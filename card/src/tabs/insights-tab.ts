@@ -7,8 +7,13 @@
  * to HA's `/history` page if the helper isn't available (e.g. when the
  * frontend bundle is mid-update or the HA version predates loadCardHelpers).
  *
+ * Plots four entities together: room temperature (line), effective low
+ * (line), effective high (line), and current_action (HA renders enums
+ * as a coloured bar at the bottom — heating red, cooling blue, idle
+ * neutral — same affordance as the climate-history view in core).
+ *
  * v0.2 will replace this with a custom uPlot chart that shades bands by
- * `current_action`. v0.1 just gives users a trend.
+ * `current_action` more tightly; v0.1 leverages HA's built-in card.
  */
 
 import { LitElement, html, css, nothing } from 'lit';
@@ -92,7 +97,7 @@ export class ComfortBandInsightsTab extends LitElement {
       const helpers = await window.loadCardHelpers();
       const card = helpers.createCardElement({
         type: 'history-graph',
-        entities: [entityId],
+        entities: this._graphEntities(),
         hours_to_show: 24,
       });
       card.hass = this.hass;
@@ -106,6 +111,28 @@ export class ComfortBandInsightsTab extends LitElement {
     } catch {
       this._graphAvailable = false;
     }
+  }
+
+  /** Entities to plot on the graph. Multiple-line history-graph plots each
+   *  numeric entity as its own line; the enum `current_action` renders as
+   *  HA's coloured bar (heating/cooling/idle), giving us the same visual
+   *  affordance as core's climate-history view at zero extra cost. */
+  private _graphEntities(): Array<{ entity: string; name?: string }> {
+    if (!this.entities) return [];
+    const items: Array<{ entity: string; name?: string }> = [];
+    if (this.entities.roomTemperature) {
+      items.push({ entity: this.entities.roomTemperature, name: 'Room' });
+    }
+    if (this.entities.effectiveLow) {
+      items.push({ entity: this.entities.effectiveLow, name: 'Low' });
+    }
+    if (this.entities.effectiveHigh) {
+      items.push({ entity: this.entities.effectiveHigh, name: 'High' });
+    }
+    if (this.entities.currentAction) {
+      items.push({ entity: this.entities.currentAction, name: 'Action' });
+    }
+    return items;
   }
 
   protected override render() {

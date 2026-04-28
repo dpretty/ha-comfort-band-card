@@ -10,13 +10,11 @@ afterEach(() => {
   delete (window as { loadCardHelpers?: unknown }).loadCardHelpers;
 });
 
-function makeEntities(
-  roomTemperature: string | null = 'sensor.gym_room_temperature',
-): ZoneEntities {
+function makeEntities(overrides: Partial<ZoneEntities> = {}): ZoneEntities {
   return {
     effectiveLow: null,
     effectiveHigh: null,
-    roomTemperature,
+    roomTemperature: 'sensor.gym_room_temperature',
     overrideEnds: null,
     currentAction: null,
     overrideActive: null,
@@ -30,6 +28,7 @@ function makeEntities(
     enabled: null,
     deviceId: 'dev-gym',
     deviceName: 'Gym',
+    ...overrides,
   };
 }
 
@@ -49,7 +48,7 @@ async function tab(props: Partial<ComfortBandInsightsTab>): Promise<ComfortBandI
 
 describe('comfort-band-insights-tab', () => {
   it('renders an empty message when no room temperature sensor is registered', async () => {
-    const el = await tab({ hass: makeHass(), entities: makeEntities(null) });
+    const el = await tab({ hass: makeHass(), entities: makeEntities({ roomTemperature: null }) });
     expect(el.shadowRoot!.querySelector('.empty')!.textContent).toContain('No room temperature');
   });
 
@@ -82,11 +81,42 @@ describe('comfort-band-insights-tab', () => {
 
     expect(createCardElement).toHaveBeenCalledWith({
       type: 'history-graph',
-      entities: ['sensor.gym_room_temperature'],
+      entities: [{ entity: 'sensor.gym_room_temperature', name: 'Room' }],
       hours_to_show: 24,
     });
     expect(el.shadowRoot!.querySelector('.graph-container')!.contains(fakeCard)).toBe(true);
     expect((fakeCard as unknown as { hass: unknown }).hass).toBe(hass);
+  });
+
+  it('plots room + low + high + action together when all four entities exist', async () => {
+    const fakeCard = document.createElement('div');
+    Object.assign(fakeCard, { hass: undefined as unknown });
+    const createCardElement = vi.fn().mockReturnValue(fakeCard);
+    (window as { loadCardHelpers?: unknown }).loadCardHelpers = vi
+      .fn()
+      .mockResolvedValue({ createCardElement });
+
+    const hass = makeHass();
+    const entities = makeEntities({
+      effectiveLow: 'sensor.gym_effective_low',
+      effectiveHigh: 'sensor.gym_effective_high',
+      currentAction: 'sensor.gym_current_action',
+    });
+    const el = await tab({ hass, entities });
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+
+    expect(createCardElement).toHaveBeenCalledWith({
+      type: 'history-graph',
+      entities: [
+        { entity: 'sensor.gym_room_temperature', name: 'Room' },
+        { entity: 'sensor.gym_effective_low', name: 'Low' },
+        { entity: 'sensor.gym_effective_high', name: 'High' },
+        { entity: 'sensor.gym_current_action', name: 'Action' },
+      ],
+      hours_to_show: 24,
+    });
   });
 
   it('falls back if loadCardHelpers throws', async () => {
