@@ -1,0 +1,14 @@
+# Node / build
+node_modules/
+coverage/
+*.tsbuildinfo
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Note: `dist/` is INTENTIONALLY tracked — it holds the built
+# `comfort-band-card.js` bundle that HACS plugin install reads.

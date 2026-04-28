@@ -1,0 +1,23 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 0"
+
+jobs:
+  hacs:
+    name: HACS (plugin)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: plugin
+          # `images` ignored until screenshots/GIFs land in the README.
+          # Tracked at https://github.com/dpretty/ha-comfort-band/issues/10.
+          # NB: hacs/action's ignore list is space-separated.
+          ignore: brands images
