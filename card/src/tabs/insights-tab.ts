@@ -1,45 +1,25 @@
 /**
  * `<comfort-band-insights-tab>` — Insights tab content.
  *
- * Wraps HA's built-in `history-graph` card via the well-known
- * `window.loadCardHelpers()` async loader (the canonical way for custom
- * cards to instantiate built-in card types). Falls back to a deep link
- * to HA's `/history` page if the helper isn't available (e.g. when the
- * frontend bundle is mid-update or the HA version predates loadCardHelpers).
- *
- * Plots four entities together: room temperature (line), effective low
- * (line), effective high (line), and current_action (HA renders enums
- * as a coloured bar at the bottom — heating red, cooling blue, idle
- * neutral — same affordance as the climate-history view in core).
- *
- * v0.2 will replace this with a custom uPlot chart that shades bands by
- * `current_action` more tightly; v0.1 leverages HA's built-in card.
+ * Renders `<comfort-band-history-chart>` (a custom uPlot chart that we
+ * own) for room temperature, effective low band, effective high band,
+ * and heating/cooling shading. v0.1 wrapped HA's built-in `history-graph`
+ * but couldn't override the auto-assigned colours for `current_action`;
+ * the custom chart fixes that with `idle = blank, heating = red,
+ * cooling = blue`.
  */
 
 import { LitElement, html, css, nothing } from 'lit';
-import type { PropertyValues } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { customElement, property } from 'lit/decorators.js';
+import '../history-chart.js';
 import type { ZoneEntities } from '../helpers.js';
 import type { HomeAssistant } from '../types.js';
 import { tokens } from '../styles.js';
-
-interface CardHelpers {
-  createCardElement: (config: unknown) => HTMLElement & { hass?: unknown };
-}
-
-declare global {
-  interface Window {
-    loadCardHelpers?: () => Promise<CardHelpers>;
-  }
-}
 
 @customElement('comfort-band-insights-tab')
 export class ComfortBandInsightsTab extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
   @property({ attribute: false }) public entities?: ZoneEntities;
-
-  @state() private _graphAvailable: boolean | null = null;
-  private _graphCard: (HTMLElement & { hass?: unknown }) | null = null;
 
   public static override styles = [
     tokens,
@@ -48,109 +28,29 @@ export class ComfortBandInsightsTab extends LitElement {
         display: block;
         padding: var(--cb-gap-md);
       }
-      .graph-container {
-        min-height: 220px;
-      }
-      .graph-container :first-child {
-        --ha-card-box-shadow: none;
-      }
-      .fallback,
       .empty {
         padding: var(--cb-gap-lg);
         color: var(--cb-text-secondary);
         font-size: 13px;
         text-align: center;
       }
-      .fallback a {
-        color: var(--cb-accent, var(--primary-color, #03a9f4));
-        text-decoration: none;
-        margin-left: 8px;
-      }
     `,
   ];
 
-  protected override async firstUpdated(): Promise<void> {
-    await this._maybeMountGraph();
-  }
-
-  protected override updated(changed: PropertyValues<this>): void {
-    if (changed.has('entities') || changed.has('hass')) {
-      void this._maybeMountGraph();
-    }
-  }
-
-  private async _maybeMountGraph(): Promise<void> {
-    const entityId = this.entities?.roomTemperature;
-    if (!entityId || !this.hass) return;
-
-    if (this._graphCard) {
-      this._graphCard.hass = this.hass;
-      return;
-    }
-
-    if (typeof window.loadCardHelpers !== 'function') {
-      this._graphAvailable = false;
-      return;
-    }
-
-    try {
-      const helpers = await window.loadCardHelpers();
-      const card = helpers.createCardElement({
-        type: 'history-graph',
-        entities: this._graphEntities(),
-        hours_to_show: 24,
-      });
-      card.hass = this.hass;
-      const container = this.renderRoot.querySelector('.graph-container');
-      if (container) {
-        container.innerHTML = '';
-        container.appendChild(card);
-        this._graphCard = card;
-        this._graphAvailable = true;
-      }
-    } catch {
-      this._graphAvailable = false;
-    }
-  }
-
-  /** Entities to plot on the graph. Multiple-line history-graph plots each
-   *  numeric entity as its own line; the enum `current_action` renders as
-   *  HA's coloured bar (heating/cooling/idle), giving us the same visual
-   *  affordance as core's climate-history view at zero extra cost. */
-  private _graphEntities(): Array<{ entity: string; name?: string }> {
-    if (!this.entities) return [];
-    const items: Array<{ entity: string; name?: string }> = [];
-    if (this.entities.roomTemperature) {
-      items.push({ entity: this.entities.roomTemperature, name: 'Room' });
-    }
-    if (this.entities.effectiveLow) {
-      items.push({ entity: this.entities.effectiveLow, name: 'Low' });
-    }
-    if (this.entities.effectiveHigh) {
-      items.push({ entity: this.entities.effectiveHigh, name: 'High' });
-    }
-    if (this.entities.currentAction) {
-      items.push({ entity: this.entities.currentAction, name: 'Action' });
-    }
-    return items;
-  }
-
   protected override render() {
-    const entityId = this.entities?.roomTemperature;
-    if (!entityId) {
+    const room = this.entities?.roomTemperature;
+    if (!room) {
       return html`<div class="empty">No room temperature sensor for this zone.</div>`;
     }
-
     return html`
-      <div class="graph-container"></div>
-      ${this._graphAvailable === false
-        ? html`<div class="fallback">
-            Inline graph unavailable.
-            <a href="/history?entity_id=${entityId}" target="_blank" rel="noopener"
-              >Open in HA history →</a
-            >
-          </div>`
-        : nothing}
+      <comfort-band-history-chart
+        .hass=${this.hass}
+        .roomEntity=${room}
+        .lowEntity=${this.entities?.effectiveLow ?? ''}
+        .highEntity=${this.entities?.effectiveHigh ?? ''}
+        .actionEntity=${this.entities?.currentAction ?? ''}
+      ></comfort-band-history-chart>
+      ${nothing}
     `;
   }
 }

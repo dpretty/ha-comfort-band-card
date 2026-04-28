@@ -23,5 +23,6 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     include: ['card/test/**/*.test.ts'],
+    setupFiles: ['card/test/_setup.ts'],
   },
 });
