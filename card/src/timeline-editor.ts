@@ -102,13 +102,11 @@ export class TimelineEditor extends LitElement {
         outline-offset: 3px;
       }
       .point-label {
-        position: absolute;
-        top: 56px;
-        font-size: 10px;
-        color: var(--cb-text-secondary);
-        transform: translateX(-50%);
-        white-space: nowrap;
-        font-variant-numeric: tabular-nums;
+        /* Hidden — densely packed transitions stack labels into an
+           unreadable mess. The list view under the timeline shows the
+           same data cleanly, and aria-label on each .point button
+           preserves it for screen readers. */
+        display: none;
       }
       .empty-hint {
         font-size: 12px;
