@@ -22,14 +22,13 @@ function makeHass(zone: string): HomeAssistant {
 
   const entity = (key: string, entityId: string): EntityRegistryEntry => ({
     entity_id: entityId,
-    unique_id: `${zone}_${key}`,
     platform: 'comfort_band',
     device_id: device.id,
-    disabled_by: null,
-    hidden_by: null,
-    name: null,
     area_id: null,
+    hidden: false,
+    entity_category: null,
     translation_key: key,
+    name: null,
   });
 
   const state = (entityId: string, value: string): HassEntity => ({

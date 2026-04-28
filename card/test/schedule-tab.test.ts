@@ -49,14 +49,13 @@ function makeHass(opts: FakeHassOptions = {}): HomeAssistant {
     entities: {
       'select.comfort_band_profiles_active_profile': {
         entity_id: 'select.comfort_band_profiles_active_profile',
-        unique_id: 'profile_manager_active_profile',
         platform: 'comfort_band',
         device_id: 'dev-pm',
-        disabled_by: null,
-        hidden_by: null,
-        name: null,
         area_id: null,
+        hidden: false,
+        entity_category: null,
         translation_key: 'active_profile',
+        name: null,
       },
     },
     callService,

@@ -56,7 +56,7 @@ export class TimelineEditor extends LitElement {
       }
       .ruler {
         position: relative;
-        height: 80px;
+        height: 50px;
         margin: var(--cb-gap-md) 0;
       }
       .track {

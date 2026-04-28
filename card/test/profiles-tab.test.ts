@@ -26,14 +26,13 @@ function makeHass(opts: {
     };
     entities[entityId] = {
       entity_id: entityId,
-      unique_id: 'profile_manager_active_profile',
       platform: 'comfort_band',
       device_id: 'dev-pm',
-      disabled_by: null,
-      hidden_by: null,
-      name: null,
       area_id: null,
+      hidden: false,
+      entity_category: null,
       translation_key: 'active_profile',
+      name: null,
     };
     states[entityId] = entityState(entityId, opts.active ?? 'home', {
       options: opts.options ?? ['home', 'away', 'sleep'],
