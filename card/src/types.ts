@@ -26,7 +26,9 @@ export interface HassEntity {
 
 export interface EntityRegistryEntry {
   entity_id: string;
-  unique_id: string;
+  /** Nullable per HA's actual frontend type — entities created outside
+   *  the registry (e.g. some YAML-defined ones) have no unique_id. */
+  unique_id: string | null;
   platform: string;
   device_id: string | null;
   disabled_by: string | null;

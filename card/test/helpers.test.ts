@@ -143,6 +143,20 @@ describe('findZoneEntities', () => {
     expect(out.currentAction).toBe(null);
   });
 
+  it('does not throw on entities with null unique_id (regression — HA registers some such entities)', () => {
+    const device = makeDevice('dev-gym', [['comfort_band', 'zone:gym']], 'Gym');
+    const entities: EntityRegistryEntry[] = [
+      makeEntity('sensor.gym_room_temperature', 'gym_room_temperature', 'dev-gym'),
+      // Entity tagged to the zone device with no unique_id —
+      // mirrors what HA does for some YAML-derived entities.
+      { ...makeEntity('sensor.gym_extra', '', 'dev-gym'), unique_id: null },
+    ];
+    const hass = makeHass([device], entities);
+
+    expect(() => findZoneEntities(hass, 'gym')).not.toThrow();
+    expect(findZoneEntities(hass, 'gym').roomTemperature).toBe('sensor.gym_room_temperature');
+  });
+
   it('skips entities whose unique_id does not start with the zone prefix', () => {
     // Defensive: an entity tagged to the zone device but with an unexpected
     // unique_id (e.g. a future version's diagnostic) should be ignored.
