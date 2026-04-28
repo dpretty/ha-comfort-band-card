@@ -119,7 +119,7 @@ export function findZoneEntities(hass: HomeAssistant, zoneSlug: string): ZoneEnt
 
   const prefix = `${zoneSlug}_`;
   for (const entry of entitiesForDevice(hass, device.id)) {
-    if (!entry.unique_id.startsWith(prefix)) continue;
+    if (!entry.unique_id?.startsWith(prefix)) continue;
     const suffix = entry.unique_id.slice(prefix.length);
     const field = KEY_TO_FIELD[suffix];
     if (field !== undefined) {

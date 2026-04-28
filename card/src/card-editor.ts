@@ -49,13 +49,43 @@ export class ComfortBandCardEditor extends LitElement {
       input[type='checkbox'] {
         font: inherit;
       }
+      /* Native <select> picks up OS chrome in many browsers, which
+         bypasses theme variables. appearance:none strips the chrome
+         so the theme-aware bg/text colors actually take. */
       select {
         font-size: 14px;
-        padding: 8px;
+        padding: 8px 32px 8px 8px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 6px;
-        color: var(--cb-text-primary);
-        background: var(--ha-card-background, #ffffff);
+        color: var(--primary-text-color, #212121);
+        background-color: var(
+          --mdc-text-field-fill-color,
+          var(--secondary-background-color, var(--card-background-color, #ffffff))
+        );
+        appearance: none;
+        -webkit-appearance: none;
+        background-image:
+          linear-gradient(45deg, transparent 50%, currentColor 50%),
+          linear-gradient(135deg, currentColor 50%, transparent 50%);
+        background-position:
+          calc(100% - 18px) 50%,
+          calc(100% - 12px) 50%;
+        background-size:
+          6px 6px,
+          6px 6px;
+        background-repeat: no-repeat;
+        cursor: pointer;
+        width: 100%;
+      }
+      select:focus-visible {
+        outline: 2px solid var(--primary-color, #03a9f4);
+        outline-offset: 1px;
+      }
+      /* Browsers vary in how much they let us style options, but set
+         theme-aware defaults so most cases are readable in dark mode. */
+      option {
+        background-color: var(--card-background-color, #ffffff);
+        color: var(--primary-text-color, #212121);
       }
       .checkbox-row {
         display: flex;
