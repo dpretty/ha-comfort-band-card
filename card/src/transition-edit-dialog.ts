@@ -34,13 +34,20 @@ export class TransitionEditDialog extends LitElement {
       :host {
         display: block;
         padding: var(--cb-gap-md);
-        background: var(--ha-card-background, #ffffff);
+        background: var(--ha-card-background, var(--card-background-color, #ffffff));
+        color: var(--primary-text-color, #212121);
         border-radius: var(--cb-radius-card);
+        /* Tells the browser to use dark-mode defaults for native form
+           controls when the HA theme is dark. Without this, native
+           <input>s render with OS light-mode chrome and our color rules
+           lose to the user-agent stylesheet. */
+        color-scheme: light dark;
       }
       h3 {
         margin: 0 0 var(--cb-gap-md);
         font-size: 14px;
         font-weight: 500;
+        color: var(--primary-text-color, #212121);
       }
       label {
         display: flex;
@@ -48,7 +55,9 @@ export class TransitionEditDialog extends LitElement {
         gap: 4px;
         margin-bottom: var(--cb-gap-md);
         font-size: 12px;
-        color: var(--cb-text-secondary);
+        /* Bumped from secondary → primary; the secondary contrast was
+           too low against HA's dark dialog bg in real-world testing. */
+        color: var(--primary-text-color, #212121);
       }
       input {
         font: inherit;
@@ -56,11 +65,20 @@ export class TransitionEditDialog extends LitElement {
         padding: 8px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 6px;
-        color: var(--cb-text-primary);
-        background: transparent;
+        color: var(--primary-text-color, #212121);
+        background-color: var(
+          --mdc-text-field-fill-color,
+          var(--secondary-background-color, var(--card-background-color, #ffffff))
+        );
+        appearance: none;
+        -webkit-appearance: none;
+      }
+      input::placeholder {
+        color: var(--secondary-text-color, #727272);
+        opacity: 1;
       }
       input:focus-visible {
-        outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
+        outline: 2px solid var(--primary-color, #03a9f4);
         outline-offset: 1px;
       }
       .error {
@@ -85,13 +103,13 @@ export class TransitionEditDialog extends LitElement {
         font-size: 13px;
       }
       .button.primary {
-        background: var(--cb-accent, var(--primary-color, #03a9f4));
-        color: #ffffff;
+        background: var(--primary-color, #03a9f4);
+        color: var(--text-primary-color, #ffffff);
       }
       .button.secondary {
         background: transparent;
         border-color: var(--divider-color, #cccccc);
-        color: var(--cb-text-primary);
+        color: var(--primary-text-color, #212121);
       }
       .button.danger {
         background: transparent;
