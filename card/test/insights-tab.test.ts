@@ -5,10 +5,7 @@ import type { ZoneEntities } from '../src/helpers.js';
 import type { HomeAssistant } from '../src/types.js';
 import { mount, teardown } from './_fixture.js';
 
-afterEach(() => {
-  teardown();
-  delete (window as { loadCardHelpers?: unknown }).loadCardHelpers;
-});
+afterEach(teardown);
 
 function makeEntities(overrides: Partial<ZoneEntities> = {}): ZoneEntities {
   return {
@@ -38,7 +35,7 @@ function makeHass(): HomeAssistant {
     devices: {},
     entities: {},
     callService: vi.fn(),
-    callWS: vi.fn(),
+    callWS: vi.fn().mockResolvedValue({}),
   };
 }
 
@@ -52,50 +49,7 @@ describe('comfort-band-insights-tab', () => {
     expect(el.shadowRoot!.querySelector('.empty')!.textContent).toContain('No room temperature');
   });
 
-  it('shows the fallback link when loadCardHelpers is not on window', async () => {
-    delete (window as { loadCardHelpers?: unknown }).loadCardHelpers;
-    const el = await tab({ hass: makeHass(), entities: makeEntities() });
-    // firstUpdated runs synchronously here; give the microtask a chance.
-    await el.updateComplete;
-    const fallback = el.shadowRoot!.querySelector('.fallback');
-    expect(fallback).not.toBeNull();
-    expect(fallback!.querySelector('a')!.getAttribute('href')).toContain(
-      'sensor.gym_room_temperature',
-    );
-  });
-
-  it('uses loadCardHelpers + createCardElement when available', async () => {
-    const fakeCard = document.createElement('div');
-    Object.assign(fakeCard, { hass: undefined as unknown });
-    const createCardElement = vi.fn().mockReturnValue(fakeCard);
-    (window as { loadCardHelpers?: unknown }).loadCardHelpers = vi
-      .fn()
-      .mockResolvedValue({ createCardElement });
-
-    const hass = makeHass();
-    const el = await tab({ hass, entities: makeEntities() });
-    // Wait for the async firstUpdated → loadCardHelpers chain.
-    await el.updateComplete;
-    await new Promise((r) => setTimeout(r, 0));
-    await el.updateComplete;
-
-    expect(createCardElement).toHaveBeenCalledWith({
-      type: 'history-graph',
-      entities: [{ entity: 'sensor.gym_room_temperature', name: 'Room' }],
-      hours_to_show: 24,
-    });
-    expect(el.shadowRoot!.querySelector('.graph-container')!.contains(fakeCard)).toBe(true);
-    expect((fakeCard as unknown as { hass: unknown }).hass).toBe(hass);
-  });
-
-  it('plots room + low + high + action together when all four entities exist', async () => {
-    const fakeCard = document.createElement('div');
-    Object.assign(fakeCard, { hass: undefined as unknown });
-    const createCardElement = vi.fn().mockReturnValue(fakeCard);
-    (window as { loadCardHelpers?: unknown }).loadCardHelpers = vi
-      .fn()
-      .mockResolvedValue({ createCardElement });
-
+  it('mounts a comfort-band-history-chart wired to the zone entities', async () => {
     const hass = makeHass();
     const entities = makeEntities({
       effectiveLow: 'sensor.gym_effective_low',
@@ -103,32 +57,31 @@ describe('comfort-band-insights-tab', () => {
       currentAction: 'sensor.gym_current_action',
     });
     const el = await tab({ hass, entities });
-    await el.updateComplete;
-    await new Promise((r) => setTimeout(r, 0));
-    await el.updateComplete;
-
-    expect(createCardElement).toHaveBeenCalledWith({
-      type: 'history-graph',
-      entities: [
-        { entity: 'sensor.gym_room_temperature', name: 'Room' },
-        { entity: 'sensor.gym_effective_low', name: 'Low' },
-        { entity: 'sensor.gym_effective_high', name: 'High' },
-        { entity: 'sensor.gym_current_action', name: 'Action' },
-      ],
-      hours_to_show: 24,
-    });
+    const chart = el.shadowRoot!.querySelector('comfort-band-history-chart') as HTMLElement & {
+      hass?: HomeAssistant;
+      roomEntity: string;
+      lowEntity: string;
+      highEntity: string;
+      actionEntity: string;
+    };
+    expect(chart).not.toBeNull();
+    expect(chart.hass).toBe(hass);
+    expect(chart.roomEntity).toBe('sensor.gym_room_temperature');
+    expect(chart.lowEntity).toBe('sensor.gym_effective_low');
+    expect(chart.highEntity).toBe('sensor.gym_effective_high');
+    expect(chart.actionEntity).toBe('sensor.gym_current_action');
   });
 
-  it('falls back if loadCardHelpers throws', async () => {
-    (window as { loadCardHelpers?: unknown }).loadCardHelpers = vi
-      .fn()
-      .mockRejectedValue(new Error('boom'));
-
-    const el = await tab({ hass: makeHass(), entities: makeEntities() });
-    await el.updateComplete;
-    await new Promise((r) => setTimeout(r, 0));
-    await el.updateComplete;
-
-    expect(el.shadowRoot!.querySelector('.fallback')).not.toBeNull();
+  it('passes empty strings for unset entity slots so the chart can choose to skip them', async () => {
+    const hass = makeHass();
+    const el = await tab({ hass, entities: makeEntities() });
+    const chart = el.shadowRoot!.querySelector('comfort-band-history-chart') as HTMLElement & {
+      lowEntity: string;
+      highEntity: string;
+      actionEntity: string;
+    };
+    expect(chart.lowEntity).toBe('');
+    expect(chart.highEntity).toBe('');
+    expect(chart.actionEntity).toBe('');
   });
 });

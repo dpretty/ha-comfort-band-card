@@ -27,7 +27,7 @@ declare global {
 });
 
 console.info(
-  '%c COMFORT-BAND-CARD %c v0.1.4 ',
+  '%c COMFORT-BAND-CARD %c v0.2.0 ',
   'color:white;background:#2196F3;padding:2px 4px;border-radius:3px',
   'color:#000;background:#fff;padding:2px 4px;border-radius:3px',
 );
