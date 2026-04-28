@@ -16,14 +16,13 @@ async function timeline(transitions: Transition[] = SCHEDULE): Promise<TimelineE
 }
 
 describe('timeline-editor', () => {
-  it('renders one button per transition with the right time/temp label', async () => {
+  it('renders one button per transition with an accessible aria-label', async () => {
     const el = await timeline();
-    const points = el.shadowRoot!.querySelectorAll('.point');
+    const points = el.shadowRoot!.querySelectorAll<HTMLButtonElement>('.point');
     expect(points.length).toBe(2);
-    const labels = el.shadowRoot!.querySelectorAll('.point-label');
-    expect(labels[0].textContent).toContain('06:00');
-    expect(labels[0].textContent).toContain('20.0');
-    expect(labels[1].textContent).toContain('22:00');
+    expect(points[0].getAttribute('aria-label')).toContain('06:00');
+    expect(points[0].getAttribute('aria-label')).toContain('20.0');
+    expect(points[1].getAttribute('aria-label')).toContain('22:00');
   });
 
   it('shows hour ticks at 0/6/12/18/24', async () => {

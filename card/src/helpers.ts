@@ -7,9 +7,15 @@
  *
  *   1. Locating the zone's device via `(comfort_band, zone:{slug})` in the
  *      device registry (set in `entity.py:37`).
- *   2. Filtering the entity registry by that `device_id`.
- *   3. Matching each entity's `unique_id` against the deterministic
- *      `{zone_name}_{translation_key}` pattern set in `entity.py:34`.
+ *   2. Filtering the entity registry by that `device_id` and the
+ *      `comfort_band` platform.
+ *   3. Matching each entity's `translation_key` against the canonical
+ *      key set in the integration (`_attr_translation_key = key` in
+ *      every per-zone entity class).
+ *
+ * Note: HA's frontend `hass.entities` exposes a **lite** entity registry
+ * payload that omits `unique_id`. `translation_key` IS in the lite payload
+ * and is the matching field that works here.
  */
 
 import type { DeviceRegistryEntry, EntityRegistryEntry, HomeAssistant } from './types.js';
@@ -43,8 +49,8 @@ export interface ZoneEntities {
   deviceName: string | null;
 }
 
-/** Map from `unique_id` suffix (after the zone-name prefix) to the
- *  `ZoneEntities` field that holds the resolved entity_id. */
+/** Map from `translation_key` to the `ZoneEntities` field that holds the
+ *  resolved `entity_id`. Mirrors `_attr_translation_key = key` in entity.py. */
 const KEY_TO_FIELD: Record<string, keyof ZoneEntities> = {
   effective_low: 'effectiveLow',
   effective_high: 'effectiveHigh',
@@ -117,11 +123,10 @@ export function findZoneEntities(hass: HomeAssistant, zoneSlug: string): ZoneEnt
   result.deviceId = device.id;
   result.deviceName = device.name_by_user ?? device.name;
 
-  const prefix = `${zoneSlug}_`;
   for (const entry of entitiesForDevice(hass, device.id)) {
-    if (!entry.unique_id?.startsWith(prefix)) continue;
-    const suffix = entry.unique_id.slice(prefix.length);
-    const field = KEY_TO_FIELD[suffix];
+    const key = entry.translation_key;
+    if (key === null) continue;
+    const field = KEY_TO_FIELD[key];
     if (field !== undefined) {
       // Cast: every key in `KEY_TO_FIELD` maps to a string-typed field.
       (result as unknown as Record<string, string | null>)[field] = entry.entity_id;
@@ -135,7 +140,7 @@ export function findActiveProfileEntity(hass: HomeAssistant): string | null {
   const device = findDeviceByIdentifier(hass, [DOMAIN, 'profile_manager']);
   if (device === null) return null;
   for (const entry of entitiesForDevice(hass, device.id)) {
-    if (entry.unique_id === 'profile_manager_active_profile') {
+    if (entry.translation_key === 'active_profile') {
       return entry.entity_id;
     }
   }

@@ -2,17 +2,20 @@ import { describe, it, expect } from 'vitest';
 import { findActiveProfileEntity, findZoneEntities } from '../src/helpers.js';
 import type { DeviceRegistryEntry, EntityRegistryEntry, HomeAssistant } from '../src/types.js';
 
-function makeEntity(entity_id: string, unique_id: string, device_id: string): EntityRegistryEntry {
+function makeEntity(
+  entity_id: string,
+  translation_key: string | null,
+  device_id: string,
+): EntityRegistryEntry {
   return {
     entity_id,
-    unique_id,
     platform: 'comfort_band',
     device_id,
-    disabled_by: null,
-    hidden_by: null,
-    name: null,
     area_id: null,
-    translation_key: null,
+    hidden: false,
+    entity_category: null,
+    translation_key,
+    name: null,
   };
 }
 
@@ -55,9 +58,7 @@ const ALL_KEYS = [
 describe('findZoneEntities', () => {
   it('resolves every entity for a zone with the canonical entity-id pattern', () => {
     const device = makeDevice('dev-gym', [['comfort_band', 'zone:gym']], 'Gym');
-    const entities = ALL_KEYS.map((key) =>
-      makeEntity(`sensor.gym_${key}`, `gym_${key}`, 'dev-gym'),
-    );
+    const entities = ALL_KEYS.map((key) => makeEntity(`sensor.gym_${key}`, key, 'dev-gym'));
     const hass = makeHass([device], entities);
 
     const out = findZoneEntities(hass, 'gym');
@@ -72,13 +73,13 @@ describe('findZoneEntities', () => {
   });
 
   it('resolves entities even when entity_ids have collision suffixes (`_2`)', () => {
-    // Reproduces the post-cutover state: unique_id is canonical (`main_*`)
+    // Reproduces the post-cutover state: translation_key is canonical
     // but entity_id has a `_2` suffix because the legacy entity squatted the slug.
     const device = makeDevice('dev-main', [['comfort_band', 'zone:main']], 'Main');
     const entities = [
-      makeEntity('sensor.main_room_temperature_2', 'main_room_temperature', 'dev-main'),
-      makeEntity('sensor.main_current_action_2', 'main_current_action', 'dev-main'),
-      makeEntity('number.main_manual_low_2', 'main_manual_low', 'dev-main'),
+      makeEntity('sensor.main_room_temperature_2', 'room_temperature', 'dev-main'),
+      makeEntity('sensor.main_current_action_2', 'current_action', 'dev-main'),
+      makeEntity('number.main_manual_low_2', 'manual_low', 'dev-main'),
     ];
     const hass = makeHass([device], entities);
 
@@ -91,12 +92,12 @@ describe('findZoneEntities', () => {
 
   it('resolves entities when the entity_id is wholly renamed (e.g. `gym_hvac_new_*`)', () => {
     // Reproduces the gym zone's renamed entity_ids — slugs differ from the
-    // canonical pattern but unique_ids stay stable. Lookup by device + unique_id
-    // sidesteps the entity-id naming chaos.
+    // canonical pattern but translation_key stays stable. Lookup by
+    // device + translation_key sidesteps the entity-id naming chaos.
     const device = makeDevice('dev-gym', [['comfort_band', 'zone:gym']], 'Gym');
     const entities = [
-      makeEntity('sensor.gym_hvac_new_room_temperature', 'gym_room_temperature', 'dev-gym'),
-      makeEntity('binary_sensor.gym_hvac_new_override_active', 'gym_override_active', 'dev-gym'),
+      makeEntity('sensor.gym_hvac_new_room_temperature', 'room_temperature', 'dev-gym'),
+      makeEntity('binary_sensor.gym_hvac_new_override_active', 'override_active', 'dev-gym'),
     ];
     const hass = makeHass([device], entities);
 
@@ -126,14 +127,14 @@ describe('findZoneEntities', () => {
   it('ignores entities from other platforms or other devices', () => {
     const device = makeDevice('dev-gym', [['comfort_band', 'zone:gym']], 'Gym');
     const entities: EntityRegistryEntry[] = [
-      makeEntity('sensor.gym_room_temperature', 'gym_room_temperature', 'dev-gym'),
-      // Foreign platform — same unique_id pattern but different platform.
+      makeEntity('sensor.gym_room_temperature', 'room_temperature', 'dev-gym'),
+      // Foreign platform — same translation_key but different platform.
       {
-        ...makeEntity('sensor.fake_gym_current_action', 'gym_current_action', 'dev-gym'),
+        ...makeEntity('sensor.fake_gym_current_action', 'current_action', 'dev-gym'),
         platform: 'template',
       },
       // Another device — sibling device that shouldn't leak through.
-      makeEntity('sensor.other_room_temperature', 'other_room_temperature', 'dev-other'),
+      makeEntity('sensor.other_room_temperature', 'room_temperature', 'dev-other'),
     ];
     const hass = makeHass([device], entities);
 
@@ -143,13 +144,12 @@ describe('findZoneEntities', () => {
     expect(out.currentAction).toBe(null);
   });
 
-  it('does not throw on entities with null unique_id (regression — HA registers some such entities)', () => {
+  it('does not throw on entities with null translation_key', () => {
     const device = makeDevice('dev-gym', [['comfort_band', 'zone:gym']], 'Gym');
     const entities: EntityRegistryEntry[] = [
-      makeEntity('sensor.gym_room_temperature', 'gym_room_temperature', 'dev-gym'),
-      // Entity tagged to the zone device with no unique_id —
-      // mirrors what HA does for some YAML-derived entities.
-      { ...makeEntity('sensor.gym_extra', '', 'dev-gym'), unique_id: null },
+      makeEntity('sensor.gym_room_temperature', 'room_temperature', 'dev-gym'),
+      // Some HA-managed entities have no translation_key.
+      makeEntity('sensor.gym_extra', null, 'dev-gym'),
     ];
     const hass = makeHass([device], entities);
 
@@ -157,37 +157,30 @@ describe('findZoneEntities', () => {
     expect(findZoneEntities(hass, 'gym').roomTemperature).toBe('sensor.gym_room_temperature');
   });
 
-  it('skips entities whose unique_id does not start with the zone prefix', () => {
-    // Defensive: an entity tagged to the zone device but with an unexpected
-    // unique_id (e.g. a future version's diagnostic) should be ignored.
+  it('skips entities whose translation_key is unrecognised', () => {
     const device = makeDevice('dev-gym', [['comfort_band', 'zone:gym']], 'Gym');
     const entities = [
-      makeEntity('sensor.gym_room_temperature', 'gym_room_temperature', 'dev-gym'),
-      makeEntity('sensor.gym_diag_x', 'diag_x', 'dev-gym'),
+      makeEntity('sensor.gym_room_temperature', 'room_temperature', 'dev-gym'),
+      makeEntity('sensor.gym_diag_x', 'unrecognised_key', 'dev-gym'),
     ];
     const hass = makeHass([device], entities);
 
     const out = findZoneEntities(hass, 'gym');
 
     expect(out.roomTemperature).toBe('sensor.gym_room_temperature');
-    // The unrecognised entity didn't crash — and didn't get assigned anywhere.
     expect(Object.values(out).every((v) => v !== 'sensor.gym_diag_x')).toBe(true);
   });
 });
 
 describe('findActiveProfileEntity', () => {
-  it('resolves the singleton profile-manager select', () => {
+  it('resolves the singleton profile-manager select via translation_key', () => {
     const device = makeDevice(
       'dev-pm',
       [['comfort_band', 'profile_manager']],
       'Comfort Band Profiles',
     );
     const entities = [
-      makeEntity(
-        'select.comfort_band_profiles_active_profile',
-        'profile_manager_active_profile',
-        'dev-pm',
-      ),
+      makeEntity('select.comfort_band_profiles_active_profile', 'active_profile', 'dev-pm'),
     ];
     const hass = makeHass([device], entities);
 

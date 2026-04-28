@@ -24,18 +24,21 @@ export interface HassEntity {
   last_updated: string;
 }
 
+/**
+ * Mirrors HA's `EntityRegistryDisplayEntry` — the **lite** registry shape
+ * that the frontend exposes via `hass.entities`. NB: `unique_id` is NOT
+ * here (omitted from the lite payload by HA), so entity matching has to
+ * go through `translation_key` + `device_id` + `platform`.
+ */
 export interface EntityRegistryEntry {
   entity_id: string;
-  /** Nullable per HA's actual frontend type — entities created outside
-   *  the registry (e.g. some YAML-defined ones) have no unique_id. */
-  unique_id: string | null;
   platform: string;
   device_id: string | null;
-  disabled_by: string | null;
-  hidden_by: string | null;
-  name: string | null;
   area_id: string | null;
+  hidden: boolean;
+  entity_category: 'config' | 'diagnostic' | null;
   translation_key: string | null;
+  name: string | null;
 }
 
 export interface DeviceRegistryEntry {
