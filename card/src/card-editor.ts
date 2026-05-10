@@ -27,6 +27,7 @@ export class ComfortBandCardEditor extends LitElement {
       type: config.type ?? 'custom:comfort-band-card',
       zone: config.zone ?? '',
       ...(config.compact !== undefined ? { compact: config.compact } : {}),
+      ...(config.variant !== undefined ? { variant: config.variant } : {}),
     };
   }
 
@@ -127,6 +128,14 @@ export class ComfortBandCardEditor extends LitElement {
     this._fireConfig(next);
   };
 
+  private _onVariantChange = (event: Event) => {
+    const value = (event.target as HTMLSelectElement).value;
+    const next = { ...this.config };
+    if (value === 'mini') next.variant = 'mini';
+    else delete next.variant;
+    this._fireConfig(next);
+  };
+
   private _fireConfig(config: ComfortBandCardConfig): void {
     this.config = config;
     this.dispatchEvent(
@@ -146,6 +155,7 @@ export class ComfortBandCardEditor extends LitElement {
       </div>`;
     }
 
+    const variant = this.config.variant === 'mini' ? 'mini' : 'tile';
     return html`
       <label>
         Zone
@@ -156,6 +166,13 @@ export class ComfortBandCardEditor extends LitElement {
           ${zones.map(
             (z) => html` <option value=${z} ?selected=${z === this.config.zone}>${z}</option> `,
           )}
+        </select>
+      </label>
+      <label>
+        Variant
+        <select @change=${this._onVariantChange} .value=${variant}>
+          <option value="tile" ?selected=${variant === 'tile'}>Tile (default)</option>
+          <option value="mini" ?selected=${variant === 'mini'}>Mini (number only, for floorplans)</option>
         </select>
       </label>
       <label class="checkbox-row">

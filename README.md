@@ -38,10 +38,27 @@ Entity discovery is by device identifier (`(comfort_band, zone:{slug})`), so ren
 ```yaml
 type: custom:comfort-band-card
 zone: gym         # required — the zone slug from your comfort_band setup
+variant: tile     # optional — `tile` (default) or `mini` (number-only chip)
 compact: false    # optional — set true for a tile that doesn't expand on tap
 ```
 
-The dashboard's visual editor offers a zone dropdown + compact-mode toggle, so you don't need to write YAML by hand.
+The dashboard's visual editor offers a zone dropdown, variant picker, and compact-mode toggle, so you don't need to write YAML by hand.
+
+### Mini variant (for floorplans)
+
+`variant: mini` renders a small inline chip showing just the room temperature, sized to its content. The background tints red while heating and blue while cooling, and tapping it opens the same modal as the full tile. Drop one inside a `picture-elements` card to label rooms on a floorplan:
+
+```yaml
+type: picture-elements
+image: /local/floorplan.png
+elements:
+  - type: custom:comfort-band-card
+    zone: gym
+    variant: mini
+    style:
+      top: 32%
+      left: 47%
+```
 
 ## Development
 

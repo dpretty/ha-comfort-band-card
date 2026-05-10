@@ -1,15 +1,15 @@
-const qn = globalThis, lr = qn.ShadowRoot && (qn.ShadyCSS === void 0 || qn.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, ar = Symbol(), as = /* @__PURE__ */ new WeakMap();
-let cl = class {
+const qn = globalThis, ur = qn.ShadowRoot && (qn.ShadyCSS === void 0 || qn.ShadyCSS.nativeShadow) && "adoptedStyleSheets" in Document.prototype && "replace" in CSSStyleSheet.prototype, fr = Symbol(), cs = /* @__PURE__ */ new WeakMap();
+let ul = class {
   constructor(e, n, i) {
-    if (this._$cssResult$ = !0, i !== ar) throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");
+    if (this._$cssResult$ = !0, i !== fr) throw Error("CSSResult is not constructable. Use `unsafeCSS` or `css` instead.");
     this.cssText = e, this.t = n;
   }
   get styleSheet() {
     let e = this.o;
     const n = this.t;
-    if (lr && e === void 0) {
+    if (ur && e === void 0) {
       const i = n !== void 0 && n.length === 1;
-      i && (e = as.get(n)), e === void 0 && ((this.o = e = new CSSStyleSheet()).replaceSync(this.cssText), i && as.set(n, e));
+      i && (e = cs.get(n)), e === void 0 && ((this.o = e = new CSSStyleSheet()).replaceSync(this.cssText), i && cs.set(n, e));
     }
     return e;
   }
@@ -17,25 +17,25 @@ let cl = class {
     return this.cssText;
   }
 };
-const ul = (t) => new cl(typeof t == "string" ? t : t + "", void 0, ar), te = (t, ...e) => {
+const fl = (t) => new ul(typeof t == "string" ? t : t + "", void 0, fr), te = (t, ...e) => {
   const n = t.length === 1 ? t[0] : e.reduce((i, o, s) => i + ((a) => {
     if (a._$cssResult$ === !0) return a.cssText;
     if (typeof a == "number") return a;
     throw Error("Value passed to 'css' function must be a 'css' function result: " + a + ". Use 'unsafeCSS' to pass non-literal values, but take care to ensure page security.");
   })(o) + t[s + 1], t[0]);
-  return new cl(n, t, ar);
+  return new ul(n, t, fr);
 }, Fa = (t, e) => {
-  if (lr) t.adoptedStyleSheets = e.map((n) => n instanceof CSSStyleSheet ? n : n.styleSheet);
+  if (ur) t.adoptedStyleSheets = e.map((n) => n instanceof CSSStyleSheet ? n : n.styleSheet);
   else for (const n of e) {
     const i = document.createElement("style"), o = qn.litNonce;
     o !== void 0 && i.setAttribute("nonce", o), i.textContent = n.cssText, t.appendChild(i);
   }
-}, cs = lr ? (t) => t : (t) => t instanceof CSSStyleSheet ? ((e) => {
+}, us = ur ? (t) => t : (t) => t instanceof CSSStyleSheet ? ((e) => {
   let n = "";
   for (const i of e.cssRules) n += i.cssText;
-  return ul(n);
+  return fl(n);
 })(t) : t;
-const { is: Ua, defineProperty: Va, getOwnPropertyDescriptor: Ia, getOwnPropertyNames: ja, getOwnPropertySymbols: Ba, getPrototypeOf: Wa } = Object, oo = globalThis, us = oo.trustedTypes, Ga = us ? us.emptyScript : "", Ya = oo.reactiveElementPolyfillSupport, $n = (t, e) => t, Jn = { toAttribute(t, e) {
+const { is: Va, defineProperty: Ua, getOwnPropertyDescriptor: Ia, getOwnPropertyNames: ja, getOwnPropertySymbols: Ba, getPrototypeOf: Wa } = Object, so = globalThis, fs = so.trustedTypes, Ga = fs ? fs.emptyScript : "", Ya = so.reactiveElementPolyfillSupport, $n = (t, e) => t, Jn = { toAttribute(t, e) {
   switch (e) {
     case Boolean:
       t = t ? Ga : null;
@@ -63,8 +63,8 @@ const { is: Ua, defineProperty: Va, getOwnPropertyDescriptor: Ia, getOwnProperty
       }
   }
   return n;
-} }, cr = (t, e) => !Ua(t, e), fs = { attribute: !0, type: String, converter: Jn, reflect: !1, useDefault: !1, hasChanged: cr };
-Symbol.metadata ??= Symbol("metadata"), oo.litPropertyMetadata ??= /* @__PURE__ */ new WeakMap();
+} }, hr = (t, e) => !Va(t, e), hs = { attribute: !0, type: String, converter: Jn, reflect: !1, useDefault: !1, hasChanged: hr };
+Symbol.metadata ??= Symbol("metadata"), so.litPropertyMetadata ??= /* @__PURE__ */ new WeakMap();
 let Ki = class extends HTMLElement {
   static addInitializer(e) {
     this._$Ei(), (this.l ??= []).push(e);
@@ -72,10 +72,10 @@ let Ki = class extends HTMLElement {
   static get observedAttributes() {
     return this.finalize(), this._$Eh && [...this._$Eh.keys()];
   }
-  static createProperty(e, n = fs) {
+  static createProperty(e, n = hs) {
     if (n.state && (n.attribute = !1), this._$Ei(), this.prototype.hasOwnProperty(e) && ((n = Object.create(n)).wrapped = !0), this.elementProperties.set(e, n), !n.noAccessor) {
       const i = Symbol(), o = this.getPropertyDescriptor(e, i, n);
-      o !== void 0 && Va(this.prototype, e, o);
+      o !== void 0 && Ua(this.prototype, e, o);
     }
   }
   static getPropertyDescriptor(e, n, i) {
@@ -90,7 +90,7 @@ let Ki = class extends HTMLElement {
     }, configurable: !0, enumerable: !0 };
   }
   static getPropertyOptions(e) {
-    return this.elementProperties.get(e) ?? fs;
+    return this.elementProperties.get(e) ?? hs;
   }
   static _$Ei() {
     if (this.hasOwnProperty($n("elementProperties"))) return;
@@ -119,8 +119,8 @@ let Ki = class extends HTMLElement {
     const n = [];
     if (Array.isArray(e)) {
       const i = new Set(e.flat(1 / 0).reverse());
-      for (const o of i) n.unshift(cs(o));
-    } else e !== void 0 && n.push(cs(e));
+      for (const o of i) n.unshift(us(o));
+    } else e !== void 0 && n.push(us(e));
     return n;
   }
   static _$Eu(e, n) {
@@ -178,7 +178,7 @@ let Ki = class extends HTMLElement {
   requestUpdate(e, n, i, o = !1, s) {
     if (e !== void 0) {
       const a = this.constructor;
-      if (o === !1 && (s = this[e]), i ??= a.getPropertyOptions(e), !((i.hasChanged ?? cr)(s, n) || i.useDefault && i.reflect && s === this._$Ej?.get(e) && !this.hasAttribute(a._$Eu(e, i)))) return;
+      if (o === !1 && (s = this[e]), i ??= a.getPropertyOptions(e), !((i.hasChanged ?? hr)(s, n) || i.useDefault && i.reflect && s === this._$Ej?.get(e) && !this.hasAttribute(a._$Eu(e, i)))) return;
       this.C(e, n, i);
     }
     this.isUpdatePending === !1 && (this._$ES = this._$EP());
@@ -246,13 +246,13 @@ let Ki = class extends HTMLElement {
   firstUpdated(e) {
   }
 };
-Ki.elementStyles = [], Ki.shadowRootOptions = { mode: "open" }, Ki[$n("elementProperties")] = /* @__PURE__ */ new Map(), Ki[$n("finalized")] = /* @__PURE__ */ new Map(), Ya?.({ ReactiveElement: Ki }), (oo.reactiveElementVersions ??= []).push("2.1.2");
-const ur = globalThis, hs = (t) => t, Qn = ur.trustedTypes, ds = Qn ? Qn.createPolicy("lit-html", { createHTML: (t) => t }) : void 0, fl = "$lit$", ni = `lit$${Math.random().toFixed(9).slice(2)}$`, hl = "?" + ni, Ka = `<${hl}>`, Si = document, En = () => Si.createComment(""), kn = (t) => t === null || typeof t != "object" && typeof t != "function", fr = Array.isArray, qa = (t) => fr(t) || typeof t?.[Symbol.iterator] == "function", Uo = `[ 	
-\f\r]`, vn = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, ps = /-->/g, ms = />/g, bi = RegExp(`>|${Uo}(?:([^\\s"'>=/]+)(${Uo}*=${Uo}*(?:[^ 	
-\f\r"'\`<>=]|("|')|))|$)`, "g"), gs = /'/g, vs = /"/g, dl = /^(?:script|style|textarea|title)$/i, pl = (t) => (e, ...n) => ({ _$litType$: t, strings: e, values: n }), F = pl(1), Wn = pl(2), Ji = Symbol.for("lit-noChange"), at = Symbol.for("lit-nothing"), bs = /* @__PURE__ */ new WeakMap(), xi = Si.createTreeWalker(Si, 129);
-function ml(t, e) {
-  if (!fr(t) || !t.hasOwnProperty("raw")) throw Error("invalid template strings array");
-  return ds !== void 0 ? ds.createHTML(e) : e;
+Ki.elementStyles = [], Ki.shadowRootOptions = { mode: "open" }, Ki[$n("elementProperties")] = /* @__PURE__ */ new Map(), Ki[$n("finalized")] = /* @__PURE__ */ new Map(), Ya?.({ ReactiveElement: Ki }), (so.reactiveElementVersions ??= []).push("2.1.2");
+const dr = globalThis, ds = (t) => t, Qn = dr.trustedTypes, ps = Qn ? Qn.createPolicy("lit-html", { createHTML: (t) => t }) : void 0, hl = "$lit$", ni = `lit$${Math.random().toFixed(9).slice(2)}$`, dl = "?" + ni, Ka = `<${dl}>`, Si = document, En = () => Si.createComment(""), kn = (t) => t === null || typeof t != "object" && typeof t != "function", pr = Array.isArray, qa = (t) => pr(t) || typeof t?.[Symbol.iterator] == "function", Io = `[ 	
+\f\r]`, vn = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, ms = /-->/g, gs = />/g, bi = RegExp(`>|${Io}(?:([^\\s"'>=/]+)(${Io}*=${Io}*(?:[^ 	
+\f\r"'\`<>=]|("|')|))|$)`, "g"), vs = /'/g, bs = /"/g, pl = /^(?:script|style|textarea|title)$/i, ml = (t) => (e, ...n) => ({ _$litType$: t, strings: e, values: n }), F = ml(1), Wn = ml(2), Ji = Symbol.for("lit-noChange"), at = Symbol.for("lit-nothing"), _s = /* @__PURE__ */ new WeakMap(), xi = Si.createTreeWalker(Si, 129);
+function gl(t, e) {
+  if (!pr(t) || !t.hasOwnProperty("raw")) throw Error("invalid template strings array");
+  return ps !== void 0 ? ps.createHTML(e) : e;
 }
 const Za = (t, e) => {
   const n = t.length - 1, i = [];
@@ -260,11 +260,11 @@ const Za = (t, e) => {
   for (let f = 0; f < n; f++) {
     const h = t[f];
     let p, b, m = -1, v = 0;
-    for (; v < h.length && (a.lastIndex = v, b = a.exec(h), b !== null); ) v = a.lastIndex, a === vn ? b[1] === "!--" ? a = ps : b[1] !== void 0 ? a = ms : b[2] !== void 0 ? (dl.test(b[2]) && (o = RegExp("</" + b[2], "g")), a = bi) : b[3] !== void 0 && (a = bi) : a === bi ? b[0] === ">" ? (a = o ?? vn, m = -1) : b[1] === void 0 ? m = -2 : (m = a.lastIndex - b[2].length, p = b[1], a = b[3] === void 0 ? bi : b[3] === '"' ? vs : gs) : a === vs || a === gs ? a = bi : a === ps || a === ms ? a = vn : (a = bi, o = void 0);
+    for (; v < h.length && (a.lastIndex = v, b = a.exec(h), b !== null); ) v = a.lastIndex, a === vn ? b[1] === "!--" ? a = ms : b[1] !== void 0 ? a = gs : b[2] !== void 0 ? (pl.test(b[2]) && (o = RegExp("</" + b[2], "g")), a = bi) : b[3] !== void 0 && (a = bi) : a === bi ? b[0] === ">" ? (a = o ?? vn, m = -1) : b[1] === void 0 ? m = -2 : (m = a.lastIndex - b[2].length, p = b[1], a = b[3] === void 0 ? bi : b[3] === '"' ? bs : vs) : a === bs || a === vs ? a = bi : a === ms || a === gs ? a = vn : (a = bi, o = void 0);
     const E = a === bi && t[f + 1].startsWith("/>") ? " " : "";
-    s += a === vn ? h + Ka : m >= 0 ? (i.push(p), h.slice(0, m) + fl + h.slice(m) + ni + E) : h + ni + (m === -2 ? f : E);
+    s += a === vn ? h + Ka : m >= 0 ? (i.push(p), h.slice(0, m) + hl + h.slice(m) + ni + E) : h + ni + (m === -2 ? f : E);
   }
-  return [ml(t, s + (t[n] || "<?>") + (e === 2 ? "</svg>" : e === 3 ? "</math>" : "")), i];
+  return [gl(t, s + (t[n] || "<?>") + (e === 2 ? "</svg>" : e === 3 ? "</math>" : "")), i];
 };
 class Pn {
   constructor({ strings: e, _$litType$: n }, i) {
@@ -278,11 +278,11 @@ class Pn {
     }
     for (; (o = xi.nextNode()) !== null && h.length < f; ) {
       if (o.nodeType === 1) {
-        if (o.hasAttributes()) for (const m of o.getAttributeNames()) if (m.endsWith(fl)) {
+        if (o.hasAttributes()) for (const m of o.getAttributeNames()) if (m.endsWith(hl)) {
           const v = b[a++], E = o.getAttribute(m).split(ni), P = /([.?@])?(.*)/.exec(v);
-          h.push({ type: 1, index: s, name: P[2], strings: E, ctor: P[1] === "." ? Qa : P[1] === "?" ? Xa : P[1] === "@" ? tc : ro }), o.removeAttribute(m);
+          h.push({ type: 1, index: s, name: P[2], strings: E, ctor: P[1] === "." ? Qa : P[1] === "?" ? Xa : P[1] === "@" ? tc : lo }), o.removeAttribute(m);
         } else m.startsWith(ni) && (h.push({ type: 6, index: s }), o.removeAttribute(m));
-        if (dl.test(o.tagName)) {
+        if (pl.test(o.tagName)) {
           const m = o.textContent.split(ni), v = m.length - 1;
           if (v > 0) {
             o.textContent = Qn ? Qn.emptyScript : "";
@@ -290,7 +290,7 @@ class Pn {
             o.append(m[v], En());
           }
         }
-      } else if (o.nodeType === 8) if (o.data === hl) h.push({ type: 2, index: s });
+      } else if (o.nodeType === 8) if (o.data === dl) h.push({ type: 2, index: s });
       else {
         let m = -1;
         for (; (m = o.data.indexOf(ni, m + 1)) !== -1; ) h.push({ type: 7, index: s }), m += ni.length - 1;
@@ -368,7 +368,7 @@ class zn {
     this._$AH !== at && kn(this._$AH) ? this._$AA.nextSibling.data = e : this.T(Si.createTextNode(e)), this._$AH = e;
   }
   $(e) {
-    const { values: n, _$litType$: i } = e, o = typeof i == "number" ? this._$AC(e) : (i.el === void 0 && (i.el = Pn.createElement(ml(i.h, i.h[0]), this.options)), i);
+    const { values: n, _$litType$: i } = e, o = typeof i == "number" ? this._$AC(e) : (i.el === void 0 && (i.el = Pn.createElement(gl(i.h, i.h[0]), this.options)), i);
     if (this._$AH?._$AD === o) this._$AH.p(n);
     else {
       const s = new Ja(o, this), a = s.u(this.options);
@@ -376,11 +376,11 @@ class zn {
     }
   }
   _$AC(e) {
-    let n = bs.get(e.strings);
-    return n === void 0 && bs.set(e.strings, n = new Pn(e)), n;
+    let n = _s.get(e.strings);
+    return n === void 0 && _s.set(e.strings, n = new Pn(e)), n;
   }
   k(e) {
-    fr(this._$AH) || (this._$AH = [], this._$AR());
+    pr(this._$AH) || (this._$AH = [], this._$AR());
     const n = this._$AH;
     let i, o = 0;
     for (const s of e) o === n.length ? n.push(i = new zn(this.O(En()), this.O(En()), this, this.options)) : i = n[o], i._$AI(s), o++;
@@ -388,15 +388,15 @@ class zn {
   }
   _$AR(e = this._$AA.nextSibling, n) {
     for (this._$AP?.(!1, !0, n); e !== this._$AB; ) {
-      const i = hs(e).nextSibling;
-      hs(e).remove(), e = i;
+      const i = ds(e).nextSibling;
+      ds(e).remove(), e = i;
     }
   }
   setConnected(e) {
     this._$AM === void 0 && (this._$Cv = e, this._$AP?.(e));
   }
 }
-class ro {
+class lo {
   get tagName() {
     return this.element.tagName;
   }
@@ -421,7 +421,7 @@ class ro {
     e === at ? this.element.removeAttribute(this.name) : this.element.setAttribute(this.name, e ?? "");
   }
 }
-class Qa extends ro {
+class Qa extends lo {
   constructor() {
     super(...arguments), this.type = 3;
   }
@@ -429,7 +429,7 @@ class Qa extends ro {
     this.element[this.name] = e === at ? void 0 : e;
   }
 }
-class Xa extends ro {
+class Xa extends lo {
   constructor() {
     super(...arguments), this.type = 4;
   }
@@ -437,7 +437,7 @@ class Xa extends ro {
     this.element.toggleAttribute(this.name, !!e && e !== at);
   }
 }
-class tc extends ro {
+class tc extends lo {
   constructor(e, n, i, o, s) {
     super(e, n, i, o, s), this.type = 5;
   }
@@ -461,8 +461,8 @@ class ec {
     Qi(this, e);
   }
 }
-const ic = ur.litHtmlPolyfillSupport;
-ic?.(Pn, zn), (ur.litHtmlVersions ??= []).push("3.3.2");
+const ic = dr.litHtmlPolyfillSupport;
+ic?.(Pn, zn), (dr.litHtmlVersions ??= []).push("3.3.2");
 const nc = (t, e, n) => {
   const i = n?.renderBefore ?? e;
   let o = i._$litPart$;
@@ -472,7 +472,7 @@ const nc = (t, e, n) => {
   }
   return o._$AI(t), o;
 };
-const hr = globalThis;
+const mr = globalThis;
 class It extends Ki {
   constructor() {
     super(...arguments), this.renderOptions = { host: this }, this._$Do = void 0;
@@ -495,16 +495,16 @@ class It extends Ki {
     return Ji;
   }
 }
-It._$litElement$ = !0, It.finalized = !0, hr.litElementHydrateSupport?.({ LitElement: It });
-const oc = hr.litElementPolyfillSupport;
+It._$litElement$ = !0, It.finalized = !0, mr.litElementHydrateSupport?.({ LitElement: It });
+const oc = mr.litElementPolyfillSupport;
 oc?.({ LitElement: It });
-(hr.litElementVersions ??= []).push("4.2.2");
+(mr.litElementVersions ??= []).push("4.2.2");
 const ae = (t) => (e, n) => {
   n !== void 0 ? n.addInitializer(() => {
     customElements.define(t, e);
   }) : customElements.define(t, e);
 };
-const rc = { attribute: !0, type: String, converter: Jn, reflect: !1, hasChanged: cr }, sc = (t = rc, e, n) => {
+const rc = { attribute: !0, type: String, converter: Jn, reflect: !1, hasChanged: hr }, sc = (t = rc, e, n) => {
   const { kind: i, metadata: o } = n;
   let s = globalThis.litPropertyMetadata.get(o);
   if (s === void 0 && globalThis.litPropertyMetadata.set(o, s = /* @__PURE__ */ new Map()), i === "setter" && ((t = Object.create(t)).wrapped = !0), s.set(n.name, t), i === "accessor") {
@@ -525,14 +525,14 @@ const rc = { attribute: !0, type: String, converter: Jn, reflect: !1, hasChanged
   }
   throw Error("Unsupported decorator location: " + i);
 };
-function Y(t) {
+function G(t) {
   return (e, n) => typeof n == "object" ? sc(t, e, n) : ((i, o, s) => {
     const a = o.hasOwnProperty(s);
     return o.constructor.createProperty(s, i), a ? Object.getOwnPropertyDescriptor(o, s) : void 0;
   })(t, e, n);
 }
 function Pt(t) {
-  return Y({ ...t, state: !0, attribute: !1 });
+  return G({ ...t, state: !0, attribute: !1 });
 }
 const lc = (t, e, n) => (n.configurable = !0, n.enumerable = !0, Reflect.decorate && typeof e != "object" && Object.defineProperty(t, e, n), n);
 function Dn(t, e) {
@@ -562,7 +562,7 @@ const ce = te`
     --cb-gap-lg: 16px;
   }
 `;
-function dr(t) {
+function Xn(t) {
   switch (t) {
     case "heating":
       return "var(--cb-action-heating)";
@@ -574,10 +574,10 @@ function dr(t) {
       return "var(--cb-action-unknown)";
   }
 }
-function pr(t) {
+function to(t) {
   return t === "heating" || t === "cooling" || t === "idle" ? t : "unknown";
 }
-function gl(t) {
+function Qo(t) {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 var ac = Object.defineProperty, cc = Object.getOwnPropertyDescriptor, On = (t, e, n, i) => {
@@ -585,16 +585,16 @@ var ac = Object.defineProperty, cc = Object.getOwnPropertyDescriptor, On = (t, e
     (a = t[s]) && (o = (i ? a(e, n, o) : a(o)) || o);
   return i && o && ac(e, n, o), o;
 };
-const Zo = 15, vl = 28, uc = vl - Zo;
-function Vo(t) {
-  return Number.isNaN(t) || !Number.isFinite(t) ? 0 : (Math.max(Zo, Math.min(vl, t)) - Zo) / uc * 100;
+const Xo = 15, vl = 28, uc = vl - Xo;
+function jo(t) {
+  return Number.isNaN(t) || !Number.isFinite(t) ? 0 : (Math.max(Xo, Math.min(vl, t)) - Xo) / uc * 100;
 }
 let Ai = class extends It {
   constructor() {
     super(...arguments), this.low = NaN, this.high = NaN, this.room = NaN, this.action = "unknown";
   }
   render() {
-    const t = pr(this.action), e = dr(t), n = Number.isFinite(this.low), i = Number.isFinite(this.high), o = Number.isFinite(this.room), s = n ? Vo(this.low) : 0, a = i ? Vo(this.high) : 100, f = Math.min(s, a), h = Math.max(0, Math.abs(a - s)), p = o ? Vo(this.room) : 50, b = (v) => Number.isFinite(v) ? `${v.toFixed(1)}°` : "—", m = `Comfort band gauge: low ${b(this.low)}, room ${b(this.room)}, high ${b(this.high)}, action ${t}`;
+    const t = to(this.action), e = Xn(t), n = Number.isFinite(this.low), i = Number.isFinite(this.high), o = Number.isFinite(this.room), s = n ? jo(this.low) : 0, a = i ? jo(this.high) : 100, f = Math.min(s, a), h = Math.max(0, Math.abs(a - s)), p = o ? jo(this.room) : 50, b = (v) => Number.isFinite(v) ? `${v.toFixed(1)}°` : "—", m = `Comfort band gauge: low ${b(this.low)}, room ${b(this.room)}, high ${b(this.high)}, action ${t}`;
     return F`
       <svg viewBox="0 0 100 24" preserveAspectRatio="none" role="img" aria-label=${m}>
         ${Wn`<rect class="track" x="0" y="10" width="100" height="4" rx="2"></rect>`}
@@ -636,28 +636,28 @@ Ai.styles = [
     `
 ];
 On([
-  Y({ type: Number })
+  G({ type: Number })
 ], Ai.prototype, "low", 2);
 On([
-  Y({ type: Number })
+  G({ type: Number })
 ], Ai.prototype, "high", 2);
 On([
-  Y({ type: Number })
+  G({ type: Number })
 ], Ai.prototype, "room", 2);
 On([
-  Y({ type: String })
+  G({ type: String })
 ], Ai.prototype, "action", 2);
 Ai = On([
   ae("band-gauge")
 ], Ai);
-var fc = Object.defineProperty, hc = Object.getOwnPropertyDescriptor, Ke = (t, e, n, i) => {
+var fc = Object.defineProperty, hc = Object.getOwnPropertyDescriptor, Ue = (t, e, n, i) => {
   for (var o = i > 1 ? void 0 : i ? hc(e, n) : e, s = t.length - 1, a; s >= 0; s--)
     (a = t[s]) && (o = (i ? a(e, n, o) : a(o)) || o);
   return i && o && fc(e, n, o), o;
 };
-let Te = class extends It {
+let _e = class extends It {
   constructor() {
-    super(...arguments), this.zoneName = "", this.roomTemp = NaN, this.low = NaN, this.high = NaN, this.action = "unknown", this.overrideActive = !1, this.overrideEnds = null, this.noExpand = !1;
+    super(...arguments), this.zoneName = "", this.roomTemp = NaN, this.low = NaN, this.high = NaN, this.action = "unknown", this.overrideActive = !1, this.overrideEnds = null, this.noExpand = !1, this.variant = "tile";
   }
   _onTap(t) {
     this.noExpand || t instanceof KeyboardEvent && t.key !== "Enter" && t.key !== " " || (t.preventDefault(), this.dispatchEvent(new CustomEvent("comfort-band-tile-tap", { bubbles: !0, composed: !0 })));
@@ -671,15 +671,15 @@ let Te = class extends It {
     return F`<div class="override-pill">Override${t ? ` · ${t}` : ""}</div>`;
   }
   _renderActionChip() {
-    const t = pr(this.action);
+    const t = to(this.action);
     if (t === "idle" || t === "unknown") return null;
-    const e = dr(t);
+    const e = Xn(t);
     return F`<span class="action-chip" style="background:${e}">
-      ${gl(t)}
+      ${Qo(t)}
     </span>`;
   }
   render() {
-    return F`
+    return this.variant === "mini" ? this._renderMini() : F`
       <div
         class="tile ${this.noExpand ? "no-expand" : ""}"
         role="${this.noExpand ? "group" : "button"}"
@@ -706,12 +706,32 @@ let Te = class extends It {
       </div>
     `;
   }
+  _renderMini() {
+    const t = to(this.action), e = t === "heating" || t === "cooling", n = e ? `--cb-mini-bg:${Xn(t)}` : "", i = `${this.zoneName || "Zone"} ${this._renderRoomTemp()}${e ? `, ${Qo(t)}` : ""}`;
+    return F`
+      <div
+        class="mini ${this.noExpand ? "no-expand" : ""} ${e ? "tinted" : ""}"
+        style=${n}
+        role="${this.noExpand ? "group" : "button"}"
+        tabindex="${this.noExpand ? -1 : 0}"
+        aria-label=${i}
+        title=${i}
+        @click=${this._onTap}
+        @keydown=${this._onTap}
+      >
+        ${this._renderRoomTemp()}
+      </div>
+    `;
+  }
 };
-Te.styles = [
+_e.styles = [
   ce,
   te`
       :host {
         display: block;
+      }
+      :host([variant='mini']) {
+        display: inline-block;
       }
       .tile {
         display: flex;
@@ -731,6 +751,35 @@ Te.styles = [
         transform: translateY(-1px);
       }
       .tile:focus-visible {
+        outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
+        outline-offset: 2px;
+      }
+      .mini {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 10px;
+        border-radius: var(--cb-radius-pill);
+        background: var(--cb-mini-bg, var(--ha-card-background, var(--card-background-color, #ffffff)));
+        color: var(--cb-mini-fg, var(--cb-text-primary));
+        box-shadow: var(--ha-card-box-shadow, none);
+        font-size: 18px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        line-height: 1;
+        cursor: pointer;
+        transition: transform 0.12s ease;
+      }
+      .mini.no-expand {
+        cursor: default;
+      }
+      .mini.tinted {
+        --cb-mini-fg: var(--cb-text-on-action, #ffffff);
+      }
+      .mini:not(.no-expand):hover {
+        transform: translateY(-1px);
+      }
+      .mini:focus-visible {
         outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
         outline-offset: 2px;
       }
@@ -783,33 +832,36 @@ Te.styles = [
       }
     `
 ];
-Ke([
-  Y({ type: String })
-], Te.prototype, "zoneName", 2);
-Ke([
-  Y({ type: Number })
-], Te.prototype, "roomTemp", 2);
-Ke([
-  Y({ type: Number })
-], Te.prototype, "low", 2);
-Ke([
-  Y({ type: Number })
-], Te.prototype, "high", 2);
-Ke([
-  Y({ type: String })
-], Te.prototype, "action", 2);
-Ke([
-  Y({ type: Boolean })
-], Te.prototype, "overrideActive", 2);
-Ke([
-  Y({ type: String })
-], Te.prototype, "overrideEnds", 2);
-Ke([
-  Y({ type: Boolean })
-], Te.prototype, "noExpand", 2);
-Te = Ke([
+Ue([
+  G({ type: String })
+], _e.prototype, "zoneName", 2);
+Ue([
+  G({ type: Number })
+], _e.prototype, "roomTemp", 2);
+Ue([
+  G({ type: Number })
+], _e.prototype, "low", 2);
+Ue([
+  G({ type: Number })
+], _e.prototype, "high", 2);
+Ue([
+  G({ type: String })
+], _e.prototype, "action", 2);
+Ue([
+  G({ type: Boolean })
+], _e.prototype, "overrideActive", 2);
+Ue([
+  G({ type: String })
+], _e.prototype, "overrideEnds", 2);
+Ue([
+  G({ type: Boolean })
+], _e.prototype, "noExpand", 2);
+Ue([
+  G({ type: String, reflect: !0 })
+], _e.prototype, "variant", 2);
+_e = Ue([
   ae("comfort-band-tile")
-], Te);
+], _e);
 function dc(t) {
   if (!t) return "";
   const e = Date.parse(t);
@@ -1009,22 +1061,22 @@ Ce.styles = [
     `
 ];
 qe([
-  Y({ type: Number })
+  G({ type: Number })
 ], Ce.prototype, "min", 2);
 qe([
-  Y({ type: Number })
+  G({ type: Number })
 ], Ce.prototype, "max", 2);
 qe([
-  Y({ type: Number })
+  G({ type: Number })
 ], Ce.prototype, "step", 2);
 qe([
-  Y({ type: Number })
+  G({ type: Number })
 ], Ce.prototype, "low", 2);
 qe([
-  Y({ type: Number })
+  G({ type: Number })
 ], Ce.prototype, "high", 2);
 qe([
-  Y({ type: String })
+  G({ type: String })
 ], Ce.prototype, "unit", 2);
 qe([
   Pt()
@@ -1035,7 +1087,7 @@ qe([
 Ce = qe([
   ae("dual-handle-slider")
 ], Ce);
-const so = "comfort_band";
+const ao = "comfort_band";
 function gc(t, e) {
   return t.callWS({
     type: "comfort_band/get_schedule",
@@ -1043,17 +1095,17 @@ function gc(t, e) {
   });
 }
 function vc(t, e) {
-  return t.callService(so, "set_schedule", { ...e });
+  return t.callService(ao, "set_schedule", { ...e });
 }
 function bc(t, e) {
   const n = { zone: e.zone };
-  return e.low !== void 0 && (n.low = e.low), e.high !== void 0 && (n.high = e.high), e.hours !== void 0 && (n.hours = e.hours), t.callService(so, "start_override", n);
+  return e.low !== void 0 && (n.low = e.low), e.high !== void 0 && (n.high = e.high), e.hours !== void 0 && (n.hours = e.hours), t.callService(ao, "start_override", n);
 }
 function _c(t, e) {
-  return t.callService(so, "cancel_override", { ...e });
+  return t.callService(ao, "cancel_override", { ...e });
 }
 function yc(t, e) {
-  return t.callService(so, "set_profile", { ...e });
+  return t.callService(ao, "set_profile", { ...e });
 }
 var wc = Object.defineProperty, xc = Object.getOwnPropertyDescriptor, rn = (t, e, n, i) => {
   for (var o = i > 1 ? void 0 : i ? xc(e, n) : e, s = t.length - 1, a; s >= 0; s--)
@@ -1092,12 +1144,12 @@ let oi = class extends It {
   }
   render() {
     if (!this.hass || !this.entities) return at;
-    const t = this._numericState(this.entities.manualLow), e = this._numericState(this.entities.manualHigh), n = this._numericState(this.entities.effectiveLow), i = this._numericState(this.entities.effectiveHigh), o = this._numericState(this.entities.roomTemperature), s = this._numericState(this.entities.overrideHours), a = this._stateOf(this.entities.currentAction)?.state ?? "unknown", f = this._stateOf(this.entities.overrideActive)?.state === "on", h = this._pendingLow ?? (Number.isFinite(t) ? t : 19), p = this._pendingHigh ?? (Number.isFinite(e) ? e : 22), b = pr(a), m = b !== "idle" && b !== "unknown";
+    const t = this._numericState(this.entities.manualLow), e = this._numericState(this.entities.manualHigh), n = this._numericState(this.entities.effectiveLow), i = this._numericState(this.entities.effectiveHigh), o = this._numericState(this.entities.roomTemperature), s = this._numericState(this.entities.overrideHours), a = this._stateOf(this.entities.currentAction)?.state ?? "unknown", f = this._stateOf(this.entities.overrideActive)?.state === "on", h = this._pendingLow ?? (Number.isFinite(t) ? t : 19), p = this._pendingHigh ?? (Number.isFinite(e) ? e : 22), b = to(a), m = b !== "idle" && b !== "unknown";
     return F`
       <div class="header-row">
         <div class="room-temp">${Number.isFinite(o) ? `${o.toFixed(1)}°` : "—"}</div>
-        ${m ? F`<span class="action-chip" style="background:${dr(b)}"
-              >${gl(b)}</span
+        ${m ? F`<span class="action-chip" style="background:${Xn(b)}"
+              >${Qo(b)}</span
             >` : at}
       </div>
       <div class="gauge-row">
@@ -1242,13 +1294,13 @@ oi.styles = [
     `
 ];
 rn([
-  Y({ attribute: !1 })
+  G({ attribute: !1 })
 ], oi.prototype, "hass", 2);
 rn([
-  Y({ type: String })
+  G({ type: String })
 ], oi.prototype, "zone", 2);
 rn([
-  Y({ attribute: !1 })
+  G({ attribute: !1 })
 ], oi.prototype, "entities", 2);
 rn([
   Pt()
@@ -1270,7 +1322,7 @@ function Sc(t) {
   const o = Math.floor(i / 60), s = i % 60;
   return s ? `${o}h ${s}m left` : `${o}h left`;
 }
-const mr = "comfort_band", Ac = {
+const gr = "comfort_band", Ac = {
   effective_low: "effectiveLow",
   effective_high: "effectiveHigh",
   room_temperature: "roomTemperature",
@@ -1315,11 +1367,11 @@ function bl(t, e) {
 }
 function _l(t, e) {
   return Object.values(t.entities).filter(
-    (n) => n.device_id === e && n.platform === mr
+    (n) => n.device_id === e && n.platform === gr
   );
 }
 function kc(t, e) {
-  const n = Ec(), i = bl(t, [mr, `zone:${e}`]);
+  const n = Ec(), i = bl(t, [gr, `zone:${e}`]);
   if (i === null) return n;
   n.deviceId = i.id, n.deviceName = i.name_by_user ?? i.name;
   for (const o of _l(t, i.id)) {
@@ -1331,7 +1383,7 @@ function kc(t, e) {
   return n;
 }
 function yl(t) {
-  const e = bl(t, [mr, "profile_manager"]);
+  const e = bl(t, [gr, "profile_manager"]);
   if (e === null) return null;
   for (const n of _l(t, e.id))
     if (n.translation_key === "active_profile")
@@ -1343,7 +1395,7 @@ var Pc = Object.defineProperty, Tc = Object.getOwnPropertyDescriptor, wl = (t, e
     (a = t[s]) && (o = (i ? a(e, n, o) : a(o)) || o);
   return i && o && Pc(e, n, o), o;
 };
-let Xn = class extends It {
+let eo = class extends It {
   _onSelect(t) {
     this.hass && yc(this.hass, { profile: t });
   }
@@ -1377,7 +1429,7 @@ let Xn = class extends It {
     `;
   }
 };
-Xn.styles = [
+eo.styles = [
   ce,
   te`
       :host {
@@ -1436,16 +1488,16 @@ Xn.styles = [
     `
 ];
 wl([
-  Y({ attribute: !1 })
-], Xn.prototype, "hass", 2);
-Xn = wl([
+  G({ attribute: !1 })
+], eo.prototype, "hass", 2);
+eo = wl([
   ae("comfort-band-profiles-tab")
-], Xn);
-const Cc = !0, Dt = "u-", Mc = "uplot", zc = Dt + "hz", Dc = Dt + "vt", Oc = Dt + "title", Nc = Dt + "wrap", Lc = Dt + "under", Hc = Dt + "over", Rc = Dt + "axis", wi = Dt + "off", Fc = Dt + "select", Uc = Dt + "cursor-x", Vc = Dt + "cursor-y", Ic = Dt + "cursor-pt", jc = Dt + "legend", Bc = Dt + "live", Wc = Dt + "inline", Gc = Dt + "series", Yc = Dt + "marker", _s = Dt + "label", Kc = Dt + "value", yn = "width", wn = "height", bn = "top", ys = "bottom", Yi = "left", Io = "right", gr = "#000", ws = gr + "0", jo = "mousemove", xs = "mousedown", Bo = "mouseup", $s = "mouseenter", Ss = "mouseleave", As = "dblclick", qc = "resize", Zc = "scroll", Es = "change", to = "dppxchange", vr = "--", sn = typeof window < "u", Jo = sn ? document : null, Zi = sn ? window : null, Jc = sn ? navigator : null;
+], eo);
+const Cc = !0, Dt = "u-", Mc = "uplot", zc = Dt + "hz", Dc = Dt + "vt", Oc = Dt + "title", Nc = Dt + "wrap", Lc = Dt + "under", Hc = Dt + "over", Rc = Dt + "axis", wi = Dt + "off", Fc = Dt + "select", Vc = Dt + "cursor-x", Uc = Dt + "cursor-y", Ic = Dt + "cursor-pt", jc = Dt + "legend", Bc = Dt + "live", Wc = Dt + "inline", Gc = Dt + "series", Yc = Dt + "marker", ys = Dt + "label", Kc = Dt + "value", yn = "width", wn = "height", bn = "top", ws = "bottom", Yi = "left", Bo = "right", vr = "#000", xs = vr + "0", Wo = "mousemove", $s = "mousedown", Go = "mouseup", Ss = "mouseenter", As = "mouseleave", Es = "dblclick", qc = "resize", Zc = "scroll", ks = "change", io = "dppxchange", br = "--", sn = typeof window < "u", tr = sn ? document : null, Zi = sn ? window : null, Jc = sn ? navigator : null;
 let lt, Gn;
-function Qo() {
+function er() {
   let t = devicePixelRatio;
-  lt != t && (lt = t, Gn && tr(Es, Gn, Qo), Gn = matchMedia(`(min-resolution: ${lt - 1e-3}dppx) and (max-resolution: ${lt + 1e-3}dppx)`), $i(Es, Gn, Qo), Zi.dispatchEvent(new CustomEvent(to)));
+  lt != t && (lt = t, Gn && nr(ks, Gn, er), Gn = matchMedia(`(min-resolution: ${lt - 1e-3}dppx) and (max-resolution: ${lt + 1e-3}dppx)`), $i(ks, Gn, er), Zi.dispatchEvent(new CustomEvent(io)));
 }
 function se(t, e) {
   if (e != null) {
@@ -1453,44 +1505,44 @@ function se(t, e) {
     !n.contains(e) && n.add(e);
   }
 }
-function Xo(t, e) {
+function ir(t, e) {
   let n = t.classList;
   n.contains(e) && n.remove(e);
 }
 function _t(t, e, n) {
   t.style[e] = n + "px";
 }
-function Ee(t, e, n, i) {
-  let o = Jo.createElement(t);
+function ke(t, e, n, i) {
+  let o = tr.createElement(t);
   return e != null && se(o, e), n?.insertBefore(o, i), o;
 }
 function ve(t, e) {
-  return Ee("div", t, e);
-}
-const ks = /* @__PURE__ */ new WeakMap();
-function Re(t, e, n, i, o) {
-  let s = "translate(" + e + "px," + n + "px)", a = ks.get(t);
-  s != a && (t.style.transform = s, ks.set(t, s), e < 0 || n < 0 || e > i || n > o ? se(t, wi) : Xo(t, wi));
+  return ke("div", t, e);
 }
 const Ps = /* @__PURE__ */ new WeakMap();
-function Ts(t, e, n) {
-  let i = e + n, o = Ps.get(t);
-  i != o && (Ps.set(t, i), t.style.background = e, t.style.borderColor = n);
+function Re(t, e, n, i, o) {
+  let s = "translate(" + e + "px," + n + "px)", a = Ps.get(t);
+  s != a && (t.style.transform = s, Ps.set(t, s), e < 0 || n < 0 || e > i || n > o ? se(t, wi) : ir(t, wi));
 }
-const Cs = /* @__PURE__ */ new WeakMap();
-function Ms(t, e, n, i) {
-  let o = e + "" + n, s = Cs.get(t);
-  o != s && (Cs.set(t, o), t.style.height = n + "px", t.style.width = e + "px", t.style.marginLeft = i ? -e / 2 + "px" : 0, t.style.marginTop = i ? -n / 2 + "px" : 0);
+const Ts = /* @__PURE__ */ new WeakMap();
+function Cs(t, e, n) {
+  let i = e + n, o = Ts.get(t);
+  i != o && (Ts.set(t, i), t.style.background = e, t.style.borderColor = n);
 }
-const br = { passive: !0 }, Qc = { ...br, capture: !0 };
+const Ms = /* @__PURE__ */ new WeakMap();
+function zs(t, e, n, i) {
+  let o = e + "" + n, s = Ms.get(t);
+  o != s && (Ms.set(t, o), t.style.height = n + "px", t.style.width = e + "px", t.style.marginLeft = i ? -e / 2 + "px" : 0, t.style.marginTop = i ? -n / 2 + "px" : 0);
+}
+const _r = { passive: !0 }, Qc = { ..._r, capture: !0 };
 function $i(t, e, n, i) {
-  e.addEventListener(t, n, i ? Qc : br);
+  e.addEventListener(t, n, i ? Qc : _r);
 }
-function tr(t, e, n, i) {
-  e.removeEventListener(t, n, br);
+function nr(t, e, n, i) {
+  e.removeEventListener(t, n, _r);
 }
-sn && Qo();
-function ke(t, e, n, i) {
+sn && er();
+function Pe(t, e, n, i) {
   let o;
   n = n || 0, i = i || e.length - 1;
   let s = i <= 2147483647;
@@ -1514,9 +1566,9 @@ function xl(t) {
     return [s, a];
   };
 }
-const $l = (t) => t != null, Sl = (t) => t != null && t > 0, lo = xl($l), Xc = xl(Sl);
+const $l = (t) => t != null, Sl = (t) => t != null && t > 0, co = xl($l), Xc = xl(Sl);
 function tu(t, e, n, i = 0, o = !1) {
-  let s = o ? Xc : lo, a = o ? Sl : $l;
+  let s = o ? Xc : co, a = o ? Sl : $l;
   [e, n] = s(t, e, n);
   let f = t[e], h = t[e];
   if (e > -1)
@@ -1531,19 +1583,19 @@ function tu(t, e, n, i = 0, o = !1) {
       }
   return [f ?? dt, h ?? -dt];
 }
-function ao(t, e, n, i) {
-  let o = Os(t), s = Os(e);
+function uo(t, e, n, i) {
+  let o = Ns(t), s = Ns(e);
   t == e && (o == -1 ? (t *= n, e /= n) : (t /= n, e *= n));
-  let a = n == 10 ? Ge : Al, f = o == 1 ? le : be, h = s == 1 ? be : le, p = f(a(zt(t))), b = h(a(zt(e))), m = Xi(n, p), v = Xi(n, b);
-  return n == 10 && (p < 0 && (m = pt(m, -p)), b < 0 && (v = pt(v, -b))), i || n == 2 ? (t = m * o, e = v * s) : (t = Tl(t, m), e = co(e, v)), [t, e];
+  let a = n == 10 ? Ye : Al, f = o == 1 ? le : be, h = s == 1 ? be : le, p = f(a(zt(t))), b = h(a(zt(e))), m = Xi(n, p), v = Xi(n, b);
+  return n == 10 && (p < 0 && (m = pt(m, -p)), b < 0 && (v = pt(v, -b))), i || n == 2 ? (t = m * o, e = v * s) : (t = Tl(t, m), e = fo(e, v)), [t, e];
 }
-function _r(t, e, n, i) {
-  let o = ao(t, e, n, i);
+function yr(t, e, n, i) {
+  let o = uo(t, e, n, i);
   return t == 0 && (o[0] = 0), e == 0 && (o[1] = 0), o;
 }
-const yr = 0.1, zs = {
+const wr = 0.1, Ds = {
   mode: 3,
-  pad: yr
+  pad: wr
 }, Sn = {
   pad: 0,
   soft: null,
@@ -1552,8 +1604,8 @@ const yr = 0.1, zs = {
   min: Sn,
   max: Sn
 };
-function eo(t, e, n, i) {
-  return uo(n) ? Ds(t, e, n) : (Sn.pad = n, Sn.soft = i ? 0 : null, Sn.mode = i ? 3 : 0, Ds(t, e, eu));
+function no(t, e, n, i) {
+  return ho(n) ? Os(t, e, n) : (Sn.pad = n, Sn.soft = i ? 0 : null, Sn.mode = i ? 3 : 0, Os(t, e, eu));
 }
 function rt(t, e) {
   return t ?? e;
@@ -1566,18 +1618,18 @@ function iu(t, e, n) {
   }
   return !1;
 }
-function Ds(t, e, n) {
-  let i = n.min, o = n.max, s = rt(i.pad, 0), a = rt(o.pad, 0), f = rt(i.hard, -dt), h = rt(o.hard, dt), p = rt(i.soft, dt), b = rt(o.soft, -dt), m = rt(i.mode, 0), v = rt(o.mode, 0), E = e - t, P = Ge(E), H = Zt(zt(t), zt(e)), U = Ge(H), I = zt(U - P);
+function Os(t, e, n) {
+  let i = n.min, o = n.max, s = rt(i.pad, 0), a = rt(o.pad, 0), f = rt(i.hard, -dt), h = rt(o.hard, dt), p = rt(i.soft, dt), b = rt(o.soft, -dt), m = rt(i.mode, 0), v = rt(o.mode, 0), E = e - t, P = Ye(E), H = Zt(zt(t), zt(e)), V = Ye(H), I = zt(V - P);
   (E < 1e-24 || I > 10) && (E = 0, (t == 0 || e == 0) && (E = 1e-24, m == 2 && p != dt && (s = 0), v == 2 && b != -dt && (a = 0)));
-  let x = E || H || 1e3, R = Ge(x), $ = Xi(10, le(R)), Z = x * (E == 0 ? t == 0 ? 0.1 : 1 : s), M = pt(Tl(t - Z, $ / 10), 24), J = t >= p && (m == 1 || m == 3 && M <= p || m == 2 && M >= p) ? p : dt, G = Zt(f, M < J && t >= J ? J : Pe(J, M)), tt = x * (E == 0 ? e == 0 ? 0.1 : 1 : a), W = pt(co(e + tt, $ / 10), 24), S = e <= b && (v == 1 || v == 3 && W >= b || v == 2 && W <= b) ? b : -dt, q = Pe(h, W > S && e <= S ? S : Zt(S, W));
-  return G == q && G == 0 && (q = 100), [G, q];
+  let x = E || H || 1e3, R = Ye(x), $ = Xi(10, le(R)), Z = x * (E == 0 ? t == 0 ? 0.1 : 1 : s), M = pt(Tl(t - Z, $ / 10), 24), J = t >= p && (m == 1 || m == 3 && M <= p || m == 2 && M >= p) ? p : dt, Y = Zt(f, M < J && t >= J ? J : Te(J, M)), tt = x * (E == 0 ? e == 0 ? 0.1 : 1 : a), W = pt(fo(e + tt, $ / 10), 24), S = e <= b && (v == 1 || v == 3 && W >= b || v == 2 && W <= b) ? b : -dt, q = Te(h, W > S && e <= S ? S : Zt(S, W));
+  return Y == q && Y == 0 && (q = 100), [Y, q];
 }
-const nu = new Intl.NumberFormat(sn ? Jc.language : "en-US"), wr = (t) => nu.format(t), ue = Math, Zn = ue.PI, zt = ue.abs, le = ue.floor, Mt = ue.round, be = ue.ceil, Pe = ue.min, Zt = ue.max, Xi = ue.pow, Os = ue.sign, Ge = ue.log10, Al = ue.log2, ou = (t, e = 1) => ue.sinh(t) * e, Wo = (t, e = 1) => ue.asinh(t / e), dt = 1 / 0;
-function Ns(t) {
-  return (Ge((t ^ t >> 31) - (t >> 31)) | 0) + 1;
+const nu = new Intl.NumberFormat(sn ? Jc.language : "en-US"), xr = (t) => nu.format(t), ue = Math, Zn = ue.PI, zt = ue.abs, le = ue.floor, Mt = ue.round, be = ue.ceil, Te = ue.min, Zt = ue.max, Xi = ue.pow, Ns = ue.sign, Ye = ue.log10, Al = ue.log2, ou = (t, e = 1) => ue.sinh(t) * e, Yo = (t, e = 1) => ue.asinh(t / e), dt = 1 / 0;
+function Ls(t) {
+  return (Ye((t ^ t >> 31) - (t >> 31)) | 0) + 1;
 }
-function er(t, e, n) {
-  return Pe(Zt(t, e), n);
+function or(t, e, n) {
+  return Te(Zt(t, e), n);
 }
 function El(t) {
   return typeof t == "function";
@@ -1586,7 +1638,7 @@ function et(t) {
   return El(t) ? t : () => t;
 }
 const ru = () => {
-}, kl = (t) => t, Pl = (t, e) => e, su = (t) => null, Ls = (t) => !0, Hs = (t, e) => t == e, lu = /\.\d*?(?=9{6,}|0{6,})/gm, Ei = (t) => {
+}, kl = (t) => t, Pl = (t, e) => e, su = (t) => null, Hs = (t) => !0, Rs = (t, e) => t == e, lu = /\.\d*?(?=9{6,}|0{6,})/gm, Ei = (t) => {
   if (Ml(t) || ri.has(t))
     return t;
   const e = `${t}`, n = e.match(lu);
@@ -1602,7 +1654,7 @@ const ru = () => {
 function _i(t, e) {
   return Ei(pt(Ei(t / e)) * e);
 }
-function co(t, e) {
+function fo(t, e) {
   return Ei(be(Ei(t / e)) * e);
 }
 function Tl(t, e) {
@@ -1629,11 +1681,11 @@ function Tn(t, e, n, i) {
   }
   return o;
 }
-const An = {}, xr = [], tn = [null, null], ii = Array.isArray, Ml = Number.isInteger, au = (t) => t === void 0;
-function Rs(t) {
+const An = {}, $r = [], tn = [null, null], ii = Array.isArray, Ml = Number.isInteger, au = (t) => t === void 0;
+function Fs(t) {
   return typeof t == "string";
 }
-function uo(t) {
+function ho(t) {
   let e = !1;
   if (t != null) {
     let n = t.constructor;
@@ -1645,7 +1697,7 @@ function cu(t) {
   return t != null && typeof t == "object";
 }
 const uu = Object.getPrototypeOf(Uint8Array), zl = "__proto__";
-function en(t, e = uo) {
+function en(t, e = ho) {
   let n;
   if (ii(t)) {
     let i = t.find((o) => o != null);
@@ -1670,7 +1722,7 @@ function kt(t) {
   for (let n = 1; n < e.length; n++) {
     let i = e[n];
     for (let o in i)
-      o != zl && (uo(t[o]) ? kt(t[o], en(i[o])) : t[o] = en(i[o]));
+      o != zl && (ho(t[o]) ? kt(t[o], en(i[o])) : t[o] = en(i[o]));
   }
   return t;
 }
@@ -1707,8 +1759,8 @@ function mu(t, e) {
     for (let p = 1; p < f.length; p++) {
       let b = f[p], m = Array(o).fill(void 0), v = e ? e[a][p] : hu, E = [];
       for (let P = 0; P < b.length; P++) {
-        let H = b[P], U = s.get(h[P]);
-        H === null ? v != fu && (m[U] = H, v == du && E.push(U)) : m[U] = H;
+        let H = b[P], V = s.get(h[P]);
+        H === null ? v != fu && (m[V] = H, v == du && E.push(V)) : m[V] = H;
       }
       pu(m, E, o), i.push(m);
     }
@@ -1850,7 +1902,7 @@ const Su = {
   // 374
   fff: (t) => $u(t.getMilliseconds())
 };
-function $r(t, e) {
+function Sr(t, e) {
   e = e || xu;
   let n = [], i = /\{([a-z]+)\}|[^{]+/gi, o;
   for (; o = i.exec(t); )
@@ -1867,10 +1919,10 @@ function Eu(t, e) {
   let n;
   return e == "UTC" || e == "Etc/UTC" ? n = new Date(+t + t.getTimezoneOffset() * 6e4) : e == Au ? n = t : (n = new Date(t.toLocaleString("en-US", { timeZone: e })), n.setMilliseconds(t.getMilliseconds())), n;
 }
-const Ll = (t) => t % 1 == 0, io = [1, 2, 2.5, 5], ku = Tn(10, -32, 0, io), Hl = Tn(10, 0, 32, io), Pu = Hl.filter(Ll), yi = ku.concat(Hl), Sr = `
-`, Rl = "{YYYY}", Fs = Sr + Rl, Fl = "{M}/{D}", xn = Sr + Fl, Yn = xn + "/{YY}", Ul = "{aa}", Tu = "{h}:{mm}", qi = Tu + Ul, Us = Sr + qi, Vs = ":{ss}", ut = null;
-function Vl(t) {
-  let e = t * 1e3, n = e * 60, i = n * 60, o = i * 24, s = o * 30, a = o * 365, h = (t == 1 ? Tn(10, 0, 3, io).filter(Ll) : Tn(10, -3, 0, io)).concat([
+const Ll = (t) => t % 1 == 0, oo = [1, 2, 2.5, 5], ku = Tn(10, -32, 0, oo), Hl = Tn(10, 0, 32, oo), Pu = Hl.filter(Ll), yi = ku.concat(Hl), Ar = `
+`, Rl = "{YYYY}", Vs = Ar + Rl, Fl = "{M}/{D}", xn = Ar + Fl, Yn = xn + "/{YY}", Vl = "{aa}", Tu = "{h}:{mm}", qi = Tu + Vl, Us = Ar + qi, Is = ":{ss}", ut = null;
+function Ul(t) {
+  let e = t * 1e3, n = e * 60, i = n * 60, o = i * 24, s = o * 30, a = o * 365, h = (t == 1 ? Tn(10, 0, 3, oo).filter(Ll) : Tn(10, -3, 0, oo)).concat([
     // minute divisors (# of secs)
     e,
     e * 5,
@@ -1921,32 +1973,32 @@ function Vl(t) {
   const p = [
     //   tick incr    default          year                    month   day                   hour    min       sec   mode
     [a, Rl, ut, ut, ut, ut, ut, ut, 1],
-    [o * 28, "{MMM}", Fs, ut, ut, ut, ut, ut, 1],
-    [o, Fl, Fs, ut, ut, ut, ut, ut, 1],
-    [i, "{h}" + Ul, Yn, ut, xn, ut, ut, ut, 1],
+    [o * 28, "{MMM}", Vs, ut, ut, ut, ut, ut, 1],
+    [o, Fl, Vs, ut, ut, ut, ut, ut, 1],
+    [i, "{h}" + Vl, Yn, ut, xn, ut, ut, ut, 1],
     [n, qi, Yn, ut, xn, ut, ut, ut, 1],
-    [e, Vs, Yn + " " + qi, ut, xn + " " + qi, ut, Us, ut, 1],
-    [t, Vs + ".{fff}", Yn + " " + qi, ut, xn + " " + qi, ut, Us, ut, 1]
+    [e, Is, Yn + " " + qi, ut, xn + " " + qi, ut, Us, ut, 1],
+    [t, Is + ".{fff}", Yn + " " + qi, ut, xn + " " + qi, ut, Us, ut, 1]
   ];
   function b(m) {
-    return (v, E, P, H, U, I) => {
-      let x = [], R = U >= a, $ = U >= s && U < a, Z = m(P), M = pt(Z * t, 3), J = Go(Z.getFullYear(), R ? 0 : Z.getMonth(), $ || R ? 1 : Z.getDate()), G = pt(J * t, 3);
+    return (v, E, P, H, V, I) => {
+      let x = [], R = V >= a, $ = V >= s && V < a, Z = m(P), M = pt(Z * t, 3), J = Ko(Z.getFullYear(), R ? 0 : Z.getMonth(), $ || R ? 1 : Z.getDate()), Y = pt(J * t, 3);
       if ($ || R) {
-        let tt = $ ? U / s : 0, W = R ? U / a : 0, S = M == G ? M : pt(Go(J.getFullYear() + W, J.getMonth() + tt, 1) * t, 3), q = new Date(Mt(S / t)), z = q.getFullYear(), j = q.getMonth();
+        let tt = $ ? V / s : 0, W = R ? V / a : 0, S = M == Y ? M : pt(Ko(J.getFullYear() + W, J.getMonth() + tt, 1) * t, 3), q = new Date(Mt(S / t)), z = q.getFullYear(), j = q.getMonth();
         for (let L = 0; S <= H; L++) {
-          let it = Go(z + W * L, j + tt * L, 1), N = it - m(pt(it * t, 3));
+          let it = Ko(z + W * L, j + tt * L, 1), N = it - m(pt(it * t, 3));
           S = pt((+it + N) * t, 3), S <= H && x.push(S);
         }
       } else {
-        let tt = U >= o ? o : U, W = le(P) - le(M), S = G + W + co(M - G, tt);
+        let tt = V >= o ? o : V, W = le(P) - le(M), S = Y + W + fo(M - Y, tt);
         x.push(S);
-        let q = m(S), z = q.getHours() + q.getMinutes() / n + q.getSeconds() / i, j = U / i, L = v.axes[E]._space, it = I / L;
-        for (; S = pt(S + U, t == 1 ? 0 : 3), !(S > H); )
+        let q = m(S), z = q.getHours() + q.getMinutes() / n + q.getSeconds() / i, j = V / i, L = v.axes[E]._space, it = I / L;
+        for (; S = pt(S + V, t == 1 ? 0 : 3), !(S > H); )
           if (j > 1) {
             let N = le(pt(z + j, 6)) % 24, nt = m(S).getHours() - N;
             nt > 1 && (nt = -1), S -= nt * i, z = (z + j) % 24;
             let ft = x[x.length - 1];
-            pt((S - ft) / U, 3) * it >= 0.7 && x.push(S);
+            pt((S - ft) / V, 3) * it >= 0.7 && x.push(S);
           } else
             x.push(S);
       }
@@ -1959,35 +2011,35 @@ function Vl(t) {
     b
   ];
 }
-const [Cu, Mu, zu] = Vl(1), [Du, Ou, Nu] = Vl(1e-3);
+const [Cu, Mu, zu] = Ul(1), [Du, Ou, Nu] = Ul(1e-3);
 Tn(2, -53, 53, [1]);
-function Is(t, e) {
+function js(t, e) {
   return t.map((n) => n.map(
     (i, o) => o == 0 || o == 8 || i == null ? i : e(o == 1 || n[8] == 0 ? i : n[1] + i)
   ));
 }
-function js(t, e) {
+function Bs(t, e) {
   return (n, i, o, s, a) => {
     let f = e.find((P) => a >= P[0]) || e[e.length - 1], h, p, b, m, v, E;
     return i.map((P) => {
-      let H = t(P), U = H.getFullYear(), I = H.getMonth(), x = H.getDate(), R = H.getHours(), $ = H.getMinutes(), Z = H.getSeconds(), M = U != h && f[2] || I != p && f[3] || x != b && f[4] || R != m && f[5] || $ != v && f[6] || Z != E && f[7] || f[1];
-      return h = U, p = I, b = x, m = R, v = $, E = Z, M(H);
+      let H = t(P), V = H.getFullYear(), I = H.getMonth(), x = H.getDate(), R = H.getHours(), $ = H.getMinutes(), Z = H.getSeconds(), M = V != h && f[2] || I != p && f[3] || x != b && f[4] || R != m && f[5] || $ != v && f[6] || Z != E && f[7] || f[1];
+      return h = V, p = I, b = x, m = R, v = $, E = Z, M(H);
     });
   };
 }
 function Lu(t, e) {
-  let n = $r(e);
+  let n = Sr(e);
   return (i, o, s, a, f) => o.map((h) => n(t(h)));
 }
-function Go(t, e, n) {
+function Ko(t, e, n) {
   return new Date(t, e, n);
 }
-function Bs(t, e) {
+function Ws(t, e) {
   return e(t);
 }
 const Hu = "{YYYY}-{MM}-{DD} {h}:{mm}{aa}";
-function Ws(t, e) {
-  return (n, i, o, s) => s == null ? vr : e(t(i));
+function Gs(t, e) {
+  return (n, i, o, s) => s == null ? br : e(t(i));
 }
 function Ru(t, e) {
   let n = t.series[e];
@@ -1996,7 +2048,7 @@ function Ru(t, e) {
 function Fu(t, e) {
   return t.series[e].fill(t, e);
 }
-const Uu = {
+const Vu = {
   show: !0,
   live: !0,
   isolate: !1,
@@ -2012,7 +2064,7 @@ const Uu = {
   idxs: null,
   values: []
 };
-function Vu(t, e) {
+function Uu(t, e) {
   let n = t.cursor.points, i = ve(), o = n.size(t, e);
   _t(i, yn, o), _t(i, wn, o);
   let s = o / -2;
@@ -2031,16 +2083,16 @@ function ju(t, e) {
 function Bu(t, e) {
   return t.series[e].points.size;
 }
-const Yo = [0, 0];
+const qo = [0, 0];
 function Wu(t, e, n) {
-  return Yo[0] = e, Yo[1] = n, Yo;
+  return qo[0] = e, qo[1] = n, qo;
 }
 function Kn(t, e, n, i = !0) {
   return (o) => {
     o.button == 0 && (!i || o.target == e) && n(o);
   };
 }
-function Ko(t, e, n, i = !0) {
+function Zo(t, e, n, i = !0) {
   return (o) => {
     (!i || o.target == e) && n(o);
   };
@@ -2053,7 +2105,7 @@ const Gu = {
   move: Wu,
   points: {
     one: !1,
-    show: Vu,
+    show: Uu,
     size: Bu,
     width: 0,
     stroke: ju,
@@ -2065,9 +2117,9 @@ const Gu = {
     click: Kn,
     // legend clicks, not .u-over clicks
     dblclick: Kn,
-    mousemove: Ko,
-    mouseleave: Ko,
-    mouseenter: Ko
+    mousemove: Zo,
+    mouseleave: Zo,
+    mouseenter: Zo
   },
   drag: {
     setScale: !0,
@@ -2102,16 +2154,16 @@ const Gu = {
   stroke: "rgba(0,0,0,0.07)",
   width: 2
   //	dash: [],
-}, Ar = kt({}, Il, {
+}, Er = kt({}, Il, {
   filter: Pl
-}), jl = kt({}, Ar, {
+}), jl = kt({}, Er, {
   size: 10
 }), Bl = kt({}, Il, {
   show: !1
-}), Er = '12px system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"', Wl = "bold " + Er, Gl = 1.5, Gs = {
+}), kr = '12px system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"', Wl = "bold " + kr, Gl = 1.5, Ys = {
   show: !0,
   scale: "x",
-  stroke: gr,
+  stroke: vr,
   space: 50,
   gap: 5,
   alignTo: 1,
@@ -2124,13 +2176,13 @@ const Gu = {
   //	incrs: timeIncrs,
   //	values: timeVals,
   //	filter: retArg1,
-  grid: Ar,
+  grid: Er,
   ticks: jl,
   border: Bl,
-  font: Er,
+  font: kr,
   lineGap: Gl,
   rotate: 0
-}, Yu = "Value", Ku = "Time", Ys = {
+}, Yu = "Value", Ku = "Time", Ks = {
   show: !0,
   scale: "x",
   auto: !1,
@@ -2143,50 +2195,50 @@ const Gu = {
   idxs: []
 };
 function qu(t, e, n, i, o) {
-  return e.map((s) => s == null ? "" : wr(s));
+  return e.map((s) => s == null ? "" : xr(s));
 }
 function Zu(t, e, n, i, o, s, a) {
   let f = [], h = ri.get(o) || 0;
-  n = a ? n : pt(co(n, o), h);
+  n = a ? n : pt(fo(n, o), h);
   for (let p = n; p <= i; p = pt(p + o, h))
     f.push(Object.is(p, -0) ? 0 : p);
   return f;
 }
-function ir(t, e, n, i, o, s, a) {
-  const f = [], h = t.scales[t.axes[e].scale].log, p = h == 10 ? Ge : Al, b = le(p(n));
-  o = Xi(h, b), h == 10 && (o = yi[ke(o, yi)]);
+function rr(t, e, n, i, o, s, a) {
+  const f = [], h = t.scales[t.axes[e].scale].log, p = h == 10 ? Ye : Al, b = le(p(n));
+  o = Xi(h, b), h == 10 && (o = yi[Pe(o, yi)]);
   let m = n, v = o * h;
-  h == 10 && (v = yi[ke(v, yi)]);
+  h == 10 && (v = yi[Pe(v, yi)]);
   do
-    f.push(m), m = m + o, h == 10 && !ri.has(m) && (m = pt(m, ri.get(o))), m >= v && (o = m, v = o * h, h == 10 && (v = yi[ke(v, yi)]));
+    f.push(m), m = m + o, h == 10 && !ri.has(m) && (m = pt(m, ri.get(o))), m >= v && (o = m, v = o * h, h == 10 && (v = yi[Pe(v, yi)]));
   while (m <= i);
   return f;
 }
 function Ju(t, e, n, i, o, s, a) {
-  let h = t.scales[t.axes[e].scale].asinh, p = i > h ? ir(t, e, Zt(h, n), i, o) : [h], b = i >= 0 && n <= 0 ? [0] : [];
-  return (n < -h ? ir(t, e, Zt(h, -i), -n, o) : [h]).reverse().map((v) => -v).concat(b, p);
+  let h = t.scales[t.axes[e].scale].asinh, p = i > h ? rr(t, e, Zt(h, n), i, o) : [h], b = i >= 0 && n <= 0 ? [0] : [];
+  return (n < -h ? rr(t, e, Zt(h, -i), -n, o) : [h]).reverse().map((v) => -v).concat(b, p);
 }
-const Yl = /./, Qu = /[12357]/, Xu = /[125]/, Ks = /1/, nr = (t, e, n, i) => t.map((o, s) => e == 4 && o == 0 || s % i == 0 && n.test(o.toExponential()[o < 0 ? 1 : 0]) ? o : null);
+const Yl = /./, Qu = /[12357]/, Xu = /[125]/, qs = /1/, sr = (t, e, n, i) => t.map((o, s) => e == 4 && o == 0 || s % i == 0 && n.test(o.toExponential()[o < 0 ? 1 : 0]) ? o : null);
 function tf(t, e, n, i, o) {
-  let s = t.axes[n], a = s.scale, f = t.scales[a], h = t.valToPos, p = s._space, b = h(10, a), m = h(9, a) - b >= p ? Yl : h(7, a) - b >= p ? Qu : h(5, a) - b >= p ? Xu : Ks;
-  if (m == Ks) {
+  let s = t.axes[n], a = s.scale, f = t.scales[a], h = t.valToPos, p = s._space, b = h(10, a), m = h(9, a) - b >= p ? Yl : h(7, a) - b >= p ? Qu : h(5, a) - b >= p ? Xu : qs;
+  if (m == qs) {
     let v = zt(h(1, a) - b);
     if (v < p)
-      return nr(e.slice().reverse(), f.distr, m, be(p / v)).reverse();
+      return sr(e.slice().reverse(), f.distr, m, be(p / v)).reverse();
   }
-  return nr(e, f.distr, m, 1);
+  return sr(e, f.distr, m, 1);
 }
 function ef(t, e, n, i, o) {
   let s = t.axes[n], a = s.scale, f = s._space, h = t.valToPos, p = zt(h(1, a) - h(2, a));
-  return p < f ? nr(e.slice().reverse(), 3, Yl, be(f / p)).reverse() : e;
+  return p < f ? sr(e.slice().reverse(), 3, Yl, be(f / p)).reverse() : e;
 }
 function nf(t, e, n, i) {
-  return i == null ? vr : e == null ? "" : wr(e);
+  return i == null ? br : e == null ? "" : xr(e);
 }
-const qs = {
+const Zs = {
   show: !0,
   scale: "y",
-  stroke: gr,
+  stroke: vr,
   space: 30,
   gap: 5,
   alignTo: 1,
@@ -2199,10 +2251,10 @@ const qs = {
   //	incrs: numIncrs,
   //	values: (vals, space) => vals,
   //	filter: retArg1,
-  grid: Ar,
+  grid: Er,
   ticks: jl,
   border: Bl,
-  font: Er,
+  font: kr,
   lineGap: Gl,
   rotate: 0
 };
@@ -2214,24 +2266,24 @@ function rf(t, e) {
   let { scale: n, idxs: i } = t.series[0], o = t._data[0], s = t.valToPos(o[i[0]], n, !0), a = t.valToPos(o[i[1]], n, !0), f = zt(a - s), h = t.series[e], p = f / (h.points.space * lt);
   return i[1] - i[0] <= p;
 }
-const Zs = {
+const Js = {
   scale: null,
   auto: !0,
   sorted: 0,
   // internal caches
   min: dt,
   max: -dt
-}, Kl = (t, e, n, i, o) => o, Js = {
+}, Kl = (t, e, n, i, o) => o, Qs = {
   show: !0,
   auto: !0,
   sorted: 0,
   gaps: Kl,
   alpha: 1,
   facets: [
-    kt({}, Zs, { scale: "x" }),
-    kt({}, Zs, { scale: "y" })
+    kt({}, Js, { scale: "x" }),
+    kt({}, Js, { scale: "y" })
   ]
-}, Qs = {
+}, Xs = {
   scale: "y",
   auto: !0,
   sorted: 0,
@@ -2274,9 +2326,9 @@ const ql = {
 }, lf = kt({}, ql, {
   time: !1,
   ori: 1
-}), Xs = {};
+}), tl = {};
 function Zl(t, e) {
-  let n = Xs[t];
+  let n = tl[t];
   return n || (n = {
     key: t,
     plots: [],
@@ -2290,27 +2342,27 @@ function Zl(t, e) {
       for (let b = 0; b < n.plots.length; b++)
         n.plots[b] != o && n.plots[b].pub(i, o, s, a, f, h, p);
     }
-  }, t != null && (Xs[t] = n)), n;
+  }, t != null && (tl[t] = n)), n;
 }
-const nn = 1, or = 2;
+const nn = 1, lr = 2;
 function ki(t, e, n) {
   const i = t.mode, o = t.series[e], s = i == 2 ? t._data[e] : t._data, a = t.scales, f = t.bbox;
-  let h = s[0], p = i == 2 ? s[1] : s[e], b = i == 2 ? a[o.facets[0].scale] : a[t.series[0].scale], m = i == 2 ? a[o.facets[1].scale] : a[o.scale], v = f.left, E = f.top, P = f.width, H = f.height, U = t.valToPosH, I = t.valToPosV;
+  let h = s[0], p = i == 2 ? s[1] : s[e], b = i == 2 ? a[o.facets[0].scale] : a[t.series[0].scale], m = i == 2 ? a[o.facets[1].scale] : a[o.scale], v = f.left, E = f.top, P = f.width, H = f.height, V = t.valToPosH, I = t.valToPosV;
   return b.ori == 0 ? n(
     o,
     h,
     p,
     b,
     m,
-    U,
+    V,
     I,
     v,
     E,
     P,
     H,
-    ho,
-    ln,
     mo,
+    ln,
+    vo,
     Ql,
     ta
   ) : n(
@@ -2320,20 +2372,20 @@ function ki(t, e, n) {
     b,
     m,
     I,
-    U,
+    V,
     E,
     v,
     H,
     P,
-    po,
+    go,
     an,
-    Tr,
+    Cr,
     Xl,
     ea
   );
 }
-function kr(t, e) {
-  let n = 0, i = 0, o = rt(t.bands, xr);
+function Pr(t, e) {
+  let n = 0, i = 0, o = rt(t.bands, $r);
   for (let s = 0; s < o.length; s++) {
     let a = o[s];
     a.series[0] == e ? n = a.dir : a.series[1] == e && (a.dir == 1 ? i |= 1 : i |= 2);
@@ -2356,21 +2408,21 @@ function af(t, e, n, i, o) {
   let s = t.mode, a = t.series[e], f = s == 2 ? a.facets[1].scale : a.scale, h = t.scales[f];
   return o == -1 ? h.min : o == 1 ? h.max : h.distr == 3 ? h.dir == 1 ? h.min : h.max : 0;
 }
-function Ye(t, e, n, i, o, s) {
-  return ki(t, e, (a, f, h, p, b, m, v, E, P, H, U) => {
+function Ke(t, e, n, i, o, s) {
+  return ki(t, e, (a, f, h, p, b, m, v, E, P, H, V) => {
     let I = a.pxRound;
     const x = p.dir * (p.ori == 0 ? 1 : -1), R = p.ori == 0 ? ln : an;
     let $, Z;
     x == 1 ? ($ = n, Z = i) : ($ = i, Z = n);
-    let M = I(m(f[$], p, H, E)), J = I(v(h[$], b, U, P)), G = I(m(f[Z], p, H, E)), tt = I(v(s == 1 ? b.max : b.min, b, U, P)), W = new Path2D(o);
-    return R(W, G, tt), R(W, M, tt), R(W, M, J), W;
+    let M = I(m(f[$], p, H, E)), J = I(v(h[$], b, V, P)), Y = I(m(f[Z], p, H, E)), tt = I(v(s == 1 ? b.max : b.min, b, V, P)), W = new Path2D(o);
+    return R(W, Y, tt), R(W, M, tt), R(W, M, J), W;
   });
 }
-function fo(t, e, n, i, o, s) {
+function po(t, e, n, i, o, s) {
   let a = null;
   if (t.length > 0) {
     a = new Path2D();
-    const f = e == 0 ? mo : Tr;
+    const f = e == 0 ? vo : Cr;
     let h = n;
     for (let m = 0; m < t.length; m++) {
       let v = t[m];
@@ -2388,7 +2440,7 @@ function cf(t, e, n) {
   let i = t[t.length - 1];
   i && i[0] == e ? i[1] = n : t.push([e, n]);
 }
-function Pr(t, e, n, i, o, s, a) {
+function Tr(t, e, n, i, o, s, a) {
   let f = [], h = t.length;
   for (let p = o == 1 ? n : i; p >= n && p <= i; p += o)
     if (e[p] === null) {
@@ -2406,11 +2458,11 @@ function Pr(t, e, n, i, o, s, a) {
     }
   return f;
 }
-function tl(t) {
+function el(t) {
   return t == 0 ? kl : t == 1 ? Mt : (e) => _i(e, t);
 }
 function Jl(t) {
-  let e = t == 0 ? ho : po, n = t == 0 ? (o, s, a, f, h, p) => {
+  let e = t == 0 ? mo : go, n = t == 0 ? (o, s, a, f, h, p) => {
     o.arcTo(s, a, f, h, p);
   } : (o, s, a, f, h, p) => {
     o.arcTo(a, s, h, f, p);
@@ -2420,18 +2472,18 @@ function Jl(t) {
     o.rect(a, s, h, f);
   };
   return (o, s, a, f, h, p = 0, b = 0) => {
-    p == 0 && b == 0 ? i(o, s, a, f, h) : (p = Pe(p, f / 2, h / 2), b = Pe(b, f / 2, h / 2), e(o, s + p, a), n(o, s + f, a, s + f, a + h, p), n(o, s + f, a + h, s, a + h, b), n(o, s, a + h, s, a, b), n(o, s, a, s + f, a, p), o.closePath());
+    p == 0 && b == 0 ? i(o, s, a, f, h) : (p = Te(p, f / 2, h / 2), b = Te(b, f / 2, h / 2), e(o, s + p, a), n(o, s + f, a, s + f, a + h, p), n(o, s + f, a + h, s, a + h, b), n(o, s, a + h, s, a, b), n(o, s, a, s + f, a, p), o.closePath());
   };
 }
-const ho = (t, e, n) => {
+const mo = (t, e, n) => {
   t.moveTo(e, n);
-}, po = (t, e, n) => {
+}, go = (t, e, n) => {
   t.moveTo(n, e);
 }, ln = (t, e, n) => {
   t.lineTo(e, n);
 }, an = (t, e, n) => {
   t.lineTo(n, e);
-}, mo = Jl(0), Tr = Jl(1), Ql = (t, e, n, i, o, s) => {
+}, vo = Jl(0), Cr = Jl(1), Ql = (t, e, n, i, o, s) => {
   t.arc(e, n, i, o, s);
 }, Xl = (t, e, n, i, o, s) => {
   t.arc(n, e, i, o, s);
@@ -2441,12 +2493,12 @@ const ho = (t, e, n) => {
   t.bezierCurveTo(n, e, o, i, a, s);
 };
 function ia(t) {
-  return (e, n, i, o, s) => ki(e, n, (a, f, h, p, b, m, v, E, P, H, U) => {
+  return (e, n, i, o, s) => ki(e, n, (a, f, h, p, b, m, v, E, P, H, V) => {
     let { pxRound: I, points: x } = a, R, $;
-    p.ori == 0 ? (R = ho, $ = Ql) : (R = po, $ = Xl);
+    p.ori == 0 ? (R = mo, $ = Ql) : (R = go, $ = Xl);
     const Z = pt(x.width * lt, 3);
-    let M = (x.size - x.width) / 2 * lt, J = pt(M * 2, 3), G = new Path2D(), tt = new Path2D(), { left: W, top: S, width: q, height: z } = e.bbox;
-    mo(
+    let M = (x.size - x.width) / 2 * lt, J = pt(M * 2, 3), Y = new Path2D(), tt = new Path2D(), { left: W, top: S, width: q, height: z } = e.bbox;
+    vo(
       tt,
       W - J,
       S - J,
@@ -2455,8 +2507,8 @@ function ia(t) {
     );
     const j = (L) => {
       if (h[L] != null) {
-        let it = I(m(f[L], p, H, E)), N = I(v(h[L], b, U, P));
-        R(G, it + M, N), $(G, it, N, M, 0, Zn * 2);
+        let it = I(m(f[L], p, H, E)), N = I(v(h[L], b, V, P));
+        R(Y, it + M, N), $(Y, it, N, M, 0, Zn * 2);
       }
     };
     if (s)
@@ -2465,10 +2517,10 @@ function ia(t) {
       for (let L = i; L <= o; L++)
         j(L);
     return {
-      stroke: Z > 0 ? G : null,
-      fill: G,
+      stroke: Z > 0 ? Y : null,
+      fill: Y,
       clip: tt,
-      flags: nn | or
+      flags: nn | lr
     };
   });
 }
@@ -2480,76 +2532,76 @@ function na(t) {
 const uf = na(ln), ff = na(an);
 function oa(t) {
   const e = rt(t?.alignGaps, 0);
-  return (n, i, o, s) => ki(n, i, (a, f, h, p, b, m, v, E, P, H, U) => {
-    [o, s] = lo(h, o, s);
-    let I = a.pxRound, x = (z) => I(m(z, p, H, E)), R = (z) => I(v(z, b, U, P)), $, Z;
+  return (n, i, o, s) => ki(n, i, (a, f, h, p, b, m, v, E, P, H, V) => {
+    [o, s] = co(h, o, s);
+    let I = a.pxRound, x = (z) => I(m(z, p, H, E)), R = (z) => I(v(z, b, V, P)), $, Z;
     p.ori == 0 ? ($ = ln, Z = uf) : ($ = an, Z = ff);
-    const M = p.dir * (p.ori == 0 ? 1 : -1), J = { stroke: new Path2D(), fill: null, clip: null, band: null, gaps: null, flags: nn }, G = J.stroke;
+    const M = p.dir * (p.ori == 0 ? 1 : -1), J = { stroke: new Path2D(), fill: null, clip: null, band: null, gaps: null, flags: nn }, Y = J.stroke;
     let tt = !1;
     if (s - o >= H * 4) {
       let z = (D) => n.posToVal(D, p.key, !0), j = null, L = null, it, N, Jt, yt = x(f[M == 1 ? o : s]), nt = x(f[o]), ft = x(f[s]), Q = z(M == 1 ? nt + 1 : ft - 1);
       for (let D = M == 1 ? o : s; D >= o && D <= s; D += M) {
         let Tt = f[D], wt = (M == 1 ? Tt < Q : Tt > Q) ? yt : x(Tt), ct = h[D];
-        wt == yt ? ct != null ? (N = ct, j == null ? ($(G, wt, R(N)), it = j = L = N) : N < j ? j = N : N > L && (L = N)) : ct === null && (tt = !0) : (j != null && Z(G, yt, R(j), R(L), R(it), R(N)), ct != null ? (N = ct, $(G, wt, R(N)), j = L = it = N) : (j = L = null, ct === null && (tt = !0)), yt = wt, Q = z(yt + M));
+        wt == yt ? ct != null ? (N = ct, j == null ? ($(Y, wt, R(N)), it = j = L = N) : N < j ? j = N : N > L && (L = N)) : ct === null && (tt = !0) : (j != null && Z(Y, yt, R(j), R(L), R(it), R(N)), ct != null ? (N = ct, $(Y, wt, R(N)), j = L = it = N) : (j = L = null, ct === null && (tt = !0)), yt = wt, Q = z(yt + M));
       }
-      j != null && j != L && Jt != yt && Z(G, yt, R(j), R(L), R(it), R(N));
+      j != null && j != L && Jt != yt && Z(Y, yt, R(j), R(L), R(it), R(N));
     } else
       for (let z = M == 1 ? o : s; z >= o && z <= s; z += M) {
         let j = h[z];
-        j === null ? tt = !0 : j != null && $(G, x(f[z]), R(j));
+        j === null ? tt = !0 : j != null && $(Y, x(f[z]), R(j));
       }
-    let [S, q] = kr(n, i);
+    let [S, q] = Pr(n, i);
     if (a.fill != null || S != 0) {
-      let z = J.fill = new Path2D(G), j = a.fillTo(n, i, a.min, a.max, S), L = R(j), it = x(f[o]), N = x(f[s]);
+      let z = J.fill = new Path2D(Y), j = a.fillTo(n, i, a.min, a.max, S), L = R(j), it = x(f[o]), N = x(f[s]);
       M == -1 && ([N, it] = [it, N]), $(z, N, L), $(z, it, L);
     }
     if (!a.spanGaps) {
       let z = [];
-      tt && z.push(...Pr(f, h, o, s, M, x, e)), J.gaps = z = a.gaps(n, i, o, s, z), J.clip = fo(z, p.ori, E, P, H, U);
+      tt && z.push(...Tr(f, h, o, s, M, x, e)), J.gaps = z = a.gaps(n, i, o, s, z), J.clip = po(z, p.ori, E, P, H, V);
     }
     return q != 0 && (J.band = q == 2 ? [
-      Ye(n, i, o, s, G, -1),
-      Ye(n, i, o, s, G, 1)
-    ] : Ye(n, i, o, s, G, q)), J;
+      Ke(n, i, o, s, Y, -1),
+      Ke(n, i, o, s, Y, 1)
+    ] : Ke(n, i, o, s, Y, q)), J;
   });
 }
 function hf(t) {
   const e = rt(t.align, 1), n = rt(t.ascDesc, !1), i = rt(t.alignGaps, 0), o = rt(t.extend, !1);
-  return (s, a, f, h) => ki(s, a, (p, b, m, v, E, P, H, U, I, x, R) => {
-    [f, h] = lo(m, f, h);
-    let $ = p.pxRound, { left: Z, width: M } = s.bbox, J = (nt) => $(P(nt, v, x, U)), G = (nt) => $(H(nt, E, R, I)), tt = v.ori == 0 ? ln : an;
+  return (s, a, f, h) => ki(s, a, (p, b, m, v, E, P, H, V, I, x, R) => {
+    [f, h] = co(m, f, h);
+    let $ = p.pxRound, { left: Z, width: M } = s.bbox, J = (nt) => $(P(nt, v, x, V)), Y = (nt) => $(H(nt, E, R, I)), tt = v.ori == 0 ? ln : an;
     const W = { stroke: new Path2D(), fill: null, clip: null, band: null, gaps: null, flags: nn }, S = W.stroke, q = v.dir * (v.ori == 0 ? 1 : -1);
-    let z = G(m[q == 1 ? f : h]), j = J(b[q == 1 ? f : h]), L = j, it = j;
+    let z = Y(m[q == 1 ? f : h]), j = J(b[q == 1 ? f : h]), L = j, it = j;
     o && e == -1 && (it = Z, tt(S, it, z)), tt(S, j, z);
     for (let nt = q == 1 ? f : h; nt >= f && nt <= h; nt += q) {
       let ft = m[nt];
       if (ft == null)
         continue;
-      let Q = J(b[nt]), D = G(ft);
+      let Q = J(b[nt]), D = Y(ft);
       e == 1 ? tt(S, Q, z) : tt(S, L, D), tt(S, Q, D), z = D, L = Q;
     }
     let N = L;
     o && e == 1 && (N = Z + M, tt(S, N, z));
-    let [Jt, yt] = kr(s, a);
+    let [Jt, yt] = Pr(s, a);
     if (p.fill != null || Jt != 0) {
-      let nt = W.fill = new Path2D(S), ft = p.fillTo(s, a, p.min, p.max, Jt), Q = G(ft);
+      let nt = W.fill = new Path2D(S), ft = p.fillTo(s, a, p.min, p.max, Jt), Q = Y(ft);
       tt(nt, N, Q), tt(nt, it, Q);
     }
     if (!p.spanGaps) {
       let nt = [];
-      nt.push(...Pr(b, m, f, h, q, J, i));
+      nt.push(...Tr(b, m, f, h, q, J, i));
       let ft = p.width * lt / 2, Q = n || e == 1 ? ft : -ft, D = n || e == -1 ? -ft : ft;
       nt.forEach((Tt) => {
         Tt[0] += Q, Tt[1] += D;
-      }), W.gaps = nt = p.gaps(s, a, f, h, nt), W.clip = fo(nt, v.ori, U, I, x, R);
+      }), W.gaps = nt = p.gaps(s, a, f, h, nt), W.clip = po(nt, v.ori, V, I, x, R);
     }
     return yt != 0 && (W.band = yt == 2 ? [
-      Ye(s, a, f, h, S, -1),
-      Ye(s, a, f, h, S, 1)
-    ] : Ye(s, a, f, h, S, yt)), W;
+      Ke(s, a, f, h, S, -1),
+      Ke(s, a, f, h, S, 1)
+    ] : Ke(s, a, f, h, S, yt)), W;
   });
 }
-function el(t, e, n, i, o, s, a = dt) {
+function il(t, e, n, i, o, s, a = dt) {
   if (t.length > 1) {
     let f = null;
     for (let h = 0, p = 1 / 0; h < t.length; h++)
@@ -2571,51 +2623,51 @@ function df(t) {
   o == null ? [0, 0] : typeof o == "number" ? [o, 0] : o;
   const s = et(o), a = 1 - e[0], f = rt(e[1], dt), h = rt(e[2], 1), p = rt(t.disp, An), b = rt(t.each, (E) => {
   }), { fill: m, stroke: v } = p;
-  return (E, P, H, U) => ki(E, P, (I, x, R, $, Z, M, J, G, tt, W, S) => {
+  return (E, P, H, V) => ki(E, P, (I, x, R, $, Z, M, J, Y, tt, W, S) => {
     let q = I.pxRound, z = n, j = i * lt, L = f * lt, it = h * lt, N, Jt;
     $.ori == 0 ? [N, Jt] = s(E, P) : [Jt, N] = s(E, P);
     const yt = $.dir * ($.ori == 0 ? 1 : -1);
-    let nt = $.ori == 0 ? mo : Tr, ft = $.ori == 0 ? b : (T, mt, Ct, Mi, ui, ze, fi) => {
+    let nt = $.ori == 0 ? vo : Cr, ft = $.ori == 0 ? b : (T, mt, Ct, Mi, ui, ze, fi) => {
       b(T, mt, Ct, ui, Mi, fi, ze);
-    }, Q = rt(E.bands, xr).find((T) => T.series[0] == P), D = Q != null ? Q.dir : 0, Tt = I.fillTo(E, P, I.min, I.max, D), Wt = q(J(Tt, Z, S, tt)), wt, ct, we, ee = W, $t = q(I.width * lt), Me = !1, je = null, fe = null, Ze = null, Pi = null;
-    m != null && ($t == 0 || v != null) && (Me = !0, je = m.values(E, P, H, U), fe = /* @__PURE__ */ new Map(), new Set(je).forEach((T) => {
+    }, Q = rt(E.bands, $r).find((T) => T.series[0] == P), D = Q != null ? Q.dir : 0, Tt = I.fillTo(E, P, I.min, I.max, D), Wt = q(J(Tt, Z, S, tt)), wt, ct, xe, ee = W, $t = q(I.width * lt), Me = !1, Be = null, fe = null, Ze = null, Pi = null;
+    m != null && ($t == 0 || v != null) && (Me = !0, Be = m.values(E, P, H, V), fe = /* @__PURE__ */ new Map(), new Set(Be).forEach((T) => {
       T != null && fe.set(T, new Path2D());
-    }), $t > 0 && (Ze = v.values(E, P, H, U), Pi = /* @__PURE__ */ new Map(), new Set(Ze).forEach((T) => {
+    }), $t > 0 && (Ze = v.values(E, P, H, V), Pi = /* @__PURE__ */ new Map(), new Set(Ze).forEach((T) => {
       T != null && Pi.set(T, new Path2D());
     })));
     let { x0: Ti, size: cn } = p;
     if (Ti != null && cn != null) {
-      z = 1, x = Ti.values(E, P, H, U), Ti.unit == 2 && (x = x.map((Ct) => E.posToVal(G + Ct * W, $.key, !0)));
-      let T = cn.values(E, P, H, U);
-      cn.unit == 2 ? ct = T[0] * W : ct = M(T[0], $, W, G) - M(0, $, W, G), ee = el(x, R, M, $, W, G, ee), we = ee - ct + j;
+      z = 1, x = Ti.values(E, P, H, V), Ti.unit == 2 && (x = x.map((Ct) => E.posToVal(Y + Ct * W, $.key, !0)));
+      let T = cn.values(E, P, H, V);
+      cn.unit == 2 ? ct = T[0] * W : ct = M(T[0], $, W, Y) - M(0, $, W, Y), ee = il(x, R, M, $, W, Y, ee), xe = ee - ct + j;
     } else
-      ee = el(x, R, M, $, W, G, ee), we = ee * a + j, ct = ee - we;
-    we < 1 && (we = 0), $t >= ct / 2 && ($t = 0), we < 5 && (q = kl);
-    let Nn = we > 0, ai = ee - we - (Nn ? $t : 0);
-    ct = q(er(ai, it, L)), wt = (z == 0 ? ct / 2 : z == yt ? 0 : ct) - z * yt * ((z == 0 ? j / 2 : 0) + (Nn ? $t / 2 : 0));
+      ee = il(x, R, M, $, W, Y, ee), xe = ee * a + j, ct = ee - xe;
+    xe < 1 && (xe = 0), $t >= ct / 2 && ($t = 0), xe < 5 && (q = kl);
+    let Nn = xe > 0, ai = ee - xe - (Nn ? $t : 0);
+    ct = q(or(ai, it, L)), wt = (z == 0 ? ct / 2 : z == yt ? 0 : ct) - z * yt * ((z == 0 ? j / 2 : 0) + (Nn ? $t / 2 : 0));
     const Gt = { stroke: null, fill: null, clip: null, band: null, gaps: null, flags: 0 }, Ci = Me ? null : new Path2D();
-    let Be = null;
+    let We = null;
     if (Q != null)
-      Be = E.data[Q.series[1]];
+      We = E.data[Q.series[1]];
     else {
       let { y0: T, y1: mt } = p;
-      T != null && mt != null && (R = mt.values(E, P, H, U), Be = T.values(E, P, H, U));
+      T != null && mt != null && (R = mt.values(E, P, H, V), We = T.values(E, P, H, V));
     }
     let ci = N * ct, K = Jt * ct;
-    for (let T = yt == 1 ? H : U; T >= H && T <= U; T += yt) {
+    for (let T = yt == 1 ? H : V; T >= H && T <= V; T += yt) {
       let mt = R[T];
       if (mt == null)
         continue;
-      if (Be != null) {
-        let Qt = Be[T] ?? 0;
+      if (We != null) {
+        let Qt = We[T] ?? 0;
         if (mt - Qt == 0)
           continue;
         Wt = J(Qt, Z, S, tt);
       }
-      let Ct = $.distr != 2 || p != null ? x[T] : T, Mi = M(Ct, $, W, G), ui = J(rt(mt, Tt), Z, S, tt), ze = q(Mi - wt), fi = q(Zt(ui, Wt)), ie = q(Pe(ui, Wt)), he = fi - ie;
+      let Ct = $.distr != 2 || p != null ? x[T] : T, Mi = M(Ct, $, W, Y), ui = J(rt(mt, Tt), Z, S, tt), ze = q(Mi - wt), fi = q(Zt(ui, Wt)), ie = q(Te(ui, Wt)), he = fi - ie;
       if (mt != null) {
-        let Qt = mt < 0 ? K : ci, xe = mt < 0 ? ci : K;
-        Me ? ($t > 0 && Ze[T] != null && nt(Pi.get(Ze[T]), ze, ie + le($t / 2), ct, Zt(0, he - $t), Qt, xe), je[T] != null && nt(fe.get(je[T]), ze, ie + le($t / 2), ct, Zt(0, he - $t), Qt, xe)) : nt(Ci, ze, ie + le($t / 2), ct, Zt(0, he - $t), Qt, xe), ft(
+        let Qt = mt < 0 ? K : ci, $e = mt < 0 ? ci : K;
+        Me ? ($t > 0 && Ze[T] != null && nt(Pi.get(Ze[T]), ze, ie + le($t / 2), ct, Zt(0, he - $t), Qt, $e), Be[T] != null && nt(fe.get(Be[T]), ze, ie + le($t / 2), ct, Zt(0, he - $t), Qt, $e)) : nt(Ci, ze, ie + le($t / 2), ct, Zt(0, he - $t), Qt, $e), ft(
           E,
           P,
           T,
@@ -2631,31 +2683,31 @@ function df(t) {
 }
 function pf(t, e) {
   const n = rt(e?.alignGaps, 0);
-  return (i, o, s, a) => ki(i, o, (f, h, p, b, m, v, E, P, H, U, I) => {
-    [s, a] = lo(p, s, a);
-    let x = f.pxRound, R = (N) => x(v(N, b, U, P)), $ = (N) => x(E(N, m, I, H)), Z, M, J;
-    b.ori == 0 ? (Z = ho, J = ln, M = ta) : (Z = po, J = an, M = ea);
-    const G = b.dir * (b.ori == 0 ? 1 : -1);
-    let tt = R(h[G == 1 ? s : a]), W = tt, S = [], q = [];
-    for (let N = G == 1 ? s : a; N >= s && N <= a; N += G)
+  return (i, o, s, a) => ki(i, o, (f, h, p, b, m, v, E, P, H, V, I) => {
+    [s, a] = co(p, s, a);
+    let x = f.pxRound, R = (N) => x(v(N, b, V, P)), $ = (N) => x(E(N, m, I, H)), Z, M, J;
+    b.ori == 0 ? (Z = mo, J = ln, M = ta) : (Z = go, J = an, M = ea);
+    const Y = b.dir * (b.ori == 0 ? 1 : -1);
+    let tt = R(h[Y == 1 ? s : a]), W = tt, S = [], q = [];
+    for (let N = Y == 1 ? s : a; N >= s && N <= a; N += Y)
       if (p[N] != null) {
         let yt = h[N], nt = R(yt);
         S.push(W = nt), q.push($(p[N]));
       }
     const z = { stroke: t(S, q, Z, J, M, x), fill: null, clip: null, band: null, gaps: null, flags: nn }, j = z.stroke;
-    let [L, it] = kr(i, o);
+    let [L, it] = Pr(i, o);
     if (f.fill != null || L != 0) {
       let N = z.fill = new Path2D(j), Jt = f.fillTo(i, o, f.min, f.max, L), yt = $(Jt);
       J(N, W, yt), J(N, tt, yt);
     }
     if (!f.spanGaps) {
       let N = [];
-      N.push(...Pr(h, p, s, a, G, R, n)), z.gaps = N = f.gaps(i, o, s, a, N), z.clip = fo(N, b.ori, P, H, U, I);
+      N.push(...Tr(h, p, s, a, Y, R, n)), z.gaps = N = f.gaps(i, o, s, a, N), z.clip = po(N, b.ori, P, H, V, I);
     }
     return it != 0 && (z.band = it == 2 ? [
-      Ye(i, o, s, a, j, -1),
-      Ye(i, o, s, a, j, 1)
-    ] : Ye(i, o, s, a, j, it)), z;
+      Ke(i, o, s, a, j, -1),
+      Ke(i, o, s, a, j, 1)
+    ] : Ke(i, o, s, a, j, it)), z;
   });
 }
 function mf(t) {
@@ -2689,22 +2741,22 @@ function gf(t, e, n, i, o, s) {
   }
   return f;
 }
-const rr = /* @__PURE__ */ new Set();
-function il() {
-  for (let t of rr)
+const ar = /* @__PURE__ */ new Set();
+function nl() {
+  for (let t of ar)
     t.syncRect(!0);
 }
-sn && ($i(qc, Zi, il), $i(Zc, Zi, il, !0), $i(to, Zi, () => {
+sn && ($i(qc, Zi, nl), $i(Zc, Zi, nl, !0), $i(io, Zi, () => {
   Bt.pxRatio = lt;
 }));
 const vf = oa(), bf = ia();
-function nl(t, e, n, i) {
-  return (i ? [t[0], t[1]].concat(t.slice(2)) : [t[0]].concat(t.slice(1))).map((s, a) => sr(s, a, e, n));
+function ol(t, e, n, i) {
+  return (i ? [t[0], t[1]].concat(t.slice(2)) : [t[0]].concat(t.slice(1))).map((s, a) => cr(s, a, e, n));
 }
 function _f(t, e) {
   return t.map((n, i) => i == 0 ? {} : kt({}, e, n));
 }
-function sr(t, e, n, i) {
+function cr(t, e, n, i) {
   return kt({}, e == 0 ? n : i, t);
 }
 function ra(t, e, n) {
@@ -2712,18 +2764,18 @@ function ra(t, e, n) {
 }
 const yf = ra;
 function wf(t, e, n) {
-  return e == null ? tn : eo(e, n, yr, !0);
+  return e == null ? tn : no(e, n, wr, !0);
 }
 function sa(t, e, n, i) {
-  return e == null ? tn : ao(e, n, t.scales[i].log, !1);
+  return e == null ? tn : uo(e, n, t.scales[i].log, !1);
 }
 const xf = sa;
 function la(t, e, n, i) {
-  return e == null ? tn : _r(e, n, t.scales[i].log, !1);
+  return e == null ? tn : yr(e, n, t.scales[i].log, !1);
 }
 const $f = la;
 function Sf(t, e, n, i, o) {
-  let s = Zt(Ns(t), Ns(e)), a = e - t, f = ke(o / i * a, n);
+  let s = Zt(Ls(t), Ls(e)), a = e - t, f = Pe(o / i * a, n);
   do {
     let h = n[f], p = i * h / a;
     if (p >= o && s + (h < 5 ? ri.get(h) : 0) <= 17)
@@ -2731,7 +2783,7 @@ function Sf(t, e, n, i, o) {
   } while (++f < n.length);
   return [0, 0];
 }
-function ol(t) {
+function rl(t) {
   let e, n;
   return t = t.replace(/(\d+)px/, (i, o) => (e = Mt((n = +o) * lt)) + "px"), [t, e, n];
 }
@@ -2764,28 +2816,28 @@ function Bt(t, e, n) {
     let r = ve(Oc, p);
     r.textContent = t.title;
   }
-  const b = Ee("canvas"), m = i.ctx = b.getContext("2d"), v = ve(Nc, p);
+  const b = ke("canvas"), m = i.ctx = b.getContext("2d"), v = ve(Nc, p);
   $i("click", v, (r) => {
-    r.target === P && (gt != Ii || xt != ji) && Vt.click(i, r);
+    r.target === P && (gt != Ii || xt != ji) && Ut.click(i, r);
   }, !0);
   const E = i.under = ve(Lc, v);
   v.appendChild(b);
   const P = i.over = ve(Hc, v);
   t = en(t);
-  const H = +rt(t.pxAlign, 1), U = tl(H);
+  const H = +rt(t.pxAlign, 1), V = el(H);
   (t.plugins || []).forEach((r) => {
     r.opts && (t = r.opts(i, t) || t);
   });
-  const I = t.ms || 1e-3, x = i.series = o == 1 ? nl(t.series || [], Ys, Qs, !1) : _f(t.series || [null], Js), R = i.axes = nl(t.axes || [], Gs, qs, !0), $ = i.scales = {}, Z = i.bands = t.bands || [];
+  const I = t.ms || 1e-3, x = i.series = o == 1 ? ol(t.series || [], Ks, Xs, !1) : _f(t.series || [null], Qs), R = i.axes = ol(t.axes || [], Ys, Zs, !0), $ = i.scales = {}, Z = i.bands = t.bands || [];
   Z.forEach((r) => {
     r.fill = et(r.fill || null), r.dir = rt(r.dir, -1);
   });
   const M = o == 2 ? x[1].facets[0].scale : x[0].scale, J = {
     axes: Sa,
     series: _a
-  }, G = (t.drawOrder || ["axes", "series"]).map((r) => J[r]);
+  }, Y = (t.drawOrder || ["axes", "series"]).map((r) => J[r]);
   function tt(r) {
-    const l = r.distr == 3 ? (c) => Ge(c > 0 ? c : r.clamp(i, c, r.min, r.max, r.key)) : r.distr == 4 ? (c) => Wo(c, r.asinh) : r.distr == 100 ? (c) => r.fwd(c) : (c) => c;
+    const l = r.distr == 3 ? (c) => Ye(c > 0 ? c : r.clamp(i, c, r.min, r.max, r.key)) : r.distr == 4 ? (c) => Yo(c, r.asinh) : r.distr == 100 ? (c) => r.fwd(c) : (c) => c;
     return (c) => {
       let u = l(c), { _min: d, _max: g } = r, _ = g - d;
       return (u - d) / _;
@@ -2803,19 +2855,19 @@ function Bt(t, e, n) {
         l = $[r] = kt({}, r == M ? ql : lf, c), l.key = r;
         let u = l.time, d = l.range, g = ii(d);
         if ((r != M || o == 2 && !u) && (g && (d[0] == null || d[1] == null) && (d = {
-          min: d[0] == null ? zs : {
+          min: d[0] == null ? Ds : {
             mode: 1,
             hard: d[0],
             soft: d[0]
           },
-          max: d[1] == null ? zs : {
+          max: d[1] == null ? Ds : {
             mode: 1,
             hard: d[1],
             soft: d[1]
           }
-        }, g = !1), !g && uo(d))) {
+        }, g = !1), !g && ho(d))) {
           let _ = d;
-          d = (y, w, A) => w == null ? tn : eo(w, A, _);
+          d = (y, w, A) => w == null ? tn : no(w, A, _);
         }
         l.range = et(d || (u ? yf : r == M ? l.distr == 3 ? xf : l.distr == 4 ? $f : ra : l.distr == 3 ? sa : l.distr == 4 ? la : wf)), l.auto = et(g ? !1 : l.auto), l.clamp = et(l.clamp || sf), l._min = l._max = null, l.valToPct = tt(l);
       }
@@ -2836,31 +2888,31 @@ function Bt(t, e, n) {
     let l = $[r];
     (l.min != null || l.max != null) && (L[r] = { min: l.min, max: l.max }, l.min = l.max = null);
   }
-  const it = t.tzDate || ((r) => new Date(Mt(r / I))), N = t.fmtDate || $r, Jt = I == 1 ? zu(it) : Nu(it), yt = js(it, Is(I == 1 ? Mu : Ou, N)), nt = Ws(it, Bs(Hu, N)), ft = [], Q = i.legend = kt({}, Uu, t.legend), D = i.cursor = kt({}, Gu, { drag: { y: o == 2 } }, t.cursor), Tt = Q.show, Wt = D.show, wt = Q.markers;
+  const it = t.tzDate || ((r) => new Date(Mt(r / I))), N = t.fmtDate || Sr, Jt = I == 1 ? zu(it) : Nu(it), yt = Bs(it, js(I == 1 ? Mu : Ou, N)), nt = Gs(it, Ws(Hu, N)), ft = [], Q = i.legend = kt({}, Vu, t.legend), D = i.cursor = kt({}, Gu, { drag: { y: o == 2 } }, t.cursor), Tt = Q.show, Wt = D.show, wt = Q.markers;
   Q.idxs = ft, wt.width = et(wt.width), wt.dash = et(wt.dash), wt.stroke = et(wt.stroke), wt.fill = et(wt.fill);
-  let ct, we, ee, $t = [], Me = [], je, fe = !1, Ze = {};
+  let ct, xe, ee, $t = [], Me = [], Be, fe = !1, Ze = {};
   if (Q.live) {
     const r = x[1] ? x[1].values : null;
-    fe = r != null, je = fe ? r(i, 1, 0) : { _: 0 };
-    for (let l in je)
-      Ze[l] = vr;
+    fe = r != null, Be = fe ? r(i, 1, 0) : { _: 0 };
+    for (let l in Be)
+      Ze[l] = br;
   }
   if (Tt)
-    if (ct = Ee("table", jc, p), ee = Ee("tbody", null, ct), Q.mount(i, ct), fe) {
-      we = Ee("thead", null, ct, ee);
-      let r = Ee("tr", null, we);
-      Ee("th", null, r);
-      for (var Pi in je)
-        Ee("th", _s, r).textContent = Pi;
+    if (ct = ke("table", jc, p), ee = ke("tbody", null, ct), Q.mount(i, ct), fe) {
+      xe = ke("thead", null, ct, ee);
+      let r = ke("tr", null, xe);
+      ke("th", null, r);
+      for (var Pi in Be)
+        ke("th", ys, r).textContent = Pi;
     } else
       se(ct, Wc), Q.live && se(ct, Bc);
   const Ti = { show: !0 }, cn = { show: !1 };
   function Nn(r, l) {
     if (l == 0 && (fe || !Q.live || o == 2))
       return tn;
-    let c = [], u = Ee("tr", Gc, ee, ee.childNodes[l]);
+    let c = [], u = ke("tr", Gc, ee, ee.childNodes[l]);
     se(u, r.class), r.show || se(u, wi);
-    let d = Ee("th", null, u);
+    let d = ke("th", null, u);
     if (wt.show) {
       let y = ve(Yc, d);
       if (l > 0) {
@@ -2868,7 +2920,7 @@ function Bt(t, e, n) {
         w && (y.style.border = w + "px " + wt.dash(i, l) + " " + wt.stroke(i, l)), y.style.background = wt.fill(i, l);
       }
     }
-    let g = ve(_s, d);
+    let g = ve(ys, d);
     r.label instanceof HTMLElement ? g.appendChild(r.label) : g.textContent = r.label, l > 0 && (wt.show || (g.style.color = r.width > 0 ? wt.stroke(i, l) : wt.fill(i, l)), Gt("click", d, (y) => {
       if (D._lock)
         return;
@@ -2881,11 +2933,11 @@ function Bt(t, e, n) {
         });
       } else
         Oe(w, { show: !r.show }, !0, Et.setSeries);
-    }, !1), Di && Gt($s, d, (y) => {
+    }, !1), Di && Gt(Ss, d, (y) => {
       D._lock || (di(y), Oe(x.indexOf(r), Wi, !0, Et.setSeries));
     }, !1));
-    for (var _ in je) {
-      let y = Ee("td", Kc, u);
+    for (var _ in Be) {
+      let y = ke("td", Kc, u);
       y.textContent = "--", c.push(y);
     }
     return [u, c];
@@ -2898,19 +2950,19 @@ function Bt(t, e, n) {
   function Ci(r, l, c) {
     const u = ai.get(l) || {};
     for (let d in u)
-      (r == null || d == r) && (tr(d, l, u[d]), delete u[d]);
+      (r == null || d == r) && (nr(d, l, u[d]), delete u[d]);
     r == null && ai.delete(l);
   }
-  let Be = 0, ci = 0, K = 0, T = 0, mt = 0, Ct = 0, Mi = mt, ui = Ct, ze = K, fi = T, ie = 0, he = 0, Qt = 0, xe = 0;
+  let We = 0, ci = 0, K = 0, T = 0, mt = 0, Ct = 0, Mi = mt, ui = Ct, ze = K, fi = T, ie = 0, he = 0, Qt = 0, $e = 0;
   i.bbox = {};
-  let vo = !1, Ln = !1, zi = !1, hi = !1, Hn = !1, de = !1;
-  function bo(r, l, c) {
-    (c || r != i.width || l != i.height) && zr(r, l), Ri(!1), zi = !0, Ln = !0, Fi();
+  let _o = !1, Ln = !1, zi = !1, hi = !1, Hn = !1, de = !1;
+  function yo(r, l, c) {
+    (c || r != i.width || l != i.height) && Dr(r, l), Ri(!1), zi = !0, Ln = !0, Fi();
   }
-  function zr(r, l) {
-    i.width = Be = K = r, i.height = ci = T = l, mt = Ct = 0, ha(), da();
+  function Dr(r, l) {
+    i.width = We = K = r, i.height = ci = T = l, mt = Ct = 0, ha(), da();
     let c = i.bbox;
-    ie = c.left = _i(mt * lt, 0.5), he = c.top = _i(Ct * lt, 0.5), Qt = c.width = _i(K * lt, 0.5), xe = c.height = _i(T * lt, 0.5);
+    ie = c.left = _i(mt * lt, 0.5), he = c.top = _i(Ct * lt, 0.5), Qt = c.width = _i(K * lt, 0.5), $e = c.height = _i(T * lt, 0.5);
   }
   const ca = 3;
   function ua() {
@@ -2918,11 +2970,11 @@ function Bt(t, e, n) {
     for (; !r; ) {
       l++;
       let c = xa(l), u = $a(l);
-      r = l == ca || c && u, r || (zr(i.width, i.height), Ln = !0);
+      r = l == ca || c && u, r || (Dr(i.width, i.height), Ln = !0);
     }
   }
   function fa({ width: r, height: l }) {
-    bo(r, l);
+    yo(r, l);
   }
   i.setSize = fa;
   function ha() {
@@ -2965,19 +3017,19 @@ function Bt(t, e, n) {
       let w = _, A = c(d, g, _, y) ?? dt, k = A >= 0 && A < dt, C = S.ori == 0 ? K : T, B = D.left, st = e[0], ot = e[g];
       if (l.has(ot[_])) {
         w = null;
-        let X = null, V = null, O;
+        let X = null, U = null, O;
         if (u == 0 || u == -1)
           for (O = _; X == null && O-- > 0; )
             l.has(ot[O]) || (X = O);
         if (u == 0 || u == 1)
-          for (O = _; V == null && O++ < ot.length; )
-            l.has(ot[O]) || (V = O);
-        if (X != null || V != null)
+          for (O = _; U == null && O++ < ot.length; )
+            l.has(ot[O]) || (U = O);
+        if (X != null || U != null)
           if (k) {
-            let bt = X == null ? -1 / 0 : z(st[X], S, C, 0), St = V == null ? 1 / 0 : z(st[V], S, C, 0), Ft = B - bt, ht = St - B;
-            Ft <= ht ? Ft <= A && (w = X) : ht <= A && (w = V);
+            let bt = X == null ? -1 / 0 : z(st[X], S, C, 0), St = U == null ? 1 / 0 : z(st[U], S, C, 0), Ft = B - bt, ht = St - B;
+            Ft <= ht ? Ft <= A && (w = X) : ht <= A && (w = U);
           } else
-            w = V == null ? X : X == null ? V : _ - X <= V - _ ? X : V;
+            w = U == null ? X : X == null ? U : _ - X <= U - _ ? X : U;
       } else k && zt(B - z(st[_], S, C, 0)) > A && (w = null);
       return w;
     };
@@ -2990,18 +3042,18 @@ function Bt(t, e, n) {
   jt.show = et(jt.show), jt.size = et(jt.size), jt.stroke = et(jt.stroke), jt.width = et(jt.width), jt.fill = et(jt.fill);
   const De = i.focus = kt({}, t.focus || { alpha: 0.3 }, D.focus), Di = De.prox >= 0, Oi = Di && jt.one;
   let pe = [], Ni = [], Li = [];
-  function Dr(r, l) {
+  function Or(r, l) {
     let c = jt.show(i, l);
     if (c instanceof HTMLElement)
       return se(c, Ic), se(c, r.class), Re(c, -10, -10, K, T), P.insertBefore(c, pe[l]), c;
   }
-  function Or(r, l) {
+  function Nr(r, l) {
     if (o == 1 || l > 0) {
       let c = o == 1 && $[r.scale].time, u = r.value;
-      r.value = c ? Rs(u) ? Ws(it, Bs(u, N)) : u || nt : u || nf, r.label = r.label || (c ? Ku : Yu);
+      r.value = c ? Fs(u) ? Gs(it, Ws(u, N)) : u || nt : u || nf, r.label = r.label || (c ? Ku : Yu);
     }
     if (Oi || l > 0) {
-      r.width = r.width == null ? 1 : r.width, r.paths = r.paths || vf || su, r.fillTo = et(r.fillTo || af), r.pxAlign = +rt(r.pxAlign, H), r.pxRound = tl(r.pxAlign), r.stroke = et(r.stroke || null), r.fill = et(r.fill || null), r._stroke = r._fill = r._paths = r._focus = null;
+      r.width = r.width == null ? 1 : r.width, r.paths = r.paths || vf || su, r.fillTo = et(r.fillTo || af), r.pxAlign = +rt(r.pxAlign, H), r.pxRound = el(r.pxAlign), r.stroke = et(r.stroke || null), r.fill = et(r.fill || null), r._stroke = r._fill = r._paths = r._focus = null;
       let c = of(Zt(1, r.width), 1), u = r.points = kt({}, {
         size: c,
         width: Zt(1, c * 0.2),
@@ -3020,12 +3072,12 @@ function Bt(t, e, n) {
     if (Wt) {
       ft.splice(l, 0, null);
       let c = null;
-      Oi ? l == 0 && (c = Dr(r, l)) : l > 0 && (c = Dr(r, l)), pe.splice(l, 0, c), Ni.splice(l, 0, 0), Li.splice(l, 0, 0);
+      Oi ? l == 0 && (c = Or(r, l)) : l > 0 && (c = Or(r, l)), pe.splice(l, 0, c), Ni.splice(l, 0, 0), Li.splice(l, 0, 0);
     }
     Rt("addSeries", l);
   }
   function pa(r, l) {
-    l = l ?? x.length, r = o == 1 ? sr(r, l, Ys, Qs) : sr(r, l, {}, Js), x.splice(l, 0, r), Or(x[l], l);
+    l = l ?? x.length, r = o == 1 ? cr(r, l, Ks, Xs) : cr(r, l, {}, Qs), x.splice(l, 0, r), Nr(x[l], l);
   }
   i.addSeries = pa;
   function ma(r) {
@@ -3045,81 +3097,81 @@ function Bt(t, e, n) {
       let d = u.time;
       r.size = et(r.size), r.space = et(r.space), r.rotate = et(r.rotate), ii(r.incrs) && r.incrs.forEach((_) => {
         !ri.has(_) && ri.set(_, Cl(_));
-      }), r.incrs = et(r.incrs || (u.distr == 2 ? Pu : d ? I == 1 ? Cu : Du : yi)), r.splits = et(r.splits || (d && u.distr == 1 ? Jt : u.distr == 3 ? ir : u.distr == 4 ? Ju : Zu)), r.stroke = et(r.stroke), r.grid.stroke = et(r.grid.stroke), r.ticks.stroke = et(r.ticks.stroke), r.border.stroke = et(r.border.stroke);
+      }), r.incrs = et(r.incrs || (u.distr == 2 ? Pu : d ? I == 1 ? Cu : Du : yi)), r.splits = et(r.splits || (d && u.distr == 1 ? Jt : u.distr == 3 ? rr : u.distr == 4 ? Ju : Zu)), r.stroke = et(r.stroke), r.grid.stroke = et(r.grid.stroke), r.ticks.stroke = et(r.ticks.stroke), r.border.stroke = et(r.border.stroke);
       let g = r.values;
       r.values = // static array of tick values
       ii(g) && !ii(g[0]) ? et(g) : (
         // temporal
         d ? (
           // config array of fmtDate string tpls
-          ii(g) ? js(it, Is(g, N)) : (
+          ii(g) ? Bs(it, js(g, N)) : (
             // fmtDate string tpl
-            Rs(g) ? Lu(it, g) : g || yt
+            Fs(g) ? Lu(it, g) : g || yt
           )
         ) : g || qu
-      ), r.filter = et(r.filter || (u.distr >= 3 && u.log == 10 ? tf : u.distr == 3 && u.log == 2 ? ef : Pl)), r.font = ol(r.font), r.labelFont = ol(r.labelFont), r._size = r.size(i, null, l, 0), r._space = r._rotate = r._incrs = r._found = // foundIncrSpace
+      ), r.filter = et(r.filter || (u.distr >= 3 && u.log == 10 ? tf : u.distr == 3 && u.log == 2 ? ef : Pl)), r.font = rl(r.font), r.labelFont = rl(r.labelFont), r._size = r.size(i, null, l, 0), r._space = r._rotate = r._incrs = r._found = // foundIncrSpace
       r._splits = r._values = null, r._size > 0 && (pi[l] = !0, r._el = ve(Rc, v));
     }
   }
   function un(r, l, c, u) {
     let [d, g, _, y] = c, w = l % 2, A = 0;
-    return w == 0 && (y || g) && (A = l == 0 && !d || l == 2 && !_ ? Mt(Gs.size / 3) : 0), w == 1 && (d || _) && (A = l == 1 && !g || l == 3 && !y ? Mt(qs.size / 2) : 0), A;
+    return w == 0 && (y || g) && (A = l == 0 && !d || l == 2 && !_ ? Mt(Ys.size / 3) : 0), w == 1 && (d || _) && (A = l == 1 && !g || l == 3 && !y ? Mt(Zs.size / 2) : 0), A;
   }
-  const Nr = i.padding = (t.padding || [un, un, un, un]).map((r) => et(rt(r, un))), Je = i._padding = Nr.map((r, l) => r(i, l, pi, 0));
-  let Ut, Ot = null, Nt = null;
+  const Lr = i.padding = (t.padding || [un, un, un, un]).map((r) => et(rt(r, un))), Je = i._padding = Lr.map((r, l) => r(i, l, pi, 0));
+  let Vt, Ot = null, Nt = null;
   const Rn = o == 1 ? x[0].idxs : null;
-  let $e = null, fn = !1;
-  function Lr(r, l) {
+  let Se = null, fn = !1;
+  function Hr(r, l) {
     if (e = r ?? [], i.data = i._data = e, o == 2) {
-      Ut = 0;
+      Vt = 0;
       for (let c = 1; c < x.length; c++)
-        Ut += e[c][0].length;
+        Vt += e[c][0].length;
     } else {
-      e.length == 0 && (i.data = i._data = e = [[]]), $e = e[0], Ut = $e.length;
+      e.length == 0 && (i.data = i._data = e = [[]]), Se = e[0], Vt = Se.length;
       let c = e;
       if (q == 2) {
         c = e.slice();
-        let u = c[0] = Array(Ut);
-        for (let d = 0; d < Ut; d++)
+        let u = c[0] = Array(Vt);
+        for (let d = 0; d < Vt; d++)
           u[d] = d;
       }
       i._data = e = c;
     }
     if (Ri(!0), Rt("setData"), q == 2 && (zi = !0), l !== !1) {
       let c = S;
-      c.auto(i, fn) ? _o() : Xe(M, c.min, c.max), hi = hi || D.left >= 0, de = !0, Fi();
+      c.auto(i, fn) ? wo() : Xe(M, c.min, c.max), hi = hi || D.left >= 0, de = !0, Fi();
     }
   }
-  i.setData = Lr;
-  function _o() {
+  i.setData = Hr;
+  function wo() {
     fn = !0;
     let r, l;
-    o == 1 && (Ut > 0 ? (Ot = Rn[0] = 0, Nt = Rn[1] = Ut - 1, r = e[0][Ot], l = e[0][Nt], q == 2 ? (r = Ot, l = Nt) : r == l && (q == 3 ? [r, l] = ao(r, r, S.log, !1) : q == 4 ? [r, l] = _r(r, r, S.log, !1) : S.time ? l = r + Mt(86400 / I) : [r, l] = eo(r, l, yr, !0))) : (Ot = Rn[0] = r = null, Nt = Rn[1] = l = null)), Xe(M, r, l);
+    o == 1 && (Vt > 0 ? (Ot = Rn[0] = 0, Nt = Rn[1] = Vt - 1, r = e[0][Ot], l = e[0][Nt], q == 2 ? (r = Ot, l = Nt) : r == l && (q == 3 ? [r, l] = uo(r, r, S.log, !1) : q == 4 ? [r, l] = yr(r, r, S.log, !1) : S.time ? l = r + Mt(86400 / I) : [r, l] = no(r, l, wr, !0))) : (Ot = Rn[0] = r = null, Nt = Rn[1] = l = null)), Xe(M, r, l);
   }
-  let Fn, Hi, yo, wo, xo, $o, So, Ao, Eo, Xt;
-  function Hr(r, l, c, u, d, g) {
-    r ??= ws, c ??= xr, u ??= "butt", d ??= ws, g ??= "round", r != Fn && (m.strokeStyle = Fn = r), d != Hi && (m.fillStyle = Hi = d), l != yo && (m.lineWidth = yo = l), g != xo && (m.lineJoin = xo = g), u != $o && (m.lineCap = $o = u), c != wo && m.setLineDash(wo = c);
+  let Fn, Hi, xo, $o, So, Ao, Eo, ko, Po, Xt;
+  function Rr(r, l, c, u, d, g) {
+    r ??= xs, c ??= $r, u ??= "butt", d ??= xs, g ??= "round", r != Fn && (m.strokeStyle = Fn = r), d != Hi && (m.fillStyle = Hi = d), l != xo && (m.lineWidth = xo = l), g != So && (m.lineJoin = So = g), u != Ao && (m.lineCap = Ao = u), c != $o && m.setLineDash($o = c);
   }
-  function Rr(r, l, c, u) {
-    l != Hi && (m.fillStyle = Hi = l), r != So && (m.font = So = r), c != Ao && (m.textAlign = Ao = c), u != Eo && (m.textBaseline = Eo = u);
+  function Fr(r, l, c, u) {
+    l != Hi && (m.fillStyle = Hi = l), r != Eo && (m.font = Eo = r), c != ko && (m.textAlign = ko = c), u != Po && (m.textBaseline = Po = u);
   }
-  function ko(r, l, c, u, d = 0) {
+  function To(r, l, c, u, d = 0) {
     if (u.length > 0 && r.auto(i, fn) && (l == null || l.min == null)) {
       let g = rt(Ot, 0), _ = rt(Nt, u.length - 1), y = c.min == null ? tu(u, g, _, d, r.distr == 3) : [c.min, c.max];
-      r.min = Pe(r.min, c.min = y[0]), r.max = Zt(r.max, c.max = y[1]);
+      r.min = Te(r.min, c.min = y[0]), r.max = Zt(r.max, c.max = y[1]);
     }
   }
-  const Fr = { min: null, max: null };
+  const Vr = { min: null, max: null };
   function va() {
     for (let u in $) {
       let d = $[u];
       L[u] == null && // scales that have never been set (on init)
       (d.min == null || // or auto scales when the x scale was explicitly set
-      L[M] != null && d.auto(i, fn)) && (L[u] = Fr);
+      L[M] != null && d.auto(i, fn)) && (L[u] = Vr);
     }
     for (let u in $) {
       let d = $[u];
-      L[u] == null && d.from != null && L[d.from] != null && (L[u] = Fr);
+      L[u] == null && d.from != null && L[d.from] != null && (L[u] = Vr);
     }
     L[M] != null && Ri(!0);
     let r = {};
@@ -3130,14 +3182,14 @@ function Bt(t, e, n) {
         if (d.min != null)
           kt(g, d);
         else if (u != M || o == 2)
-          if (Ut == 0 && g.from == null) {
+          if (Vt == 0 && g.from == null) {
             let _ = g.range(i, null, null, u);
             g.min = _[0], g.max = _[1];
           } else
             g.min = dt, g.max = -dt;
       }
     }
-    if (Ut > 0) {
+    if (Vt > 0) {
       x.forEach((u, d) => {
         if (o == 1) {
           let g = u.scale, _ = L[g];
@@ -3146,12 +3198,12 @@ function Bt(t, e, n) {
           let y = r[g];
           if (d == 0) {
             let w = y.range(i, y.min, y.max, g);
-            y.min = w[0], y.max = w[1], Ot = ke(y.min, e[0]), Nt = ke(y.max, e[0]), Nt - Ot > 1 && (e[0][Ot] < y.min && Ot++, e[0][Nt] > y.max && Nt--), u.min = $e[Ot], u.max = $e[Nt];
-          } else u.show && u.auto && ko(y, _, u, e[d], u.sorted);
+            y.min = w[0], y.max = w[1], Ot = Pe(y.min, e[0]), Nt = Pe(y.max, e[0]), Nt - Ot > 1 && (e[0][Ot] < y.min && Ot++, e[0][Nt] > y.max && Nt--), u.min = Se[Ot], u.max = Se[Nt];
+          } else u.show && u.auto && To(y, _, u, e[d], u.sorted);
           u.idxs[0] = Ot, u.idxs[1] = Nt;
         } else if (d > 0 && u.show && u.auto) {
           let [g, _] = u.facets, y = g.scale, w = _.scale, [A, k] = e[d], C = r[y], B = r[w];
-          C != null && ko(C, L[y], g, A, g.sorted), B != null && ko(B, L[w], _, k, _.sorted), u.min = _.min, u.max = _.max;
+          C != null && To(C, L[y], g, A, g.sorted), B != null && To(B, L[w], _, k, _.sorted), u.min = _.min, u.max = _.max;
         }
       });
       for (let u in r) {
@@ -3185,7 +3237,7 @@ function Bt(t, e, n) {
       if (g.min != d.min || g.max != d.max) {
         g.min = d.min, g.max = d.max;
         let _ = g.distr;
-        g._min = _ == 3 ? Ge(g.min) : _ == 4 ? Wo(g.min, g.asinh) : _ == 100 ? g.fwd(g.min) : g.min, g._max = _ == 3 ? Ge(g.max) : _ == 4 ? Wo(g.max, g.asinh) : _ == 100 ? g.fwd(g.max) : g.max, l[u] = c = !0;
+        g._min = _ == 3 ? Ye(g.min) : _ == 4 ? Yo(g.min, g.asinh) : _ == 100 ? g.fwd(g.min) : g.min, g._max = _ == 3 ? Ye(g.max) : _ == 4 ? Yo(g.max, g.asinh) : _ == 100 ? g.fwd(g.max) : g.max, l[u] = c = !0;
       }
     }
     if (c) {
@@ -3200,15 +3252,15 @@ function Bt(t, e, n) {
       L[u] = null;
   }
   function ba(r) {
-    let l = er(Ot - 1, 0, Ut - 1), c = er(Nt + 1, 0, Ut - 1);
+    let l = or(Ot - 1, 0, Vt - 1), c = or(Nt + 1, 0, Vt - 1);
     for (; r[l] == null && l > 0; )
       l--;
-    for (; r[c] == null && c < Ut - 1; )
+    for (; r[c] == null && c < Vt - 1; )
       c++;
     return [l, c];
   }
   function _a() {
-    if (Ut > 0) {
+    if (Vt > 0) {
       let r = x.some((l) => l._focus) && Xt != De.alpha;
       r && (m.globalAlpha = Xt = De.alpha), x.forEach((l, c) => {
         if (c > 0 && l.show && (Ur(c, !1), Ur(c, !0), l._paths == null)) {
@@ -3220,10 +3272,10 @@ function Bt(t, e, n) {
       }), x.forEach((l, c) => {
         if (c > 0 && l.show) {
           let u = Xt;
-          Xt != l.alpha && (m.globalAlpha = Xt = l.alpha), l._paths != null && Vr(c, !1);
+          Xt != l.alpha && (m.globalAlpha = Xt = l.alpha), l._paths != null && Ir(c, !1);
           {
             let d = l._paths != null ? l._paths.gaps : null, g = l.points.show(i, c, Ot, Nt, d), _ = l.points.filter(i, c, g, d);
-            (g || _) && (l.points._paths = l.points.paths(i, c, Ot, Nt, _), Vr(c, !0));
+            (g || _) && (l.points._paths = l.points.paths(i, c, Ot, Nt, _), Ir(c, !0));
           }
           Xt != u && (m.globalAlpha = Xt = u), Rt("drawSeries", c);
         }
@@ -3234,7 +3286,7 @@ function Bt(t, e, n) {
     let c = l ? x[r].points : x[r];
     c._stroke = c.stroke(i, r), c._fill = c.fill(i, r);
   }
-  function Vr(r, l) {
+  function Ir(r, l) {
     let c = l ? x[r].points : x[r], {
       stroke: u,
       fill: d,
@@ -3249,32 +3301,32 @@ function Bt(t, e, n) {
     l && w == null && (w = A > 0 ? "#fff" : y);
     let B = c.pxAlign == 1 && C > 0;
     if (B && m.translate(C, C), !l) {
-      let st = ie - A / 2, ot = he - A / 2, X = Qt + A, V = xe + A;
-      k = new Path2D(), k.rect(st, ot, X, V);
+      let st = ie - A / 2, ot = he - A / 2, X = Qt + A, U = $e + A;
+      k = new Path2D(), k.rect(st, ot, X, U);
     }
-    l ? Po(y, A, c.dash, c.cap, w, u, d, _, g) : ya(r, y, A, c.dash, c.cap, w, u, d, _, k, g), B && m.translate(-C, -C);
+    l ? Co(y, A, c.dash, c.cap, w, u, d, _, g) : ya(r, y, A, c.dash, c.cap, w, u, d, _, k, g), B && m.translate(-C, -C);
   }
   function ya(r, l, c, u, d, g, _, y, w, A, k) {
     let C = !1;
     w != 0 && Z.forEach((B, st) => {
       if (B.series[0] == r) {
-        let ot = x[B.series[1]], X = e[B.series[1]], V = (ot._paths || An).band;
-        ii(V) && (V = B.dir == 1 ? V[0] : V[1]);
+        let ot = x[B.series[1]], X = e[B.series[1]], U = (ot._paths || An).band;
+        ii(U) && (U = B.dir == 1 ? U[0] : U[1]);
         let O, bt = null;
-        ot.show && V && iu(X, Ot, Nt) ? (bt = B.fill(i, st) || g, O = ot._paths.clip) : V = null, Po(l, c, u, d, bt, _, y, w, A, k, O, V), C = !0;
+        ot.show && U && iu(X, Ot, Nt) ? (bt = B.fill(i, st) || g, O = ot._paths.clip) : U = null, Co(l, c, u, d, bt, _, y, w, A, k, O, U), C = !0;
       }
-    }), C || Po(l, c, u, d, g, _, y, w, A, k);
+    }), C || Co(l, c, u, d, g, _, y, w, A, k);
   }
-  const Ir = nn | or;
-  function Po(r, l, c, u, d, g, _, y, w, A, k, C) {
-    Hr(r, l, c, u, d), (w || A || C) && (m.save(), w && m.clip(w), A && m.clip(A)), C ? (y & Ir) == Ir ? (m.clip(C), k && m.clip(k), Vn(d, _), Un(r, g, l)) : y & or ? (Vn(d, _), m.clip(C), Un(r, g, l)) : y & nn && (m.save(), m.clip(C), k && m.clip(k), Vn(d, _), m.restore(), Un(r, g, l)) : (Vn(d, _), Un(r, g, l)), (w || A || C) && m.restore();
+  const jr = nn | lr;
+  function Co(r, l, c, u, d, g, _, y, w, A, k, C) {
+    Rr(r, l, c, u, d), (w || A || C) && (m.save(), w && m.clip(w), A && m.clip(A)), C ? (y & jr) == jr ? (m.clip(C), k && m.clip(k), Un(d, _), Vn(r, g, l)) : y & lr ? (Un(d, _), m.clip(C), Vn(r, g, l)) : y & nn && (m.save(), m.clip(C), k && m.clip(k), Un(d, _), m.restore(), Vn(r, g, l)) : (Un(d, _), Vn(r, g, l)), (w || A || C) && m.restore();
   }
-  function Un(r, l, c) {
+  function Vn(r, l, c) {
     c > 0 && (l instanceof Map ? l.forEach((u, d) => {
       m.strokeStyle = Fn = d, m.stroke(u);
     }) : l != null && r && m.stroke(l));
   }
-  function Vn(r, l) {
+  function Un(r, l) {
     l instanceof Map ? l.forEach((c, u) => {
       m.fillStyle = Hi = u, m.fill(c);
     }) : l != null && r && m.fill(l);
@@ -3289,13 +3341,13 @@ function Bt(t, e, n) {
     }
     return d._found = g;
   }
-  function To(r, l, c, u, d, g, _, y, w, A) {
+  function Mo(r, l, c, u, d, g, _, y, w, A) {
     let k = _ % 2 / 2;
-    H == 1 && m.translate(k, k), Hr(y, _, w, A, y), m.beginPath();
+    H == 1 && m.translate(k, k), Rr(y, _, w, A, y), m.beginPath();
     let C, B, st, ot, X = d + (u == 0 || u == 3 ? -g : g);
     c == 0 ? (B = d, ot = X) : (C = d, st = X);
-    for (let V = 0; V < r.length; V++)
-      l[V] != null && (c == 0 ? C = st = r[V] : B = ot = r[V], m.moveTo(C, B), m.lineTo(st, ot));
+    for (let U = 0; U < r.length; U++)
+      l[U] != null && (c == 0 ? C = st = r[U] : B = ot = r[U], m.moveTo(C, B), m.lineTo(st, ot));
     m.stroke(), H == 1 && m.translate(-k, -k);
   }
   function xa(r) {
@@ -3312,15 +3364,15 @@ function Bt(t, e, n) {
       let g = c.side, _ = g % 2, { min: y, max: w } = d, [A, k] = wa(u, y, w, _ == 0 ? K : T);
       if (k == 0)
         return;
-      let C = d.distr == 2, B = c._splits = c.splits(i, u, y, w, A, k, C), st = d.distr == 2 ? B.map((O) => $e[O]) : B, ot = d.distr == 2 ? $e[B[1]] - $e[B[0]] : A, X = c._values = c.values(i, c.filter(i, st, u, k, ot), u, k, ot);
+      let C = d.distr == 2, B = c._splits = c.splits(i, u, y, w, A, k, C), st = d.distr == 2 ? B.map((O) => Se[O]) : B, ot = d.distr == 2 ? Se[B[1]] - Se[B[0]] : A, X = c._values = c.values(i, c.filter(i, st, u, k, ot), u, k, ot);
       c._rotate = g == 2 ? c.rotate(i, X, u, k) : 0;
-      let V = c._size;
-      c._size = be(c.size(i, X, u, r)), V != null && c._size != V && (l = !1);
+      let U = c._size;
+      c._size = be(c.size(i, X, u, r)), U != null && c._size != U && (l = !1);
     }), l;
   }
   function $a(r) {
     let l = !0;
-    return Nr.forEach((c, u) => {
+    return Lr.forEach((c, u) => {
       let d = c(i, u, pi, r);
       d != Je[u] && (l = !1), Je[u] = d;
     }), l;
@@ -3333,63 +3385,63 @@ function Bt(t, e, n) {
       let c = l.side, u = c % 2, d, g, _ = l.stroke(i, r), y = c == 0 || c == 3 ? -1 : 1, [w, A] = l._found;
       if (l.label != null) {
         let Kt = l.labelGap * y, re = Mt((l._lpos + Kt) * lt);
-        Rr(l.labelFont[0], _, "center", c == 2 ? bn : ys), m.save(), u == 1 ? (d = g = 0, m.translate(
+        Fr(l.labelFont[0], _, "center", c == 2 ? bn : ws), m.save(), u == 1 ? (d = g = 0, m.translate(
           re,
-          Mt(he + xe / 2)
+          Mt(he + $e / 2)
         ), m.rotate((c == 3 ? -Zn : Zn) / 2)) : (d = Mt(ie + Qt / 2), g = re);
         let vi = El(l.label) ? l.label(i, r, w, A) : l.label;
         m.fillText(vi, d, g), m.restore();
       }
       if (A == 0)
         continue;
-      let k = $[l.scale], C = u == 0 ? Qt : xe, B = u == 0 ? ie : he, st = l._splits, ot = k.distr == 2 ? st.map((Kt) => $e[Kt]) : st, X = k.distr == 2 ? $e[st[1]] - $e[st[0]] : w, V = l.ticks, O = l.border, bt = V.show ? V.size : 0, St = Mt(bt * lt), Ft = Mt((l.alignTo == 2 ? l._size - bt - l.gap : l.gap) * lt), ht = l._rotate * -Zn / 180, At = U(l._pos * lt), ne = (St + Ft) * y, Yt = At + ne;
+      let k = $[l.scale], C = u == 0 ? Qt : $e, B = u == 0 ? ie : he, st = l._splits, ot = k.distr == 2 ? st.map((Kt) => Se[Kt]) : st, X = k.distr == 2 ? Se[st[1]] - Se[st[0]] : w, U = l.ticks, O = l.border, bt = U.show ? U.size : 0, St = Mt(bt * lt), Ft = Mt((l.alignTo == 2 ? l._size - bt - l.gap : l.gap) * lt), ht = l._rotate * -Zn / 180, At = V(l._pos * lt), ne = (St + Ft) * y, Yt = At + ne;
       g = u == 0 ? Yt : 0, d = u == 1 ? Yt : 0;
-      let me = l.font[0], Se = l.align == 1 ? Yi : l.align == 2 ? Io : ht > 0 ? Yi : ht < 0 ? Io : u == 0 ? "center" : c == 3 ? Io : Yi, Le = ht || u == 1 ? "middle" : c == 2 ? bn : ys;
-      Rr(me, _, Se, Le);
-      let oe = l.font[1] * l.lineGap, ge = st.map((Kt) => U(f(Kt, k, C, B))), Ae = l._values;
-      for (let Kt = 0; Kt < Ae.length; Kt++) {
-        let re = Ae[Kt];
+      let me = l.font[0], Ae = l.align == 1 ? Yi : l.align == 2 ? Bo : ht > 0 ? Yi : ht < 0 ? Bo : u == 0 ? "center" : c == 3 ? Bo : Yi, Le = ht || u == 1 ? "middle" : c == 2 ? bn : ws;
+      Fr(me, _, Ae, Le);
+      let oe = l.font[1] * l.lineGap, ge = st.map((Kt) => V(f(Kt, k, C, B))), Ee = l._values;
+      for (let Kt = 0; Kt < Ee.length; Kt++) {
+        let re = Ee[Kt];
         if (re != null) {
           u == 0 ? d = ge[Kt] : g = ge[Kt], re = "" + re;
           let vi = re.indexOf(`
 `) == -1 ? [re] : re.split(/\n/gm);
           for (let qt = 0; qt < vi.length; qt++) {
-            let ls = vi[qt];
-            ht ? (m.save(), m.translate(d, g + qt * oe), m.rotate(ht), m.fillText(ls, 0, 0), m.restore()) : m.fillText(ls, d, g + qt * oe);
+            let as = vi[qt];
+            ht ? (m.save(), m.translate(d, g + qt * oe), m.rotate(ht), m.fillText(as, 0, 0), m.restore()) : m.fillText(as, d, g + qt * oe);
           }
         }
       }
-      V.show && To(
+      U.show && Mo(
         ge,
-        V.filter(i, ot, r, A, X),
+        U.filter(i, ot, r, A, X),
         u,
         c,
         At,
         St,
-        pt(V.width * lt, 3),
-        V.stroke(i, r),
-        V.dash,
-        V.cap
+        pt(U.width * lt, 3),
+        U.stroke(i, r),
+        U.dash,
+        U.cap
       );
       let He = l.grid;
-      He.show && To(
+      He.show && Mo(
         ge,
         He.filter(i, ot, r, A, X),
         u,
         u == 0 ? 2 : 1,
         u == 0 ? he : ie,
-        u == 0 ? xe : Qt,
+        u == 0 ? $e : Qt,
         pt(He.width * lt, 3),
         He.stroke(i, r),
         He.dash,
         He.cap
-      ), O.show && To(
+      ), O.show && Mo(
         [At],
         [1],
         u == 0 ? 1 : 0,
         u == 0 ? 1 : 2,
         u == 1 ? he : ie,
-        u == 1 ? xe : Qt,
+        u == 1 ? $e : Qt,
         pt(O.width * lt, 3),
         O.stroke(i, r),
         O.dash,
@@ -3405,34 +3457,34 @@ function Bt(t, e, n) {
       })));
     });
   }
-  let In = !1, Co = !1, hn = [];
+  let In = !1, zo = !1, hn = [];
   function Aa() {
-    Co = !1;
+    zo = !1;
     for (let r = 0; r < hn.length; r++)
       Rt(...hn[r]);
     hn.length = 0;
   }
   function Fi() {
-    In || (gu(jr), In = !0);
+    In || (gu(Br), In = !0);
   }
   function Ea(r, l = !1) {
-    In = !0, Co = l, r(i), jr(), l && hn.length > 0 && queueMicrotask(Aa);
+    In = !0, zo = l, r(i), Br(), l && hn.length > 0 && queueMicrotask(Aa);
   }
   i.batch = Ea;
-  function jr() {
-    if (vo && (va(), vo = !1), zi && (ua(), zi = !1), Ln) {
-      if (_t(E, Yi, mt), _t(E, bn, Ct), _t(E, yn, K), _t(E, wn, T), _t(P, Yi, mt), _t(P, bn, Ct), _t(P, yn, K), _t(P, wn, T), _t(v, yn, Be), _t(v, wn, ci), b.width = Mt(Be * lt), b.height = Mt(ci * lt), R.forEach(({ _el: r, _show: l, _size: c, _pos: u, side: d }) => {
+  function Br() {
+    if (_o && (va(), _o = !1), zi && (ua(), zi = !1), Ln) {
+      if (_t(E, Yi, mt), _t(E, bn, Ct), _t(E, yn, K), _t(E, wn, T), _t(P, Yi, mt), _t(P, bn, Ct), _t(P, yn, K), _t(P, wn, T), _t(v, yn, We), _t(v, wn, ci), b.width = Mt(We * lt), b.height = Mt(ci * lt), R.forEach(({ _el: r, _show: l, _size: c, _pos: u, side: d }) => {
         if (r != null)
           if (l) {
             let g = d === 3 || d === 0 ? c : 0, _ = d % 2 == 1;
-            _t(r, _ ? "left" : "top", u - g), _t(r, _ ? "width" : "height", c), _t(r, _ ? "top" : "left", _ ? Ct : mt), _t(r, _ ? "height" : "width", _ ? T : K), Xo(r, wi);
+            _t(r, _ ? "left" : "top", u - g), _t(r, _ ? "width" : "height", c), _t(r, _ ? "top" : "left", _ ? Ct : mt), _t(r, _ ? "height" : "width", _ ? T : K), ir(r, wi);
           } else
             se(r, wi);
-      }), Fn = Hi = yo = xo = $o = So = Ao = Eo = wo = null, Xt = 1, mn(!0), mt != Mi || Ct != ui || K != ze || T != fi) {
+      }), Fn = Hi = xo = So = Ao = Eo = ko = Po = $o = null, Xt = 1, mn(!0), mt != Mi || Ct != ui || K != ze || T != fi) {
         Ri(!1);
         let r = K / ze, l = T / fi;
         if (Wt && !hi && D.left >= 0) {
-          D.left *= r, D.top *= l, Ui && Re(Ui, Mt(D.left), 0, K, T), Vi && Re(Vi, 0, Mt(D.top), K, T);
+          D.left *= r, D.top *= l, Vi && Re(Vi, Mt(D.left), 0, K, T), Ui && Re(Ui, 0, Mt(D.top), K, T);
           for (let c = 0; c < pe.length; c++) {
             let u = pe[c];
             u != null && (Ni[c] *= r, Li[c] *= l, Re(u, be(Ni[c]), be(Li[c]), K, T));
@@ -3440,22 +3492,22 @@ function Bt(t, e, n) {
         }
         if (vt.show && !Hn && vt.left >= 0 && vt.width > 0) {
           vt.left *= r, vt.width *= r, vt.top *= l, vt.height *= l;
-          for (let c in Lo)
+          for (let c in Ro)
             _t(Bi, c, vt[c]);
         }
         Mi = mt, ui = Ct, ze = K, fi = T;
       }
       Rt("setSize"), Ln = !1;
     }
-    Be > 0 && ci > 0 && (m.clearRect(0, 0, b.width, b.height), Rt("drawClear"), G.forEach((r) => r()), Rt("draw")), vt.show && Hn && (jn(vt), Hn = !1), Wt && hi && (gi(null, !0, !1), hi = !1), Q.show && Q.live && de && (Oo(), de = !1), h || (h = !0, i.status = 1, Rt("ready")), fn = !1, In = !1;
+    We > 0 && ci > 0 && (m.clearRect(0, 0, b.width, b.height), Rt("drawClear"), Y.forEach((r) => r()), Rt("draw")), vt.show && Hn && (jn(vt), Hn = !1), Wt && hi && (gi(null, !0, !1), hi = !1), Q.show && Q.live && de && (Lo(), de = !1), h || (h = !0, i.status = 1, Rt("ready")), fn = !1, In = !1;
   }
   i.redraw = (r, l) => {
     zi = l || !1, r !== !1 ? Xe(M, S.min, S.max) : Fi();
   };
-  function Mo(r, l) {
+  function Do(r, l) {
     let c = $[r];
     if (c.from == null) {
-      if (Ut == 0) {
+      if (Vt == 0) {
         let u = c.range(i, l.min, l.max, r);
         l.min = u[0], l.max = u[1];
       }
@@ -3463,16 +3515,16 @@ function Bt(t, e, n) {
         let u = l.min;
         l.min = l.max, l.max = u;
       }
-      if (Ut > 1 && l.min != null && l.max != null && l.max - l.min < 1e-16)
+      if (Vt > 1 && l.min != null && l.max != null && l.max - l.min < 1e-16)
         return;
-      r == M && c.distr == 2 && Ut > 0 && (l.min = ke(l.min, e[0]), l.max = ke(l.max, e[0]), l.min == l.max && l.max++), L[r] = l, vo = !0, Fi();
+      r == M && c.distr == 2 && Vt > 0 && (l.min = Pe(l.min, e[0]), l.max = Pe(l.max, e[0]), l.min == l.max && l.max++), L[r] = l, _o = !0, Fi();
     }
   }
-  i.setScale = Mo;
-  let zo, Do, Ui, Vi, Br, Wr, Ii, ji, Gr, Yr, gt, xt, Qe = !1;
-  const Vt = D.drag;
-  let Lt = Vt.x, Ht = Vt.y;
-  Wt && (D.x && (zo = ve(Uc, P)), D.y && (Do = ve(Vc, P)), S.ori == 0 ? (Ui = zo, Vi = Do) : (Ui = Do, Vi = zo), gt = D.left, xt = D.top);
+  i.setScale = Do;
+  let Oo, No, Vi, Ui, Wr, Gr, Ii, ji, Yr, Kr, gt, xt, Qe = !1;
+  const Ut = D.drag;
+  let Lt = Ut.x, Ht = Ut.y;
+  Wt && (D.x && (Oo = ve(Vc, P)), D.y && (No = ve(Uc, P)), S.ori == 0 ? (Vi = Oo, Ui = No) : (Vi = No, Ui = Oo), gt = D.left, xt = D.top);
   const vt = i.select = kt({
     show: !0,
     over: !0,
@@ -3484,21 +3536,21 @@ function Bt(t, e, n) {
   function jn(r, l) {
     if (vt.show) {
       for (let c in r)
-        vt[c] = r[c], c in Lo && _t(Bi, c, r[c]);
+        vt[c] = r[c], c in Ro && _t(Bi, c, r[c]);
       l !== !1 && Rt("setSelect");
     }
   }
   i.setSelect = jn;
   function ka(r) {
     if (x[r].show)
-      Tt && Xo($t[r], wi);
+      Tt && ir($t[r], wi);
     else if (Tt && se($t[r], wi), Wt) {
       let c = Oi ? pe[0] : pe[r];
       c != null && Re(c, -10, -10, K, T);
     }
   }
   function Xe(r, l, c) {
-    Mo(r, { min: l, max: c });
+    Do(r, { min: l, max: c });
   }
   function Oe(r, l, c, u) {
     l.focus != null && za(r), l.show != null && x.forEach((d, g) => {
@@ -3519,7 +3571,7 @@ function Bt(t, e, n) {
   function Ma(r, l) {
     x[r].alpha = l, Wt && pe[r] != null && (pe[r].style.opacity = l), Tt && $t[r] && ($t[r].style.opacity = l);
   }
-  let We, ti, mi;
+  let Ge, ti, mi;
   const Wi = { focus: !0 };
   function za(r) {
     if (r != mi) {
@@ -3532,7 +3584,7 @@ function Bt(t, e, n) {
       }), mi = r, c && Fi();
     }
   }
-  Tt && Di && Gt(Ss, ct, (r) => {
+  Tt && Di && Gt(As, ct, (r) => {
     D._lock || (di(r), mi != null && Oe(null, Wi, !0, Et.setSeries));
   });
   function Ne(r, l, c) {
@@ -3545,9 +3597,9 @@ function Bt(t, e, n) {
   }
   function Da(r, l) {
     let c = Ne(r, M, l);
-    return ke(c, e[0], Ot, Nt);
+    return Pe(c, e[0], Ot, Nt);
   }
-  i.valToIdx = (r) => ke(r, e[0]), i.posToIdx = Da, i.posToVal = Ne, i.valToPos = (r, l, c) => $[l].ori == 0 ? s(
+  i.valToIdx = (r) => Pe(r, e[0]), i.posToIdx = Da, i.posToVal = Ne, i.valToPos = (r, l, c) => $[l].ori == 0 ? s(
     r,
     $[l],
     c ? Qt : K,
@@ -3555,18 +3607,18 @@ function Bt(t, e, n) {
   ) : a(
     r,
     $[l],
-    c ? xe : T,
+    c ? $e : T,
     c ? he : 0
   ), i.setCursor = (r, l, c) => {
     gt = r.left, xt = r.top, gi(null, l, c);
   };
-  function Kr(r, l) {
+  function qr(r, l) {
     _t(Bi, Yi, vt.left = r), _t(Bi, yn, vt.width = l);
   }
-  function qr(r, l) {
+  function Zr(r, l) {
     _t(Bi, bn, vt.top = r), _t(Bi, wn, vt.height = l);
   }
-  let dn = S.ori == 0 ? Kr : qr, pn = S.ori == 1 ? Kr : qr;
+  let dn = S.ori == 0 ? qr : Zr, pn = S.ori == 1 ? qr : Zr;
   function Oa() {
     if (Tt && Q.live)
       for (let r = o == 2 ? 1 : 0; r < x.length; r++) {
@@ -3577,7 +3629,7 @@ function Bt(t, e, n) {
           Me[r][c++].firstChild.nodeValue = l[u];
       }
   }
-  function Oo(r, l) {
+  function Lo(r, l) {
     if (r != null && (r.idxs ? r.idxs.forEach((c, u) => {
       ft[u] = c;
     }) : au(r.idx) || ft.fill(r.idx), Q.idx = ft[0]), Tt && Q.live) {
@@ -3587,17 +3639,17 @@ function Bt(t, e, n) {
     }
     de = !1, l !== !1 && Rt("setLegend");
   }
-  i.setLegend = Oo;
+  i.setLegend = Lo;
   function Na(r, l) {
-    let c = x[r], u = r == 0 && q == 2 ? $e : e[r], d;
+    let c = x[r], u = r == 0 && q == 2 ? Se : e[r], d;
     fe ? d = c.values(i, r, l) ?? Ze : (d = c.value(i, l == null ? null : u[l], r, l), d = d == null ? Ze : { _: d }), Q.values[r] = d;
   }
   function gi(r, l, c) {
-    Gr = gt, Yr = xt, [gt, xt] = D.move(i, gt, xt), D.left = gt, D.top = xt, Wt && (Ui && Re(Ui, Mt(gt), 0, K, T), Vi && Re(Vi, 0, Mt(xt), K, T));
+    Yr = gt, Kr = xt, [gt, xt] = D.move(i, gt, xt), D.left = gt, D.top = xt, Wt && (Vi && Re(Vi, Mt(gt), 0, K, T), Ui && Re(Ui, 0, Mt(xt), K, T));
     let u, d = Ot > Nt;
-    We = dt, ti = null;
+    Ge = dt, ti = null;
     let g = S.ori == 0 ? K : T, _ = S.ori == 1 ? K : T;
-    if (gt < 0 || Ut == 0 || d) {
+    if (gt < 0 || Vt == 0 || d) {
       u = D.idx = null;
       for (let y = 0; y < x.length; y++) {
         let w = pe[y];
@@ -3606,50 +3658,50 @@ function Bt(t, e, n) {
       Di && Oe(null, Wi, !0, r == null && Et.setSeries), Q.live && (ft.fill(u), de = !0);
     } else {
       let y, w, A;
-      o == 1 && (y = S.ori == 0 ? gt : xt, w = Ne(y, M), u = D.idx = ke(w, e[0], Ot, Nt), A = z(e[0][u], S, g, 0));
-      let k = -10, C = -10, B = 0, st = 0, ot = !0, X = "", V = "";
+      o == 1 && (y = S.ori == 0 ? gt : xt, w = Ne(y, M), u = D.idx = Pe(w, e[0], Ot, Nt), A = z(e[0][u], S, g, 0));
+      let k = -10, C = -10, B = 0, st = 0, ot = !0, X = "", U = "";
       for (let O = o == 2 ? 1 : 0; O < x.length; O++) {
         let bt = x[O], St = ft[O], Ft = St == null ? null : o == 1 ? e[O][St] : e[O][1][St], ht = D.dataIdx(i, O, u, w), At = ht == null ? null : o == 1 ? e[O][ht] : e[O][1][ht];
         if (de = de || At != Ft || ht != St, ft[O] = ht, O > 0 && bt.show) {
           let ne = ht == null ? -10 : ht == u ? A : z(o == 1 ? e[0][ht] : e[O][0][ht], S, g, 0), Yt = At == null ? -10 : j(At, o == 1 ? $[bt.scale] : $[bt.facets[1].scale], _, 0);
           if (Di && At != null) {
-            let me = S.ori == 1 ? gt : xt, Se = zt(De.dist(i, O, ht, Yt, me));
-            if (Se < We) {
+            let me = S.ori == 1 ? gt : xt, Ae = zt(De.dist(i, O, ht, Yt, me));
+            if (Ae < Ge) {
               let Le = De.bias;
               if (Le != 0) {
-                let oe = Ne(me, bt.scale), ge = At >= 0 ? 1 : -1, Ae = oe >= 0 ? 1 : -1;
-                Ae == ge && (Ae == 1 ? Le == 1 ? At >= oe : At <= oe : (
+                let oe = Ne(me, bt.scale), ge = At >= 0 ? 1 : -1, Ee = oe >= 0 ? 1 : -1;
+                Ee == ge && (Ee == 1 ? Le == 1 ? At >= oe : At <= oe : (
                   // >= 0
                   Le == 1 ? At <= oe : At >= oe
-                )) && (We = Se, ti = O);
+                )) && (Ge = Ae, ti = O);
               } else
-                We = Se, ti = O;
+                Ge = Ae, ti = O;
             }
           }
           if (de || Oi) {
-            let me, Se;
-            S.ori == 0 ? (me = ne, Se = Yt) : (me = Yt, Se = ne);
-            let Le, oe, ge, Ae, He, Kt, re = !0, vi = jt.bbox;
+            let me, Ae;
+            S.ori == 0 ? (me = ne, Ae = Yt) : (me = Yt, Ae = ne);
+            let Le, oe, ge, Ee, He, Kt, re = !0, vi = jt.bbox;
             if (vi != null) {
               re = !1;
               let qt = vi(i, O);
-              ge = qt.left, Ae = qt.top, Le = qt.width, oe = qt.height;
+              ge = qt.left, Ee = qt.top, Le = qt.width, oe = qt.height;
             } else
-              ge = me, Ae = Se, Le = oe = jt.size(i, O);
+              ge = me, Ee = Ae, Le = oe = jt.size(i, O);
             if (Kt = jt.fill(i, O), He = jt.stroke(i, O), Oi)
-              O == ti && We <= De.prox && (k = ge, C = Ae, B = Le, st = oe, ot = re, X = Kt, V = He);
+              O == ti && Ge <= De.prox && (k = ge, C = Ee, B = Le, st = oe, ot = re, X = Kt, U = He);
             else {
               let qt = pe[O];
-              qt != null && (Ni[O] = ge, Li[O] = Ae, Ms(qt, Le, oe, re), Ts(qt, Kt, He), Re(qt, be(ge), be(Ae), K, T));
+              qt != null && (Ni[O] = ge, Li[O] = Ee, zs(qt, Le, oe, re), Cs(qt, Kt, He), Re(qt, be(ge), be(Ee), K, T));
             }
           }
         }
       }
       if (Oi) {
-        let O = De.prox, bt = mi == null ? We <= O : We > O || ti != mi;
+        let O = De.prox, bt = mi == null ? Ge <= O : Ge > O || ti != mi;
         if (de || bt) {
           let St = pe[0];
-          St != null && (Ni[0] = k, Li[0] = C, Ms(St, B, st, ot), Ts(St, X, V), Re(St, be(k), be(C), K, T));
+          St != null && (Ni[0] = k, Li[0] = C, zs(St, B, st, ot), Cs(St, X, U), Re(St, be(k), be(C), K, T));
         }
       }
     }
@@ -3657,36 +3709,36 @@ function Bt(t, e, n) {
       if (r != null) {
         let [y, w] = Et.scales, [A, k] = Et.match, [C, B] = r.cursor.sync.scales, st = r.cursor.drag;
         if (Lt = st._x, Ht = st._y, Lt || Ht) {
-          let { left: ot, top: X, width: V, height: O } = r.select, bt = r.scales[C].ori, St = r.posToVal, Ft, ht, At, ne, Yt, me = y != null && A(y, C), Se = w != null && k(w, B);
-          me && Lt ? (bt == 0 ? (Ft = ot, ht = V) : (Ft = X, ht = O), At = $[y], ne = z(St(Ft, C), At, g, 0), Yt = z(St(Ft + ht, C), At, g, 0), dn(Pe(ne, Yt), zt(Yt - ne))) : dn(0, g), Se && Ht ? (bt == 1 ? (Ft = ot, ht = V) : (Ft = X, ht = O), At = $[w], ne = j(St(Ft, B), At, _, 0), Yt = j(St(Ft + ht, B), At, _, 0), pn(Pe(ne, Yt), zt(Yt - ne))) : pn(0, _);
+          let { left: ot, top: X, width: U, height: O } = r.select, bt = r.scales[C].ori, St = r.posToVal, Ft, ht, At, ne, Yt, me = y != null && A(y, C), Ae = w != null && k(w, B);
+          me && Lt ? (bt == 0 ? (Ft = ot, ht = U) : (Ft = X, ht = O), At = $[y], ne = z(St(Ft, C), At, g, 0), Yt = z(St(Ft + ht, C), At, g, 0), dn(Te(ne, Yt), zt(Yt - ne))) : dn(0, g), Ae && Ht ? (bt == 1 ? (Ft = ot, ht = U) : (Ft = X, ht = O), At = $[w], ne = j(St(Ft, B), At, _, 0), Yt = j(St(Ft + ht, B), At, _, 0), pn(Te(ne, Yt), zt(Yt - ne))) : pn(0, _);
         } else
-          Ho();
+          Fo();
       } else {
-        let y = zt(Gr - Br), w = zt(Yr - Wr);
+        let y = zt(Yr - Wr), w = zt(Kr - Gr);
         if (S.ori == 1) {
           let B = y;
           y = w, w = B;
         }
-        Lt = Vt.x && y >= Vt.dist, Ht = Vt.y && w >= Vt.dist;
-        let A = Vt.uni;
-        A != null ? Lt && Ht && (Lt = y >= A, Ht = w >= A, !Lt && !Ht && (w > y ? Ht = !0 : Lt = !0)) : Vt.x && Vt.y && (Lt || Ht) && (Lt = Ht = !0);
+        Lt = Ut.x && y >= Ut.dist, Ht = Ut.y && w >= Ut.dist;
+        let A = Ut.uni;
+        A != null ? Lt && Ht && (Lt = y >= A, Ht = w >= A, !Lt && !Ht && (w > y ? Ht = !0 : Lt = !0)) : Ut.x && Ut.y && (Lt || Ht) && (Lt = Ht = !0);
         let k, C;
-        Lt && (S.ori == 0 ? (k = Ii, C = gt) : (k = ji, C = xt), dn(Pe(k, C), zt(C - k)), Ht || pn(0, _)), Ht && (S.ori == 1 ? (k = Ii, C = gt) : (k = ji, C = xt), pn(Pe(k, C), zt(C - k)), Lt || dn(0, g)), !Lt && !Ht && (dn(0, 0), pn(0, 0));
+        Lt && (S.ori == 0 ? (k = Ii, C = gt) : (k = ji, C = xt), dn(Te(k, C), zt(C - k)), Ht || pn(0, _)), Ht && (S.ori == 1 ? (k = Ii, C = gt) : (k = ji, C = xt), pn(Te(k, C), zt(C - k)), Lt || dn(0, g)), !Lt && !Ht && (dn(0, 0), pn(0, 0));
       }
-    if (Vt._x = Lt, Vt._y = Ht, r == null) {
+    if (Ut._x = Lt, Ut._y = Ht, r == null) {
       if (c) {
-        if (ss != null) {
+        if (ls != null) {
           let [y, w] = Et.scales;
           Et.values[0] = y != null ? Ne(S.ori == 0 ? gt : xt, y) : null, Et.values[1] = w != null ? Ne(S.ori == 1 ? gt : xt, w) : null;
         }
-        gn(jo, i, gt, xt, K, T, u);
+        gn(Wo, i, gt, xt, K, T, u);
       }
       if (Di) {
         let y = c && Et.setSeries, w = De.prox;
-        mi == null ? We <= w && Oe(ti, Wi, !0, y) : We > w ? Oe(null, Wi, !0, y) : ti != mi && Oe(ti, Wi, !0, y);
+        mi == null ? Ge <= w && Oe(ti, Wi, !0, y) : Ge > w ? Oe(null, Wi, !0, y) : ti != mi && Oe(ti, Wi, !0, y);
       }
     }
-    de && (Q.idx = u, Oo()), l !== !1 && Rt("setCursor");
+    de && (Q.idx = u, Lo()), l !== !1 && Rt("setCursor");
   }
   let ei = null;
   Object.defineProperty(i, "rect", {
@@ -3697,10 +3749,10 @@ function Bt(t, e, n) {
   function mn(r = !1) {
     r ? ei = null : (ei = P.getBoundingClientRect(), Rt("syncRect", ei));
   }
-  function Zr(r, l, c, u, d, g, _) {
-    D._lock || Qe && r != null && r.movementX == 0 && r.movementY == 0 || (No(r, l, c, u, d, g, _, !1, r != null), r != null ? gi(null, !0, !0) : gi(l, !0, !1));
+  function Jr(r, l, c, u, d, g, _) {
+    D._lock || Qe && r != null && r.movementX == 0 && r.movementY == 0 || (Ho(r, l, c, u, d, g, _, !1, r != null), r != null ? gi(null, !0, !0) : gi(l, !0, !1));
   }
-  function No(r, l, c, u, d, g, _, y, w) {
+  function Ho(r, l, c, u, d, g, _, y, w) {
     if (ei == null && mn(!1), di(r), r != null)
       c = r.clientX - ei.left, u = r.clientY - ei.top;
     else {
@@ -3708,35 +3760,35 @@ function Bt(t, e, n) {
         gt = -10, xt = -10;
         return;
       }
-      let [A, k] = Et.scales, C = l.cursor.sync, [B, st] = C.values, [ot, X] = C.scales, [V, O] = Et.match, bt = l.axes[0].side % 2 == 1, St = S.ori == 0 ? K : T, Ft = S.ori == 1 ? K : T, ht = bt ? g : d, At = bt ? d : g, ne = bt ? u : c, Yt = bt ? c : u;
-      if (ot != null ? c = V(A, ot) ? f(B, $[A], St, 0) : -10 : c = St * (ne / ht), X != null ? u = O(k, X) ? f(st, $[k], Ft, 0) : -10 : u = Ft * (Yt / At), S.ori == 1) {
+      let [A, k] = Et.scales, C = l.cursor.sync, [B, st] = C.values, [ot, X] = C.scales, [U, O] = Et.match, bt = l.axes[0].side % 2 == 1, St = S.ori == 0 ? K : T, Ft = S.ori == 1 ? K : T, ht = bt ? g : d, At = bt ? d : g, ne = bt ? u : c, Yt = bt ? c : u;
+      if (ot != null ? c = U(A, ot) ? f(B, $[A], St, 0) : -10 : c = St * (ne / ht), X != null ? u = O(k, X) ? f(st, $[k], Ft, 0) : -10 : u = Ft * (Yt / At), S.ori == 1) {
         let me = c;
         c = u, u = me;
       }
     }
-    w && (l == null || l.cursor.event.type == jo) && ((c <= 1 || c >= K - 1) && (c = _i(c, K)), (u <= 1 || u >= T - 1) && (u = _i(u, T))), y ? (Br = c, Wr = u, [Ii, ji] = D.move(i, c, u)) : (gt = c, xt = u);
+    w && (l == null || l.cursor.event.type == Wo) && ((c <= 1 || c >= K - 1) && (c = _i(c, K)), (u <= 1 || u >= T - 1) && (u = _i(u, T))), y ? (Wr = c, Gr = u, [Ii, ji] = D.move(i, c, u)) : (gt = c, xt = u);
   }
-  const Lo = {
+  const Ro = {
     width: 0,
     height: 0,
     left: 0,
     top: 0
   };
-  function Ho() {
-    jn(Lo, !1);
+  function Fo() {
+    jn(Ro, !1);
   }
-  let Jr, Qr, Xr, ts;
-  function es(r, l, c, u, d, g, _) {
-    Qe = !0, Lt = Ht = Vt._x = Vt._y = !1, No(r, l, c, u, d, g, _, !0, !1), r != null && (Gt(Bo, Jo, is, !1), gn(xs, i, Ii, ji, K, T, null));
-    let { left: y, top: w, width: A, height: k } = vt;
-    Jr = y, Qr = w, Xr = A, ts = k;
-  }
+  let Qr, Xr, ts, es;
   function is(r, l, c, u, d, g, _) {
-    Qe = Vt._x = Vt._y = !1, No(r, l, c, u, d, g, _, !1, !0);
-    let { left: y, top: w, width: A, height: k } = vt, C = A > 0 || k > 0, B = Jr != y || Qr != w || Xr != A || ts != k;
-    if (C && B && jn(vt), Vt.setScale && C && B) {
-      let st = y, ot = A, X = w, V = k;
-      if (S.ori == 1 && (st = w, ot = k, X = y, V = A), Lt && Xe(
+    Qe = !0, Lt = Ht = Ut._x = Ut._y = !1, Ho(r, l, c, u, d, g, _, !0, !1), r != null && (Gt(Go, tr, ns, !1), gn($s, i, Ii, ji, K, T, null));
+    let { left: y, top: w, width: A, height: k } = vt;
+    Qr = y, Xr = w, ts = A, es = k;
+  }
+  function ns(r, l, c, u, d, g, _) {
+    Qe = Ut._x = Ut._y = !1, Ho(r, l, c, u, d, g, _, !1, !0);
+    let { left: y, top: w, width: A, height: k } = vt, C = A > 0 || k > 0, B = Qr != y || Xr != w || ts != A || es != k;
+    if (C && B && jn(vt), Ut.setScale && C && B) {
+      let st = y, ot = A, X = w, U = k;
+      if (S.ori == 1 && (st = w, ot = k, X = y, U = A), Lt && Xe(
         M,
         Ne(st, M),
         Ne(st + ot, M)
@@ -3745,13 +3797,13 @@ function Bt(t, e, n) {
           let bt = $[O];
           O != M && bt.from == null && bt.min != dt && Xe(
             O,
-            Ne(X + V, O),
+            Ne(X + U, O),
             Ne(X, O)
           );
         }
-      Ho();
+      Fo();
     } else D.lock && (D._lock = !D._lock, gi(l, !0, r != null));
-    r != null && (Ci(Bo, Jo), gn(Bo, i, gt, xt, K, T, null));
+    r != null && (Ci(Go, tr), gn(Go, i, gt, xt, K, T, null));
   }
   function La(r, l, c, u, d, g, _) {
     if (D._lock)
@@ -3764,23 +3816,23 @@ function Bt(t, e, n) {
     }
     gt = -10, xt = -10, ft.fill(null), gi(null, !0, !0), y && (Qe = y);
   }
-  function ns(r, l, c, u, d, g, _) {
-    D._lock || (di(r), _o(), Ho(), r != null && gn(As, i, gt, xt, K, T, null));
+  function os(r, l, c, u, d, g, _) {
+    D._lock || (di(r), wo(), Fo(), r != null && gn(Es, i, gt, xt, K, T, null));
   }
-  function os() {
-    R.forEach(Af), bo(i.width, i.height, !0);
+  function rs() {
+    R.forEach(Af), yo(i.width, i.height, !0);
   }
-  $i(to, Zi, os);
+  $i(io, Zi, rs);
   const Gi = {};
-  Gi.mousedown = es, Gi.mousemove = Zr, Gi.mouseup = is, Gi.dblclick = ns, Gi.setSeries = (r, l, c, u) => {
+  Gi.mousedown = is, Gi.mousemove = Jr, Gi.mouseup = ns, Gi.dblclick = os, Gi.setSeries = (r, l, c, u) => {
     let d = Et.match[2];
     c = d(i, l, c), c != -1 && Oe(c, u, !0, !1);
-  }, Wt && (Gt(xs, P, es), Gt(jo, P, Zr), Gt($s, P, (r) => {
+  }, Wt && (Gt($s, P, is), Gt(Wo, P, Jr), Gt(Ss, P, (r) => {
     di(r), mn(!1);
-  }), Gt(Ss, P, La), Gt(As, P, ns), rr.add(i), i.syncRect = mn);
+  }), Gt(As, P, La), Gt(Es, P, os), ar.add(i), i.syncRect = mn);
   const Bn = i.hooks = t.hooks || {};
   function Rt(r, l, c) {
-    Co ? hn.push([r, l, c]) : r in Bn && Bn[r].forEach((u) => {
+    zo ? hn.push([r, l, c]) : r in Bn && Bn[r].forEach((u) => {
       u.call(null, i, l, c);
     });
   }
@@ -3788,61 +3840,61 @@ function Bt(t, e, n) {
     for (let l in r.hooks)
       Bn[l] = (Bn[l] || []).concat(r.hooks[l]);
   });
-  const rs = (r, l, c) => c, Et = kt({
+  const ss = (r, l, c) => c, Et = kt({
     key: null,
     setSeries: !1,
     filters: {
-      pub: Ls,
-      sub: Ls
+      pub: Hs,
+      sub: Hs
     },
     scales: [M, x[1] ? x[1].scale : null],
-    match: [Hs, Hs, rs],
+    match: [Rs, Rs, ss],
     values: [null, null]
   }, D.sync);
-  Et.match.length == 2 && Et.match.push(rs), D.sync = Et;
-  const ss = Et.key, Ro = Zl(ss);
+  Et.match.length == 2 && Et.match.push(ss), D.sync = Et;
+  const ls = Et.key, Vo = Zl(ls);
   function gn(r, l, c, u, d, g, _) {
-    Et.filters.pub(r, l, c, u, d, g, _) && Ro.pub(r, l, c, u, d, g, _);
+    Et.filters.pub(r, l, c, u, d, g, _) && Vo.pub(r, l, c, u, d, g, _);
   }
-  Ro.sub(i);
+  Vo.sub(i);
   function Ha(r, l, c, u, d, g, _) {
     Et.filters.sub(r, l, c, u, d, g, _) && Gi[r](null, l, c, u, d, g, _);
   }
   i.pub = Ha;
   function Ra() {
-    Ro.unsub(i), rr.delete(i), ai.clear(), tr(to, Zi, os), p.remove(), ct?.remove(), Rt("destroy");
+    Vo.unsub(i), ar.delete(i), ai.clear(), nr(io, Zi, rs), p.remove(), ct?.remove(), Rt("destroy");
   }
   i.destroy = Ra;
-  function Fo() {
-    Rt("init", t, e), Lr(e || t.data, !1), L[M] ? Mo(M, L[M]) : _o(), Hn = vt.show && (vt.width > 0 || vt.height > 0), hi = de = !0, bo(t.width, t.height);
+  function Uo() {
+    Rt("init", t, e), Hr(e || t.data, !1), L[M] ? Do(M, L[M]) : wo(), Hn = vt.show && (vt.width > 0 || vt.height > 0), hi = de = !0, yo(t.width, t.height);
   }
-  return x.forEach(Or), R.forEach(ga), n ? n instanceof HTMLElement ? (n.appendChild(p), Fo()) : n(i, Fo) : Fo(), i;
+  return x.forEach(Nr), R.forEach(ga), n ? n instanceof HTMLElement ? (n.appendChild(p), Uo()) : n(i, Uo) : Uo(), i;
 }
 Bt.assign = kt;
-Bt.fmtNum = wr;
-Bt.rangeNum = eo;
-Bt.rangeLog = ao;
-Bt.rangeAsinh = _r;
+Bt.fmtNum = xr;
+Bt.rangeNum = no;
+Bt.rangeLog = uo;
+Bt.rangeAsinh = yr;
 Bt.orient = ki;
 Bt.pxRatio = lt;
 Bt.join = mu;
-Bt.fmtDate = $r, Bt.tzDate = Eu;
+Bt.fmtDate = Sr, Bt.tzDate = Eu;
 Bt.sync = Zl;
 {
-  Bt.addGap = cf, Bt.clipGaps = fo;
+  Bt.addGap = cf, Bt.clipGaps = po;
   let t = Bt.paths = {
     points: ia
   };
   t.linear = oa, t.stepped = hf, t.bars = df, t.spline = mf;
 }
 const Ef = '.uplot,.uplot *,.uplot *:before,.uplot *:after{box-sizing:border-box}.uplot{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica Neue,Arial,Noto Sans,sans-serif,"Apple Color Emoji","Segoe UI Emoji",Segoe UI Symbol,"Noto Color Emoji";line-height:1.5;width:min-content}.u-title{text-align:center;font-size:18px;font-weight:700}.u-wrap{position:relative;user-select:none}.u-over,.u-under{position:absolute}.u-under{overflow:hidden}.uplot canvas{display:block;position:relative;width:100%;height:100%}.u-axis{position:absolute}.u-legend{font-size:14px;margin:auto;text-align:center}.u-inline{display:block}.u-inline *{display:inline-block}.u-inline tr{margin-right:16px}.u-legend th{font-weight:600}.u-legend th>*{vertical-align:middle;display:inline-block}.u-legend .u-marker{width:1em;height:1em;margin-right:4px;background-clip:padding-box!important}.u-inline.u-live th:after{content:":";vertical-align:middle}.u-inline:not(.u-live) .u-value{display:none}.u-series>*{padding:4px}.u-series th{cursor:pointer}.u-legend .u-off>*{opacity:.3}.u-select{background:#00000012;position:absolute;pointer-events:none}.u-cursor-x,.u-cursor-y{position:absolute;left:0;top:0;pointer-events:none;will-change:transform}.u-hz .u-cursor-x,.u-vt .u-cursor-y{height:100%;border-right:1px dashed #607D8B}.u-hz .u-cursor-y,.u-vt .u-cursor-x{width:100%;border-bottom:1px dashed #607D8B}.u-cursor-pt{position:absolute;top:0;left:0;border-radius:50%;border:0 solid;pointer-events:none;will-change:transform;background-clip:padding-box!important}.u-axis.u-off,.u-select.u-off,.u-cursor-x.u-off,.u-cursor-y.u-off,.u-cursor-pt.u-off{display:none}';
-var kf = Object.defineProperty, Pf = Object.getOwnPropertyDescriptor, Ve = (t, e, n, i) => {
+var kf = Object.defineProperty, Pf = Object.getOwnPropertyDescriptor, Ie = (t, e, n, i) => {
   for (var o = i > 1 ? void 0 : i ? Pf(e, n) : e, s = t.length - 1, a; s >= 0; s--)
     (a = t[s]) && (o = (i ? a(e, n, o) : a(o)) || o);
   return i && o && kf(e, n, o), o;
 };
 const Tf = 24;
-let _e = class extends It {
+let ye = class extends It {
   constructor() {
     super(...arguments), this.roomEntity = "", this.lowEntity = "", this.highEntity = "", this.actionEntity = "", this._loading = !0, this._error = null, this._empty = !1, this._plot = null, this._resizeObserver = null, this._hasFetched = !1, this._intervals = [];
   }
@@ -3979,7 +4031,7 @@ let _e = class extends It {
             a.save();
             for (const p of this._intervals) {
               const b = s.valToPos(p.start, "x", !0), m = s.valToPos(p.end, "x", !0);
-              m <= b || (a.fillStyle = p.action === "heating" ? rl(n, 0.18) : rl(i, 0.18), a.fillRect(b, f, m - b, h));
+              m <= b || (a.fillStyle = p.action === "heating" ? sl(n, 0.18) : sl(i, 0.18), a.fillRect(b, f, m - b, h));
             }
             a.restore();
           }
@@ -4024,9 +4076,9 @@ let _e = class extends It {
     `;
   }
 };
-_e.styles = [
+ye.styles = [
   ce,
-  ul(Ef),
+  fl(Ef),
   te`
       :host {
         display: block;
@@ -4074,37 +4126,37 @@ _e.styles = [
       }
     `
 ];
-Ve([
-  Y({ attribute: !1 })
-], _e.prototype, "hass", 2);
-Ve([
-  Y({ type: String })
-], _e.prototype, "roomEntity", 2);
-Ve([
-  Y({ type: String })
-], _e.prototype, "lowEntity", 2);
-Ve([
-  Y({ type: String })
-], _e.prototype, "highEntity", 2);
-Ve([
-  Y({ type: String })
-], _e.prototype, "actionEntity", 2);
-Ve([
+Ie([
+  G({ attribute: !1 })
+], ye.prototype, "hass", 2);
+Ie([
+  G({ type: String })
+], ye.prototype, "roomEntity", 2);
+Ie([
+  G({ type: String })
+], ye.prototype, "lowEntity", 2);
+Ie([
+  G({ type: String })
+], ye.prototype, "highEntity", 2);
+Ie([
+  G({ type: String })
+], ye.prototype, "actionEntity", 2);
+Ie([
   Pt()
-], _e.prototype, "_loading", 2);
-Ve([
+], ye.prototype, "_loading", 2);
+Ie([
   Pt()
-], _e.prototype, "_error", 2);
-Ve([
+], ye.prototype, "_error", 2);
+Ie([
   Pt()
-], _e.prototype, "_empty", 2);
-Ve([
+], ye.prototype, "_empty", 2);
+Ie([
   Dn(".chart-host")
-], _e.prototype, "_host", 2);
-_e = Ve([
+], ye.prototype, "_host", 2);
+ye = Ie([
   ae("comfort-band-history-chart")
-], _e);
-function rl(t, e) {
+], ye);
+function sl(t, e) {
   const n = t.trim(), i = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(n);
   if (i) {
     let s = i[1];
@@ -4115,7 +4167,7 @@ function rl(t, e) {
   const o = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(n);
   return o ? `rgba(${o[1]}, ${o[2]}, ${o[3]}, ${e})` : n;
 }
-var Cf = Object.defineProperty, Mf = Object.getOwnPropertyDescriptor, Cr = (t, e, n, i) => {
+var Cf = Object.defineProperty, Mf = Object.getOwnPropertyDescriptor, Mr = (t, e, n, i) => {
   for (var o = i > 1 ? void 0 : i ? Mf(e, n) : e, s = t.length - 1, a; s >= 0; s--)
     (a = t[s]) && (o = (i ? a(e, n, o) : a(o)) || o);
   return i && o && Cf(e, n, o), o;
@@ -4150,13 +4202,13 @@ Cn.styles = [
       }
     `
 ];
-Cr([
-  Y({ attribute: !1 })
+Mr([
+  G({ attribute: !1 })
 ], Cn.prototype, "hass", 2);
-Cr([
-  Y({ attribute: !1 })
+Mr([
+  G({ attribute: !1 })
 ], Cn.prototype, "entities", 2);
-Cn = Cr([
+Cn = Mr([
   ae("comfort-band-insights-tab")
 ], Cn);
 var zf = Object.defineProperty, Df = Object.getOwnPropertyDescriptor, aa = (t, e, n, i) => {
@@ -4164,8 +4216,8 @@ var zf = Object.defineProperty, Df = Object.getOwnPropertyDescriptor, aa = (t, e
     (a = t[s]) && (o = (i ? a(e, n, o) : a(o)) || o);
   return i && o && zf(e, n, o), o;
 };
-const Of = 500, Nf = 1.5, Lf = 15, sl = [0, 6, 12, 18, 24];
-function ll(t) {
+const Of = 500, Nf = 1.5, Lf = 15, ll = [0, 6, 12, 18, 24];
+function al(t) {
   const e = /^(\d{1,2}):(\d{2})$/.exec(t);
   return e ? parseInt(e[1], 10) * 60 + parseInt(e[2], 10) : 0;
 }
@@ -4173,13 +4225,13 @@ function Hf(t) {
   const e = Math.max(0, Math.min(1439, t)), n = Math.floor(e / 60), i = e % 60;
   return `${n.toString().padStart(2, "0")}:${i.toString().padStart(2, "0")}`;
 }
-function qo(t) {
+function Jo(t) {
   return t / (24 * 60) * 100;
 }
 function Rf(t, e) {
   return Math.round(t / e) * e;
 }
-let no = class extends It {
+let ro = class extends It {
   constructor() {
     super(...arguments), this.transitions = [], this._longPressTimer = null, this._onTrackTap = (t) => {
       if (t.target.classList.contains("point")) return;
@@ -4187,8 +4239,8 @@ let no = class extends It {
       if (!e) return;
       const n = e.getBoundingClientRect(), i = this._xToMinutes(t.clientX, n);
       for (const o of this.transitions) {
-        const s = ll(o.at);
-        if (Math.abs(qo(s) - qo(i)) < Nf) return;
+        const s = al(o.at);
+        if (Math.abs(Jo(s) - Jo(i)) < Nf) return;
       }
       this.dispatchEvent(
         new CustomEvent("transition-add", {
@@ -4241,12 +4293,12 @@ let no = class extends It {
     return F`
       <div class="ruler">
         <div class="track" @click=${this._onTrackTap}></div>
-        ${sl.map((t, e) => {
-      const n = e === 0 ? "hour-tick start" : e === sl.length - 1 ? "hour-tick terminal" : "hour-tick";
+        ${ll.map((t, e) => {
+      const n = e === 0 ? "hour-tick start" : e === ll.length - 1 ? "hour-tick terminal" : "hour-tick";
       return F`<div class=${n} style="left:${t / 24 * 100}%">${t}h</div>`;
     })}
         ${this.transitions.map((t) => {
-      const e = ll(t.at), n = qo(e), i = `Transition at ${t.at}, low ${t.low.toFixed(1)} degrees, high ${t.high.toFixed(1)} degrees. Tap to edit, long-press or Delete to remove.`;
+      const e = al(t.at), n = Jo(e), i = `Transition at ${t.at}, low ${t.low.toFixed(1)} degrees, high ${t.high.toFixed(1)} degrees. Tap to edit, long-press or Delete to remove.`;
       return F`
             <button
               class="point"
@@ -4268,7 +4320,7 @@ let no = class extends It {
     `;
   }
 };
-no.styles = [
+ro.styles = [
   ce,
   te`
       :host {
@@ -4337,13 +4389,13 @@ no.styles = [
     `
 ];
 aa([
-  Y({ type: Array })
-], no.prototype, "transitions", 2);
-no = aa([
+  G({ type: Array })
+], ro.prototype, "transitions", 2);
+ro = aa([
   ae("timeline-editor")
-], no);
-var Ff = Object.defineProperty, Uf = Object.getOwnPropertyDescriptor, si = (t, e, n, i) => {
-  for (var o = i > 1 ? void 0 : i ? Uf(e, n) : e, s = t.length - 1, a; s >= 0; s--)
+], ro);
+var Ff = Object.defineProperty, Vf = Object.getOwnPropertyDescriptor, si = (t, e, n, i) => {
+  for (var o = i > 1 ? void 0 : i ? Vf(e, n) : e, s = t.length - 1, a; s >= 0; s--)
     (a = t[s]) && (o = (i ? a(e, n, o) : a(o)) || o);
   return i && o && Ff(e, n, o), o;
 };
@@ -4516,10 +4568,10 @@ Fe.styles = [
     `
 ];
 si([
-  Y({ type: Object })
+  G({ type: Object })
 ], Fe.prototype, "transition", 2);
 si([
-  Y({ type: Boolean })
+  G({ type: Boolean })
 ], Fe.prototype, "isNew", 2);
 si([
   Pt()
@@ -4539,12 +4591,12 @@ si([
 Fe = si([
   ae("transition-edit-dialog")
 ], Fe);
-var Vf = Object.defineProperty, If = Object.getOwnPropertyDescriptor, Ie = (t, e, n, i) => {
+var Uf = Object.defineProperty, If = Object.getOwnPropertyDescriptor, je = (t, e, n, i) => {
   for (var o = i > 1 ? void 0 : i ? If(e, n) : e, s = t.length - 1, a; s >= 0; s--)
     (a = t[s]) && (o = (i ? a(e, n, o) : a(o)) || o);
-  return i && o && Vf(e, n, o), o;
+  return i && o && Uf(e, n, o), o;
 };
-let ye = class extends It {
+let we = class extends It {
   constructor() {
     super(...arguments), this.zone = "", this._profile = "", this._transitions = [], this._loading = !0, this._error = null, this._mode = "list", this._editing = null, this._newAt = "06:00", this._onAdd = (t) => {
       this._newAt = t.detail.at, this._editing = null, this._mode = "add";
@@ -4575,11 +4627,11 @@ let ye = class extends It {
     };
   }
   willUpdate(t) {
-    t.has("hass") && this.hass && this._profile === "" && (this._profile = al(this.hass) ?? "home", this._refresh());
+    t.has("hass") && this.hass && this._profile === "" && (this._profile = cl(this.hass) ?? "home", this._refresh());
   }
   updated(t) {
     if (t.has("hass") && this.hass) {
-      const e = al(this.hass);
+      const e = cl(this.hass);
       e && e !== this._profile && (this._profile = e, this._refresh());
     }
   }
@@ -4662,7 +4714,7 @@ let ye = class extends It {
     `;
   }
 };
-ye.styles = [
+we.styles = [
   ce,
   te`
       :host {
@@ -4722,37 +4774,37 @@ ye.styles = [
       }
     `
 ];
-Ie([
-  Y({ attribute: !1 })
-], ye.prototype, "hass", 2);
-Ie([
-  Y({ type: String })
-], ye.prototype, "zone", 2);
-Ie([
+je([
+  G({ attribute: !1 })
+], we.prototype, "hass", 2);
+je([
+  G({ type: String })
+], we.prototype, "zone", 2);
+je([
   Pt()
-], ye.prototype, "_profile", 2);
-Ie([
+], we.prototype, "_profile", 2);
+je([
   Pt()
-], ye.prototype, "_transitions", 2);
-Ie([
+], we.prototype, "_transitions", 2);
+je([
   Pt()
-], ye.prototype, "_loading", 2);
-Ie([
+], we.prototype, "_loading", 2);
+je([
   Pt()
-], ye.prototype, "_error", 2);
-Ie([
+], we.prototype, "_error", 2);
+je([
   Pt()
-], ye.prototype, "_mode", 2);
-Ie([
+], we.prototype, "_mode", 2);
+je([
   Pt()
-], ye.prototype, "_editing", 2);
-Ie([
+], we.prototype, "_editing", 2);
+je([
   Pt()
-], ye.prototype, "_newAt", 2);
-ye = Ie([
+], we.prototype, "_newAt", 2);
+we = je([
   ae("comfort-band-schedule-tab")
-], ye);
-function al(t) {
+], we);
+function cl(t) {
   const e = yl(t);
   return e ? t.states[e]?.state ?? null : null;
 }
@@ -4773,7 +4825,7 @@ const Yf = [
   { id: "profiles", label: "Profiles" },
   { id: "insights", label: "Insights" }
 ];
-let Ue = class extends It {
+let Ve = class extends It {
   constructor() {
     super(...arguments), this.zone = "", this.zoneName = "", this._activeTab = "now", this._isOpen = !1, this._onClose = () => {
       this._isOpen = !1, this.dispatchEvent(
@@ -4843,7 +4895,7 @@ let Ue = class extends It {
     }
   }
 };
-Ue.styles = [
+Ve.styles = [
   ce,
   te`
       :host {
@@ -4925,30 +4977,30 @@ Ue.styles = [
     `
 ];
 li([
-  Y({ attribute: !1 })
-], Ue.prototype, "hass", 2);
+  G({ attribute: !1 })
+], Ve.prototype, "hass", 2);
 li([
-  Y({ type: String })
-], Ue.prototype, "zone", 2);
+  G({ type: String })
+], Ve.prototype, "zone", 2);
 li([
-  Y({ type: String })
-], Ue.prototype, "zoneName", 2);
+  G({ type: String })
+], Ve.prototype, "zoneName", 2);
 li([
-  Y({ attribute: !1 })
-], Ue.prototype, "entities", 2);
-li([
-  Pt()
-], Ue.prototype, "_activeTab", 2);
+  G({ attribute: !1 })
+], Ve.prototype, "entities", 2);
 li([
   Pt()
-], Ue.prototype, "_isOpen", 2);
+], Ve.prototype, "_activeTab", 2);
+li([
+  Pt()
+], Ve.prototype, "_isOpen", 2);
 li([
   Dn("dialog")
-], Ue.prototype, "_dialog", 2);
-Ue = li([
+], Ve.prototype, "_dialog", 2);
+Ve = li([
   ae("comfort-band-modal")
-], Ue);
-var Kf = Object.defineProperty, qf = Object.getOwnPropertyDescriptor, Mr = (t, e, n, i) => {
+], Ve);
+var Kf = Object.defineProperty, qf = Object.getOwnPropertyDescriptor, zr = (t, e, n, i) => {
   for (var o = i > 1 ? void 0 : i ? qf(e, n) : e, s = t.length - 1, a; s >= 0; s--)
     (a = t[s]) && (o = (i ? a(e, n, o) : a(o)) || o);
   return i && o && Kf(e, n, o), o;
@@ -4964,13 +5016,17 @@ let Mn = class extends It {
     }, this._onCompactChange = (t) => {
       const e = t.target.checked, n = { ...this.config };
       e ? n.compact = !0 : delete n.compact, this._fireConfig(n);
+    }, this._onVariantChange = (t) => {
+      const e = t.target.value, n = { ...this.config };
+      e === "mini" ? n.variant = "mini" : delete n.variant, this._fireConfig(n);
     };
   }
   setConfig(t) {
     this.config = {
       type: t.type ?? "custom:comfort-band-card",
       zone: t.zone ?? "",
-      ...t.compact !== void 0 ? { compact: t.compact } : {}
+      ...t.compact !== void 0 ? { compact: t.compact } : {},
+      ...t.variant !== void 0 ? { variant: t.variant } : {}
     };
   }
   _availableZones() {
@@ -4992,16 +5048,26 @@ let Mn = class extends It {
   }
   render() {
     const t = this._availableZones();
-    return t.length === 0 ? F`<div class="empty">
+    if (t.length === 0)
+      return F`<div class="empty">
         No Comfort Band zones found. Add one via Settings → Devices & Services first.
-      </div>` : F`
+      </div>`;
+    const e = this.config.variant === "mini" ? "mini" : "tile";
+    return F`
       <label>
         Zone
         <select @change=${this._onZoneChange} .value=${this.config.zone || ""}>
           ${this.config.zone === "" ? F`<option value="" disabled selected>Select a zone…</option>` : null}
           ${t.map(
-      (e) => F` <option value=${e} ?selected=${e === this.config.zone}>${e}</option> `
+      (n) => F` <option value=${n} ?selected=${n === this.config.zone}>${n}</option> `
     )}
+        </select>
+      </label>
+      <label>
+        Variant
+        <select @change=${this._onVariantChange} .value=${e}>
+          <option value="tile" ?selected=${e === "tile"}>Tile (default)</option>
+          <option value="mini" ?selected=${e === "mini"}>Mini (number only, for floorplans)</option>
         </select>
       </label>
       <label class="checkbox-row">
@@ -5085,16 +5151,16 @@ Mn.styles = [
       }
     `
 ];
-Mr([
-  Y({ attribute: !1 })
+zr([
+  G({ attribute: !1 })
 ], Mn.prototype, "hass", 2);
-Mr([
-  Y({ attribute: !1 })
+zr([
+  G({ attribute: !1 })
 ], Mn.prototype, "config", 2);
-Mn = Mr([
+Mn = zr([
   ae("comfort-band-card-editor")
 ], Mn);
-var Zf = Object.defineProperty, Jf = Object.getOwnPropertyDescriptor, go = (t, e, n, i) => {
+var Zf = Object.defineProperty, Jf = Object.getOwnPropertyDescriptor, bo = (t, e, n, i) => {
   for (var o = i > 1 ? void 0 : i ? Jf(e, n) : e, s = t.length - 1, a; s >= 0; s--)
     (a = t[s]) && (o = (i ? a(e, n, o) : a(o)) || o);
   return i && o && Zf(e, n, o), o;
@@ -5112,7 +5178,7 @@ let on = class extends It {
   }
   /** HA's panel/grid uses this to size the card. ~1 row per ~50 px of content. */
   getCardSize() {
-    return 2;
+    return this._config?.variant === "mini" ? 1 : 2;
   }
   /** HA dashboard editor: tells HA which custom element to render as the
    *  visual config UI. Returning the element directly (not a string) is
@@ -5143,23 +5209,24 @@ let on = class extends It {
         Comfort Band zone <code>${t}</code> not found. Add it via Settings → Devices &
         Services.
       </div>`;
-    const n = this._config.compact === !0, i = this._buildView(this.hass, e);
+    const n = this._config.compact === !0, i = this._config.variant === "mini" ? "mini" : "tile", o = this._buildView(this.hass, e);
     return F`
       <comfort-band-tile
-        zoneName=${i.zoneName}
-        .roomTemp=${i.roomTemp}
-        .low=${i.low}
-        .high=${i.high}
-        .action=${i.action}
-        .overrideActive=${i.overrideActive}
-        .overrideEnds=${i.overrideEnds}
+        zoneName=${o.zoneName}
+        .roomTemp=${o.roomTemp}
+        .low=${o.low}
+        .high=${o.high}
+        .action=${o.action}
+        .overrideActive=${o.overrideActive}
+        .overrideEnds=${o.overrideEnds}
         .noExpand=${n}
+        .variant=${i}
         @comfort-band-tile-tap=${this._onTileTap}
       ></comfort-band-tile>
       ${n ? null : F`<comfort-band-modal
             .hass=${this.hass}
             zone=${t}
-            zoneName=${i.zoneName}
+            zoneName=${o.zoneName}
             .entities=${e}
           ></comfort-band-modal>`}
     `;
@@ -5198,16 +5265,16 @@ on.styles = [
       }
     `
 ];
-go([
-  Y({ attribute: !1 })
+bo([
+  G({ attribute: !1 })
 ], on.prototype, "hass", 2);
-go([
+bo([
   Pt()
 ], on.prototype, "_config", 2);
-go([
+bo([
   Dn("comfort-band-modal")
 ], on.prototype, "_modal", 2);
-on = go([
+on = bo([
   ae("comfort-band-card")
 ], on);
 (window.customCards ??= []).push({
@@ -5217,7 +5284,7 @@ on = go([
   preview: !1
 });
 console.info(
-  "%c COMFORT-BAND-CARD %c v0.2.0 ",
+  "%c COMFORT-BAND-CARD %c v0.3.0 ",
   "color:white;background:#2196F3;padding:2px 4px;border-radius:3px",
   "color:#000;background:#fff;padding:2px 4px;border-radius:3px"
 );
