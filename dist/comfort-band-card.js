@@ -760,7 +760,10 @@ _e.styles = [
         justify-content: center;
         padding: 4px 10px;
         border-radius: var(--cb-radius-pill);
-        background: var(--cb-mini-bg, var(--ha-card-background, var(--card-background-color, #ffffff)));
+        background: var(
+          --cb-mini-bg,
+          var(--ha-card-background, var(--card-background-color, #ffffff))
+        );
         color: var(--cb-mini-fg, var(--cb-text-primary));
         box-shadow: var(--ha-card-box-shadow, none);
         font-size: 18px;
@@ -5067,7 +5070,9 @@ let Mn = class extends It {
         Variant
         <select @change=${this._onVariantChange} .value=${e}>
           <option value="tile" ?selected=${e === "tile"}>Tile (default)</option>
-          <option value="mini" ?selected=${e === "mini"}>Mini (number only, for floorplans)</option>
+          <option value="mini" ?selected=${e === "mini"}>
+            Mini (number only, for floorplans)
+          </option>
         </select>
       </label>
       <label class="checkbox-row">
@@ -5284,7 +5289,7 @@ on = bo([
   preview: !1
 });
 console.info(
-  "%c COMFORT-BAND-CARD %c v0.3.0 ",
+  "%c COMFORT-BAND-CARD %c v0.3.1 ",
   "color:white;background:#2196F3;padding:2px 4px;border-radius:3px",
   "color:#000;background:#fff;padding:2px 4px;border-radius:3px"
 );

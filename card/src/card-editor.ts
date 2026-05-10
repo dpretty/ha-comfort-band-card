@@ -172,7 +172,9 @@ export class ComfortBandCardEditor extends LitElement {
         Variant
         <select @change=${this._onVariantChange} .value=${variant}>
           <option value="tile" ?selected=${variant === 'tile'}>Tile (default)</option>
-          <option value="mini" ?selected=${variant === 'mini'}>Mini (number only, for floorplans)</option>
+          <option value="mini" ?selected=${variant === 'mini'}>
+            Mini (number only, for floorplans)
+          </option>
         </select>
       </label>
       <label class="checkbox-row">

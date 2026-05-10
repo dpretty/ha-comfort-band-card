@@ -63,7 +63,10 @@ export class ComfortBandTile extends LitElement {
         justify-content: center;
         padding: 4px 10px;
         border-radius: var(--cb-radius-pill);
-        background: var(--cb-mini-bg, var(--ha-card-background, var(--card-background-color, #ffffff)));
+        background: var(
+          --cb-mini-bg,
+          var(--ha-card-background, var(--card-background-color, #ffffff))
+        );
         color: var(--cb-mini-fg, var(--cb-text-primary));
         box-shadow: var(--ha-card-box-shadow, none);
         font-size: 18px;
