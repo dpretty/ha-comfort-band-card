@@ -34,7 +34,10 @@ export class TransitionEditDialog extends LitElement {
       :host {
         display: block;
         padding: var(--cb-gap-md);
-        background: var(--ha-card-background, var(--card-background-color, #ffffff));
+        /* See modal.ts for why we avoid --ha-card-background here:
+           per-card theme overrides (e.g. a transparent floorplan
+           overlay) would otherwise make this nested dialog unreadable. */
+        background: var(--card-background-color, var(--primary-background-color, #ffffff));
         color: var(--primary-text-color, #212121);
         border-radius: var(--cb-radius-card);
         /* Tells the browser to use dark-mode defaults for native form
