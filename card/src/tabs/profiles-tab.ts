@@ -206,7 +206,10 @@ export class ComfortBandProfilesTab extends LitElement {
       }
       .name {
         font-weight: 500;
-        text-transform: capitalize;
+        /* Display names verbatim — user-defined profiles may use
+         * intentional casing ("HomeOffice", "off-peak"). The CSS
+         * capitalize transform we used in v0.1 only worked when all
+         * names were built-in lowercase. */
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
