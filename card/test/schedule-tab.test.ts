@@ -308,6 +308,33 @@ describe('comfort-band-schedule-tab', () => {
     expect(msg).toMatchObject({ zone: 'gym', profile: 'away' });
   });
 
+  it('keeps the editor visible (no .loading flash) across a profile flip', async () => {
+    // Stale data is in place when the flip happens — we must NOT drop back
+    // to the "Loading schedule…" placeholder while the new subscription
+    // resolves; that would be a visible flash.
+    const fake = makeHass({
+      active: 'home',
+      initialSchedule: {
+        baseline: [{ at: '06:00', low: 20, high: 23 }],
+        current: [],
+      },
+    });
+    const el = await tab(fake.hass);
+    expect(el.shadowRoot!.querySelector('.loading')).toBeNull();
+
+    fake.hass.states['select.comfort_band_profiles_active_profile'] = {
+      ...fake.hass.states['select.comfort_band_profiles_active_profile'],
+      state: 'away',
+    };
+    el.hass = { ...fake.hass };
+    await el.updateComplete;
+
+    // Before any new initial event arrives we should still see the editor,
+    // not the loading placeholder.
+    expect(el.shadowRoot!.querySelector('.loading')).toBeNull();
+    expect(el.shadowRoot!.querySelector('timeline-editor')).not.toBeNull();
+  });
+
   it('unsubscribes when the element is removed from the DOM', async () => {
     const fake = makeHass();
     const el = await tab(fake.hass);
@@ -329,6 +356,83 @@ describe('comfort-band-schedule-tab', () => {
     await el.updateComplete;
 
     expect(fake.subscribeMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('surfaces a subscribe error in the UI', async () => {
+    const subscribeMessage = vi.fn().mockRejectedValue(new Error('boom: zone not found'));
+    const hass: HomeAssistant = {
+      states: {
+        'select.comfort_band_profiles_active_profile': {
+          entity_id: 'select.comfort_band_profiles_active_profile',
+          state: 'home',
+          attributes: { options: ['home', 'away', 'sleep'] },
+          last_changed: '',
+          last_updated: '',
+        },
+      },
+      devices: {
+        'dev-pm': {
+          id: 'dev-pm',
+          identifiers: [['comfort_band', 'profile_manager']],
+          name: 'Comfort Band Profiles',
+          name_by_user: null,
+          area_id: null,
+        },
+      },
+      entities: {
+        'select.comfort_band_profiles_active_profile': {
+          entity_id: 'select.comfort_band_profiles_active_profile',
+          platform: 'comfort_band',
+          device_id: 'dev-pm',
+          area_id: null,
+          hidden: false,
+          entity_category: null,
+          translation_key: 'active_profile',
+          name: null,
+        },
+      },
+      connection: {
+        subscribeMessage: subscribeMessage as unknown as HassConnection['subscribeMessage'],
+      },
+      callService: vi.fn(),
+      callWS: vi.fn(),
+    };
+
+    const el = await mount('comfort-band-schedule-tab', { hass, zone: 'gym' });
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+
+    const errorDiv = el.shadowRoot!.querySelector('.error');
+    expect(errorDiv).not.toBeNull();
+    expect(errorDiv!.textContent).toContain('boom');
+  });
+
+  it('surfaces a save error without clobbering already-rendered transitions', async () => {
+    const fake = makeHass({
+      initialSchedule: {
+        baseline: [{ at: '06:00', low: 20, high: 23 }],
+        current: [],
+      },
+    });
+    (fake.hass.callService as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('save failed'),
+    );
+    const el = await tab(fake.hass);
+
+    const editor = el.shadowRoot!.querySelector('timeline-editor')!;
+    editor.dispatchEvent(
+      new CustomEvent('transition-delete', {
+        detail: { at: '06:00' },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+
+    const errorDiv = el.shadowRoot!.querySelector('.error');
+    expect(errorDiv).not.toBeNull();
+    expect(errorDiv!.textContent).toContain('save failed');
   });
 
   it('cancels an in-flight subscribe when superseded by a profile flip', async () => {

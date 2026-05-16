@@ -126,7 +126,9 @@ export class ComfortBandScheduleTab extends LitElement {
     super.connectedCallback();
     // Re-subscribe after a DOM detach/reattach (e.g. switching dashboard
     // tabs). `willUpdate`'s `_profile === ''` guard doesn't fire here
-    // because `_profile` is already set from the prior mount.
+    // because `_profile` is already set from the prior mount. On the very
+    // first mount this is a no-op: `_profile` is still the empty string
+    // (falsy), so willUpdate owns the initial subscribe.
     if (this.hass && this.zone && this._profile && !this._unsub) {
       void this._subscribe();
     }
@@ -170,8 +172,11 @@ export class ComfortBandScheduleTab extends LitElement {
   }
 
   private _unsubscribe(): void {
-    // Bumping the gen invalidates any in-flight subscribe attempt so its
-    // returned unsub gets called when it eventually resolves.
+    // Bumping the gen here (in addition to `_subscribe()`'s bump) is
+    // load-bearing: it invalidates an in-flight subscribe whose
+    // `await subscribeSchedule(...)` may resolve after we've already
+    // unsubscribed. Without it, the resolved handle would overwrite
+    // `_unsub` for an element that already tore itself down.
     this._subscribeGen++;
     this._unsub?.();
     this._unsub = undefined;
