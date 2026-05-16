@@ -43,6 +43,10 @@ interface HandleDrag {
   moved: boolean;
   longPressTimer: number | null;
   longPressed: boolean;
+  // Cached at pointerdown; the schedule can't mutate during a single drag
+  // (the only writer is `_writeSchedule`, which is invoked on release), so
+  // there's no need to recompute neighbour bounds on every pointermove.
+  range: { min: number; max: number };
 }
 
 interface EmptyDrag {
@@ -275,6 +279,7 @@ export class ComfortBandScheduleChart extends LitElement {
       moved: false,
       longPressTimer: null,
       longPressed: false,
+      range: this._timeRangeFor(transition.at),
     };
     drag.longPressTimer = window.setTimeout(() => {
       drag.longPressTimer = null;
@@ -317,8 +322,11 @@ export class ComfortBandScheduleChart extends LitElement {
     }
     const rect = svgEl.getBoundingClientRect();
 
-    const range = this._timeRangeFor(drag.origin.at);
-    const newAtMins = clamp(this._clientToMinutes(event.clientX, rect), range.min, range.max);
+    const newAtMins = clamp(
+      this._clientToMinutes(event.clientX, rect),
+      drag.range.min,
+      drag.range.max,
+    );
     const newTemp = this._clientToTemp(event.clientY, rect);
 
     let low = drag.origin.low;

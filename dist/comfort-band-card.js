@@ -4249,7 +4249,8 @@ let di = class extends Vt {
         startY: e.clientY,
         moved: !1,
         longPressTimer: null,
-        longPressed: !1
+        longPressed: !1,
+        range: this._timeRangeFor(t.at)
       };
       o.longPressTimer = window.setTimeout(() => {
         o.longPressTimer = null, this._drag === o && !o.moved && (o.longPressed = !0, this._fire("transition-delete", { at: o.origin.at }));
@@ -4265,9 +4266,13 @@ let di = class extends Vt {
         this._preview = { at: t.origin.at, low: t.origin.low, high: t.origin.high };
         return;
       }
-      const s = o.getBoundingClientRect(), l = this._timeRangeFor(t.origin.at), h = _e(this._clientToMinutes(e.clientX, s), l.min, l.max), f = this._clientToTemp(e.clientY, s);
-      let p = t.origin.low, b = t.origin.high;
-      t.handle === "low" ? p = _e(f, Je, b - Ve) : b = _e(f, p + Ve, Ie), this._preview = { at: lr(h), low: p, high: b };
+      const s = o.getBoundingClientRect(), l = _e(
+        this._clientToMinutes(e.clientX, s),
+        t.range.min,
+        t.range.max
+      ), h = this._clientToTemp(e.clientY, s);
+      let f = t.origin.low, p = t.origin.high;
+      t.handle === "low" ? f = _e(h, Je, p - Ve) : p = _e(h, f + Ve, Ie), this._preview = { at: lr(l), low: f, high: p };
     }, this._onHandlePointerUp = (e) => {
       const t = this._drag;
       if (!t || t.kind !== "handle") return;
