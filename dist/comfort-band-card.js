@@ -1607,7 +1607,7 @@ let ii = class extends Ut {
         (n) => n instanceof HTMLElement && (n.classList?.contains("menu") || n.classList?.contains("overflow"))
       ) || (this._openMenu = null);
     }, this._onDialogCancel = () => {
-      this._mode = "list", this._target = null, this._error = null;
+      this._busy || (this._mode = "list", this._target = null, this._error = null);
     }, this._onDialogSave = async (t) => {
       if (!this.hass || this._busy) return;
       const { name: e, description: i } = t.detail, n = this._mode, o = this._target;
@@ -1751,7 +1751,7 @@ let ii = class extends Ut {
       ${s ? M`<button class="new-profile" type="button" @click=${this._onNew}>
             + New profile
           </button>` : it}
-      <ul role="listbox" aria-label="Profiles">
+      <ul aria-label="Profiles">
         ${e.map(
       (l, h) => this._renderRow(l, h, i, n, o, s)
     )}
@@ -1767,10 +1767,9 @@ let ii = class extends Ut {
     return M`
       <li
         data-profile=${t}
-        role="option"
         tabindex="0"
         class=${l ? "active" : ""}
-        aria-selected=${l}
+        aria-current=${l ? "true" : "false"}
         @click=${() => this._onSelect(t)}
         @keydown=${(b) => {
       (b.key === "Enter" || b.key === " ") && (b.preventDefault(), this._onSelect(t));

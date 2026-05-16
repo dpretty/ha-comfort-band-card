@@ -11,7 +11,7 @@
  *   - `'create'` — empty name + description.
  *   - `'clone'`  — empty name + description; parent knows the source.
  *   - `'rename'` — pre-fills name with `existingName`; description hidden
- *     (we don't expose edit-description without rename in v0.2).
+ *     (we don't expose edit-description without rename in this release).
  */
 
 import { LitElement, html, css } from 'lit';

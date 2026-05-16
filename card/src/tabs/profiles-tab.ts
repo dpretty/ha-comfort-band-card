@@ -441,6 +441,9 @@ export class ComfortBandProfilesTab extends LitElement {
   }
 
   private _onDialogCancel = (): void => {
+    // The Cancel button is disabled while `_busy` is true, but guard
+    // programmatic firers (tests, parent-dispatched events) too.
+    if (this._busy) return;
     this._mode = 'list';
     this._target = null;
     this._error = null;
@@ -549,7 +552,7 @@ export class ComfortBandProfilesTab extends LitElement {
             + New profile
           </button>`
         : nothing}
-      <ul role="listbox" aria-label="Profiles">
+      <ul aria-label="Profiles">
         ${options.map((profile, index) =>
           this._renderRow(profile, index, active, defaultProfile, descriptions, crudAvailable),
         )}
@@ -578,13 +581,18 @@ export class ComfortBandProfilesTab extends LitElement {
     // any character (only length is capped), so we anchor on the row
     // index instead of the name to avoid producing invalid id syntax.
     const menuId = `cb-profile-menu-${index}`;
+    // We deliberately don't use `role="option"` / `role="listbox"` here.
+    // ARIA's `option` content model is meant for text/inline content only,
+    // and nesting a `role="menu"` widget inside it (our ⋮ menu) violates
+    // the contract — screen readers report ambiguous structure. Plain
+    // <li> with `aria-current` for the active row is well-supported and
+    // keeps the menu nesting valid.
     return html`
       <li
         data-profile=${profile}
-        role="option"
         tabindex="0"
         class=${isActive ? 'active' : ''}
-        aria-selected=${isActive}
+        aria-current=${isActive ? 'true' : 'false'}
         @click=${() => this._onSelect(profile)}
         @keydown=${(e: KeyboardEvent) => {
           if (e.key === 'Enter' || e.key === ' ') {
