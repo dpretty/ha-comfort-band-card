@@ -509,18 +509,16 @@ export class ComfortBandScheduleChart extends LitElement {
     return pts;
   }
 
-  private _stepPath(transitions: Transition[], pick: 'low' | 'high'): string {
-    if (transitions.length === 0) return '';
-    const pts = this._stepPoints(transitions, pick);
+  private _pointsToPath(pts: Array<[number, number]>): string {
     return pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'} ${x} ${y}`).join(' ');
   }
 
-  private _fillPath(transitions: Transition[]): string {
-    if (transitions.length === 0) return '';
-    const high = this._stepPoints(transitions, 'high');
-    const low = this._stepPoints(transitions, 'low');
-    const forward = high.map(([x, y], i) => `${i === 0 ? 'M' : 'L'} ${x} ${y}`).join(' ');
-    const back = low
+  private _fillFromPoints(
+    highPts: Array<[number, number]>,
+    lowPts: Array<[number, number]>,
+  ): string {
+    const forward = this._pointsToPath(highPts);
+    const back = lowPts
       .slice()
       .reverse()
       .map(([x, y]) => `L ${x} ${y}`)
@@ -530,15 +528,22 @@ export class ComfortBandScheduleChart extends LitElement {
 
   protected override render() {
     const rendered = this._renderedTransitions();
-    const lowPath = this._stepPath(rendered, 'low');
-    const highPath = this._stepPath(rendered, 'high');
-    const fillPath = this._fillPath(rendered);
+    // Compute step points once per axis; build all three SVG paths from them
+    // (low line, high line, fill polygon) so a 60-Hz drag doesn't recompute
+    // the same step geometry four times.
+    const hasTransitions = rendered.length > 0;
+    const lowPts = hasTransitions ? this._stepPoints(rendered, 'low') : [];
+    const highPts = hasTransitions ? this._stepPoints(rendered, 'high') : [];
+    const lowPath = hasTransitions ? this._pointsToPath(lowPts) : '';
+    const highPath = hasTransitions ? this._pointsToPath(highPts) : '';
+    const fillPath = hasTransitions ? this._fillFromPoints(highPts, lowPts) : '';
 
     return html`
       <div class="chart">
         <svg
           viewBox="0 0 ${VIEW_W} ${VIEW_H}"
           preserveAspectRatio="none"
+          role="group"
           aria-label="Schedule chart: drag the circular handles to adjust each transition's time and band."
           @pointerdown=${this._onBackgroundPointerDown}
           @pointermove=${this._onBackgroundPointerMove}

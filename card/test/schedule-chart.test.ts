@@ -327,4 +327,22 @@ describe('comfort-band-schedule-chart', () => {
     handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     expect(fire).not.toHaveBeenCalled();
   });
+
+  it('keyboard: ArrowUp on a high handle at Y_AXIS_MAX is clamped (no event)', async () => {
+    const el = await chart([{ at: '06:00', low: 26, high: 28 }]);
+    const fire = vi.fn();
+    el.addEventListener('transition-update', fire);
+    const handle = el.shadowRoot!.querySelector('.handle.high') as SVGElement;
+    handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    expect(fire).not.toHaveBeenCalled();
+  });
+
+  it('keyboard: ArrowDown on a low handle at Y_AXIS_MIN is clamped (no event)', async () => {
+    const el = await chart([{ at: '06:00', low: 14, high: 18 }]);
+    const fire = vi.fn();
+    el.addEventListener('transition-update', fire);
+    const handle = el.shadowRoot!.querySelector('.handle.low') as SVGElement;
+    handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(fire).not.toHaveBeenCalled();
+  });
 });

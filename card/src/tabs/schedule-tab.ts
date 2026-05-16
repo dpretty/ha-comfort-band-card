@@ -24,6 +24,17 @@ import { setSchedule, subscribeSchedule } from '../services.js';
 import type { HomeAssistant, Transition, UnsubscribeFunc } from '../types.js';
 import { tokens } from '../styles.js';
 
+/** Compare two transitions by `at` as minutes-since-midnight. Numeric so a
+ *  non-zero-padded `at` ever produced by an external integration sorts
+ *  correctly (e.g. `"9:00"` would rank after `"10:00"` under localeCompare). */
+function compareTransitions(a: Transition, b: Transition): number {
+  const toMins = (at: string): number => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(at);
+    return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : 0;
+  };
+  return toMins(a.at) - toMins(b.at);
+}
+
 type Mode = 'list' | 'add' | 'edit';
 
 @customElement('comfort-band-schedule-tab')
@@ -40,8 +51,9 @@ export class ComfortBandScheduleTab extends LitElement {
   @state() private _newAt = '06:00';
   // Plain fields — `_mode` is the @state that drives re-renders; these are
   // read once when the dialog opens. Marking them @state would re-render on
-  // every assignment from `_onAdd`, which always sets them before flipping
-  // `_mode = 'add'`.
+  // every assignment. **Contract:** any handler that sets these MUST set
+  // them BEFORE flipping `_mode = 'add'`, otherwise the dialog renders with
+  // stale defaults. `_onAdd` and the dialog-close handlers honour this.
   private _newLow: number | undefined;
   private _newHigh: number | undefined;
   private _unsub?: UnsubscribeFunc;
@@ -228,7 +240,7 @@ export class ComfortBandScheduleTab extends LitElement {
     const next = this._transitions
       .filter((t) => t.at !== oldAt && t.at !== transition.at)
       .concat(transition)
-      .sort((a, b) => a.at.localeCompare(b.at));
+      .sort(compareTransitions);
     await this._writeSchedule(next);
   };
 
@@ -251,7 +263,7 @@ export class ComfortBandScheduleTab extends LitElement {
       }
       next.push(incoming);
     }
-    next.sort((a, b) => a.at.localeCompare(b.at));
+    next.sort(compareTransitions);
     await this._writeSchedule(next);
     this._mode = 'list';
     this._editing = null;
