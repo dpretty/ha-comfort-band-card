@@ -4,14 +4,14 @@ A Lovelace card for the [Comfort Band](https://github.com/dpretty/ha-comfort-ban
 
 Compact tile + expanded modal with **Now / Schedule / Profiles / Insights** tabs. Replaces a dashboard full of sliders, input_numbers, and `browser_mod` popups with one element per zone.
 
-> Requires the `comfort_band` integration ≥ **v0.1.0**.
+> Requires the `comfort_band` integration ≥ **v0.1.0** for tile + Now / Schedule / Insights, or **≥ v0.3.0** for full profile management (create / clone / rename / delete).
 
 ## What you get
 
 - **Compact tile** — zone display name, prominent room temperature, inline `[low … room … high]` band gauge coloured by `current_action` (red=heating, blue=cooling, neutral=idle), override pill while an override is active.
 - **Now tab** — large band gauge + dual-handle slider for manual low/high (drag = `start_override`), Cancel-override button, 1h/3h/6h duration presets.
 - **Schedule tab** — 2D chart of the active profile's transitions: time on X, temperature on Y (14–28 °C), with the band area filled. Drag a handle horizontally to change its time (snap 15 min), vertically to retarget low or high (snap 0.5 °C). Tap a handle for the precise-edit dialog. Long-press to delete. Tap empty space to add a transition at the snapped time, with the band centred on the tap temperature. Keyboard: arrows nudge, Enter edits, Delete removes. Persists via `comfort_band.set_schedule`; the live-update WS subscription keeps other open card instances in sync.
-- **Profiles tab** — list + switch active profile (`comfort_band.set_profile`).
+- **Profiles tab** — list + switch active profile, plus full CRUD: tap **+ New profile** to create one, or use the per-row overflow menu (`⋮`) to Clone, Rename, or Delete. The active-fallback (`home` by default; tracks renames) is protected from deletion. Requires integration ≥ **v0.3.0**.
 - **Insights tab** — wraps HA's built-in `history-graph` for the last 24 h of `room_temperature`.
 
 Entity discovery is by device identifier (`(comfort_band, zone:{slug})`), so renamed entity_ids still work.

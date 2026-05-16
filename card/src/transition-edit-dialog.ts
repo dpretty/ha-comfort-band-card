@@ -100,6 +100,8 @@ export class TransitionEditDialog extends LitElement {
       .button {
         font: inherit;
         padding: 6px 12px;
+        /* WCAG 2.5.5: 44×44 minimum touch target on action buttons. */
+        min-height: 44px;
         border-radius: var(--cb-radius-pill);
         border: 1px solid transparent;
         cursor: pointer;
@@ -219,7 +221,7 @@ export class TransitionEditDialog extends LitElement {
           @input=${(e: Event) => (this._high = parseFloat((e.target as HTMLInputElement).value))}
         />
       </label>
-      ${this._error ? html`<div class="error">${this._error}</div>` : null}
+      ${this._error ? html`<div class="error" role="alert">${this._error}</div>` : null}
       <div class="actions">
         ${this.isNew
           ? null

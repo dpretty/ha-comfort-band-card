@@ -66,3 +66,32 @@ export function cancelOverride(hass: HomeAssistant, args: { zone: string }): Pro
 export function setProfile(hass: HomeAssistant, args: { profile: string }): Promise<unknown> {
   return hass.callService(DOMAIN, 'set_profile', { ...args });
 }
+
+export function createProfile(
+  hass: HomeAssistant,
+  args: { name: string; description?: string },
+): Promise<unknown> {
+  const data: Record<string, unknown> = { name: args.name };
+  if (args.description !== undefined) data.description = args.description;
+  return hass.callService(DOMAIN, 'create_profile', data);
+}
+
+export function cloneProfile(
+  hass: HomeAssistant,
+  args: { source: string; target: string; description?: string },
+): Promise<unknown> {
+  const data: Record<string, unknown> = { source: args.source, target: args.target };
+  if (args.description !== undefined) data.description = args.description;
+  return hass.callService(DOMAIN, 'clone_profile', data);
+}
+
+export function renameProfile(
+  hass: HomeAssistant,
+  args: { old: string; new: string },
+): Promise<unknown> {
+  return hass.callService(DOMAIN, 'rename_profile', { old: args.old, new: args.new });
+}
+
+export function deleteProfile(hass: HomeAssistant, args: { name: string }): Promise<unknown> {
+  return hass.callService(DOMAIN, 'delete_profile', { name: args.name });
+}
