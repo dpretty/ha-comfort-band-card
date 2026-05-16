@@ -345,4 +345,17 @@ describe('comfort-band-schedule-chart', () => {
     handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     expect(fire).not.toHaveBeenCalled();
   });
+
+  it('focus on a handle applies the .focused class; blur removes it', async () => {
+    // The .focused class is a Lit-managed fallback so jsdom (which doesn't
+    // honour :focus-visible reliably) still surfaces the ring in screenshots.
+    const el = await chart();
+    const handle = el.shadowRoot!.querySelector('.handle.low') as SVGElement;
+    handle.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
+    await el.updateComplete;
+    expect(handle.classList.contains('focused')).toBe(true);
+    handle.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+    await el.updateComplete;
+    expect(handle.classList.contains('focused')).toBe(false);
+  });
 });

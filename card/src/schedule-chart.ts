@@ -364,7 +364,12 @@ export class ComfortBandScheduleChart extends LitElement {
   private _onBackgroundPointerDown = (event: PointerEvent) => {
     const svgEl = this._svg();
     if (!svgEl) return;
-    svgEl.setPointerCapture(event.pointerId);
+    try {
+      svgEl.setPointerCapture(event.pointerId);
+    } catch {
+      // jsdom doesn't fully implement pointer capture; matches the
+      // releasePointerCapture try/catch elsewhere in this file.
+    }
     const drag: EmptyDrag = {
       kind: 'empty',
       startX: event.clientX,
@@ -559,6 +564,7 @@ export class ComfortBandScheduleChart extends LitElement {
           @pointerup=${this._onBackgroundPointerUp}
           @pointercancel=${this._onBackgroundPointerUp}
         >
+          <title>Schedule chart for the active profile</title>
           ${TEMP_TICKS.map(
             (t) =>
               svg`<line class="grid" x1="0" x2=${VIEW_W} y1=${this._tempToY(t)} y2=${this._tempToY(t)}></line>`,
