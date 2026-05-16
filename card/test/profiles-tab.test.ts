@@ -426,8 +426,10 @@ describe('comfort-band-profiles-tab', () => {
     findMenuButton(el, 'Delete')!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLButtonElement>('.confirm-actions .danger')!.click();
-    // Allow the rejected promise + re-render to settle.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Two ticks: the rejected-promise catch runs in the next microtask;
+    // Lit re-renders the error in the tick after that. Avoids relying on
+    // `setTimeout(0)` for ordering.
+    await el.updateComplete;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('.confirm-delete')).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
@@ -465,8 +467,9 @@ describe('comfort-band-profiles-tab', () => {
         composed: true,
       }),
     );
-    // Wait for the async failure + re-render.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Two ticks: catch runs in the next microtask; Lit re-renders the
+    // error in the tick after that.
+    await el.updateComplete;
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('.error')!.textContent).toContain('Backend exploded');
     // Stays in the dialog so the user can correct + retry.

@@ -262,6 +262,11 @@ export class ComfortBandProfilesTab extends LitElement {
       .menu button:hover:not([disabled]) {
         background: var(--cb-track-bg);
       }
+      .menu button:focus-visible {
+        outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
+        /* Inset so the ring doesn't clip the menu's border-radius. */
+        outline-offset: -2px;
+      }
       .menu button[disabled] {
         opacity: 0.5;
         cursor: not-allowed;
@@ -375,6 +380,9 @@ export class ComfortBandProfilesTab extends LitElement {
       e.preventDefault();
       e.stopPropagation();
       this._openMenu = null;
+      // Defensive: clear the open-modality flag so a subsequent pointer
+      // open without going through `_toggleMenu` doesn't inherit `true`.
+      this._menuOpenedByKeyboard = false;
       // Return focus to the originating overflow button so keyboard
       // users don't lose their place in the list. Profile names are
       // user-supplied and may contain `"` / `]` / other CSS-syntax chars
@@ -523,7 +531,7 @@ export class ComfortBandProfilesTab extends LitElement {
               Cancel
             </button>
             <button class="button danger" ?disabled=${this._busy} @click=${this._onConfirmDelete}>
-              Delete
+              ${this._busy ? 'Deleting…' : 'Delete'}
             </button>
           </div>
         </div>
@@ -542,8 +550,8 @@ export class ComfortBandProfilesTab extends LitElement {
           </button>`
         : nothing}
       <ul role="listbox" aria-label="Profiles">
-        ${options.map((profile) =>
-          this._renderRow(profile, active, defaultProfile, descriptions, crudAvailable),
+        ${options.map((profile, index) =>
+          this._renderRow(profile, index, active, defaultProfile, descriptions, crudAvailable),
         )}
       </ul>
       ${!crudAvailable
@@ -557,6 +565,7 @@ export class ComfortBandProfilesTab extends LitElement {
 
   private _renderRow(
     profile: string,
+    index: number,
     active: string,
     defaultProfile: string,
     descriptions: Record<string, string>,
@@ -565,6 +574,10 @@ export class ComfortBandProfilesTab extends LitElement {
     const isActive = profile === active;
     const isDefault = profile === defaultProfile;
     const description = descriptions[profile] ?? '';
+    // Stable `id` for aria-controls linkage. Profile names can contain
+    // any character (only length is capped), so we anchor on the row
+    // index instead of the name to avoid producing invalid id syntax.
+    const menuId = `cb-profile-menu-${index}`;
     return html`
       <li
         data-profile=${profile}
@@ -591,6 +604,7 @@ export class ComfortBandProfilesTab extends LitElement {
               type="button"
               aria-label="More actions for ${profile}"
               aria-haspopup="menu"
+              aria-controls=${menuId}
               aria-expanded=${this._openMenu === profile}
               @click=${(e: Event) => this._toggleMenu(profile, e)}
             >
@@ -600,6 +614,7 @@ export class ComfortBandProfilesTab extends LitElement {
         ${this._openMenu === profile
           ? html`
               <div
+                id=${menuId}
                 class="menu"
                 role="menu"
                 @click=${(e: Event) => e.stopPropagation()}
