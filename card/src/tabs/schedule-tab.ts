@@ -140,7 +140,13 @@ export class ComfortBandScheduleTab extends LitElement {
   }
 
   private async _subscribe(): Promise<void> {
-    if (!this.hass || !this.zone || !this._profile) return;
+    if (!this.hass || !this.zone || !this._profile) {
+      // Defensive: a misconfigured or torn-down element should never sit
+      // in the "Loading…" state. Callers always check these conditions
+      // before us, so this branch is unreachable in practice.
+      this._loading = false;
+      return;
+    }
     const gen = ++this._subscribeGen;
     // Only show the loading state when we have nothing to display. On a
     // re-subscribe (profile flip, reconnect) keep the stale data visible
@@ -182,9 +188,9 @@ export class ComfortBandScheduleTab extends LitElement {
     this._unsub = undefined;
   }
 
-  private async _resubscribe(): Promise<void> {
+  private _resubscribe(): Promise<void> {
     this._unsubscribe();
-    await this._subscribe();
+    return this._subscribe();
   }
 
   private _onAdd = (event: CustomEvent<{ at: string }>) => {

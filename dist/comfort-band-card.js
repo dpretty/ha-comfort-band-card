@@ -4590,7 +4590,10 @@ let ye = class extends It {
     this._unsubscribe(), super.disconnectedCallback();
   }
   async _subscribe() {
-    if (!this.hass || !this.zone || !this._profile) return;
+    if (!this.hass || !this.zone || !this._profile) {
+      this._loading = !1;
+      return;
+    }
     const t = ++this._subscribeGen;
     this._transitions.length === 0 && (this._loading = !0), this._error = null;
     try {
@@ -4614,8 +4617,8 @@ let ye = class extends It {
   _unsubscribe() {
     this._subscribeGen++, this._unsub?.(), this._unsub = void 0;
   }
-  async _resubscribe() {
-    this._unsubscribe(), await this._subscribe();
+  _resubscribe() {
+    return this._unsubscribe(), this._subscribe();
   }
   async _writeSchedule(t) {
     if (this.hass)
