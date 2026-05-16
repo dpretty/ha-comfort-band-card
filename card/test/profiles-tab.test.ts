@@ -437,6 +437,62 @@ describe('comfort-band-profiles-tab', () => {
     );
   });
 
+  it('cancel from create dialog restores focus to the + New profile button', async () => {
+    const el = await profilesTab(makeHass({ options: ['home', 'away'] }));
+    const newBtn = el.shadowRoot!.querySelector<HTMLButtonElement>('.new-profile')!;
+    newBtn.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector('profile-edit-dialog')!.dispatchEvent(
+      new CustomEvent('dialog-cancel', { bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    expect(el.shadowRoot!.activeElement).toBe(
+      el.shadowRoot!.querySelector<HTMLButtonElement>('.new-profile'),
+    );
+  });
+
+  it('cancel from clone dialog restores focus to the originating ⋮ button', async () => {
+    const el = await profilesTab(makeHass({ options: ['home', 'away'] }));
+    const awayRow = el.shadowRoot!.querySelectorAll<HTMLLIElement>('li')[1];
+    awayRow.querySelector<HTMLButtonElement>('.overflow')!.click();
+    await el.updateComplete;
+    findMenuButton(el, 'Clone')!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector('profile-edit-dialog')!.dispatchEvent(
+      new CustomEvent('dialog-cancel', { bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    const awayOverflow = el
+      .shadowRoot!.querySelectorAll<HTMLLIElement>('li')[1]
+      .querySelector<HTMLButtonElement>('.overflow');
+    expect(el.shadowRoot!.activeElement).toBe(awayOverflow);
+  });
+
+  it('Tab in menu also clears the keyboard-open flag (prevents subsequent focus hijack)', async () => {
+    const el = await profilesTab(makeHass({ options: ['home', 'away'] }));
+    const row = el.shadowRoot!.querySelectorAll<HTMLLIElement>('li')[1];
+    const overflow = row.querySelector<HTMLButtonElement>('.overflow')!;
+    // Keyboard open
+    overflow.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, detail: 0 }));
+    await el.updateComplete;
+    // Tab to dismiss
+    el.shadowRoot!.querySelector('.menu')!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('.menu')).toBeNull();
+    // Subsequent pointer-open must NOT shift focus into the menu.
+    overflow.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, detail: 1 }));
+    await el.updateComplete;
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    const firstItem = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      '.menu button[role="menuitem"]:not([disabled])',
+    );
+    expect(el.shadowRoot!.activeElement).not.toBe(firstItem);
+  });
+
   it('a profile name containing CSS-special characters does not break Escape focus restore', async () => {
     // Profile name with `"` and `]` — the Escape handler used to interpolate
     // these into a querySelector and throw. The DOM-walk fallback handles it.

@@ -64,6 +64,9 @@ export class ComfortBandProfilesTab extends LitElement {
    *  this is true do we shift focus into the menu (per ARIA APG guidance:
    *  pointer-opened menus shouldn't hijack focus from the user's pointer). */
   private _menuOpenedByKeyboard = false;
+  /** Profile name whose ⋮ button (or `+ New profile`) opened the dialog;
+   *  used to restore focus to that trigger on dialog dismiss (WCAG 2.4.3). */
+  private _dialogTrigger: string | null = null;
 
   private _onDocumentClick = (e: MouseEvent): void => {
     if (this._openMenu === null) return;
@@ -97,6 +100,10 @@ export class ComfortBandProfilesTab extends LitElement {
     // focus target (the ⋮ button); stealing it would surprise the user.
     if (changed.has('_openMenu') && this._openMenu !== null && this._menuOpenedByKeyboard) {
       requestAnimationFrame(() => {
+        // Re-check the flag at fire-time: if a Tab/Escape dismiss
+        // happened between schedule and fire, we don't want a stale
+        // keyboard-focus rAF to hijack a later pointer-open.
+        if (!this._menuOpenedByKeyboard || this._openMenu === null) return;
         this.shadowRoot
           ?.querySelector<HTMLButtonElement>('.menu button[role="menuitem"]:not([disabled])')
           ?.focus();
@@ -374,6 +381,9 @@ export class ComfortBandProfilesTab extends LitElement {
     // proceed. Escape closes and returns focus to the ⋮ button.
     if (e.key === 'Tab') {
       this._openMenu = null;
+      // Match Escape: clear the keyboard-open flag so the next pointer
+      // open doesn't inherit it and hijack focus.
+      this._menuOpenedByKeyboard = false;
       return;
     }
     if (e.key === 'Escape') {
@@ -416,6 +426,9 @@ export class ComfortBandProfilesTab extends LitElement {
   private _onNew(): void {
     this._error = null;
     this._target = null;
+    // Sentinel value for "the + New profile button" — distinguishes from
+    // a per-row trigger when restoring focus on dismiss.
+    this._dialogTrigger = '__new__';
     this._mode = 'create';
   }
 
@@ -423,6 +436,7 @@ export class ComfortBandProfilesTab extends LitElement {
     this._error = null;
     this._openMenu = null;
     this._target = profile;
+    this._dialogTrigger = profile;
     this._mode = 'clone';
   }
 
@@ -430,6 +444,7 @@ export class ComfortBandProfilesTab extends LitElement {
     this._error = null;
     this._openMenu = null;
     this._target = profile;
+    this._dialogTrigger = profile;
     this._mode = 'rename';
   }
 
@@ -437,7 +452,29 @@ export class ComfortBandProfilesTab extends LitElement {
     this._error = null;
     this._openMenu = null;
     this._target = profile;
+    this._dialogTrigger = profile;
     this._mode = 'confirm-delete';
+  }
+
+  /** Restore focus to the element that opened the dialog. Called when
+   *  the dialog dismisses (cancel or successful save). Best-effort —
+   *  silently no-ops if the trigger element has been removed from the
+   *  DOM (e.g. delete succeeded and the row is gone). */
+  private _restoreFocusAfterDialog(): void {
+    const trigger = this._dialogTrigger;
+    this._dialogTrigger = null;
+    if (trigger === null) return;
+    requestAnimationFrame(() => {
+      if (trigger === '__new__') {
+        this.shadowRoot?.querySelector<HTMLButtonElement>('.new-profile')?.focus();
+        return;
+      }
+      // Walk rows by data-profile (mirrors the Escape handler — avoids
+      // querySelector injection for names containing CSS-special chars).
+      const rows = this.shadowRoot?.querySelectorAll<HTMLLIElement>('li[data-profile]');
+      const li = rows ? Array.from(rows).find((el) => el.dataset.profile === trigger) : undefined;
+      li?.querySelector<HTMLButtonElement>('.overflow')?.focus();
+    });
   }
 
   private _onDialogCancel = (): void => {
@@ -447,6 +484,7 @@ export class ComfortBandProfilesTab extends LitElement {
     this._mode = 'list';
     this._target = null;
     this._error = null;
+    this._restoreFocusAfterDialog();
   };
 
   private _onDialogSave = async (e: DialogSaveEvent): Promise<void> => {
@@ -471,6 +509,7 @@ export class ComfortBandProfilesTab extends LitElement {
       this._mode = 'list';
       this._target = null;
       this._error = null;
+      this._restoreFocusAfterDialog();
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to save profile.';
     } finally {
@@ -487,6 +526,9 @@ export class ComfortBandProfilesTab extends LitElement {
       this._mode = 'list';
       this._target = null;
       this._error = null;
+      // After delete the row vanishes; trigger restore is best-effort —
+      // falls through to no-op if the row's overflow button is gone.
+      this._restoreFocusAfterDialog();
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to delete profile.';
     } finally {
@@ -592,7 +634,7 @@ export class ComfortBandProfilesTab extends LitElement {
         data-profile=${profile}
         tabindex="0"
         class=${isActive ? 'active' : ''}
-        aria-current=${isActive ? 'true' : 'false'}
+        aria-current=${isActive ? 'true' : nothing}
         @click=${() => this._onSelect(profile)}
         @keydown=${(e: KeyboardEvent) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -612,8 +654,8 @@ export class ComfortBandProfilesTab extends LitElement {
               type="button"
               aria-label="More actions for ${profile}"
               aria-haspopup="menu"
-              aria-controls=${menuId}
-              aria-expanded=${this._openMenu === profile}
+              aria-controls=${this._openMenu === profile ? menuId : nothing}
+              aria-expanded=${this._openMenu === profile ? 'true' : 'false'}
               @click=${(e: Event) => this._toggleMenu(profile, e)}
             >
               ⋮
