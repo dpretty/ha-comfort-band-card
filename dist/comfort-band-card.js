@@ -4546,7 +4546,7 @@ var Vf = Object.defineProperty, If = Object.getOwnPropertyDescriptor, Ie = (t, e
 };
 let ye = class extends It {
   constructor() {
-    super(...arguments), this.zone = "", this._profile = "", this._transitions = [], this._loading = !0, this._error = null, this._mode = "list", this._editing = null, this._newAt = "06:00", this._subscribeGen = 0, this._onAdd = (t) => {
+    super(...arguments), this.zone = "", this._profile = "", this._transitions = [], this._loading = !1, this._error = null, this._mode = "list", this._editing = null, this._newAt = "06:00", this._subscribeGen = 0, this._onAdd = (t) => {
       this._newAt = t.detail.at, this._editing = null, this._mode = "add";
     }, this._onEdit = (t) => {
       this._editing = t.detail.transition, this._mode = "edit";

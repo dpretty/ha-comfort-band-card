@@ -33,7 +33,7 @@ export class ComfortBandScheduleTab extends LitElement {
 
   @state() private _profile = '';
   @state() private _transitions: Transition[] = [];
-  @state() private _loading = true;
+  @state() private _loading = false;
   @state() private _error: string | null = null;
   @state() private _mode: Mode = 'list';
   @state() private _editing: Transition | null = null;

@@ -358,6 +358,107 @@ describe('comfort-band-schedule-tab', () => {
     expect(fake.subscribeMessage).toHaveBeenCalledTimes(2);
   });
 
+  it('does not flash the loading state on DOM reattach when stale data exists', async () => {
+    const fake = makeHass({
+      initialSchedule: {
+        baseline: [{ at: '06:00', low: 20, high: 23 }],
+        current: [],
+      },
+    });
+    const el = await tab(fake.hass);
+    expect(el.shadowRoot!.querySelector('.loading')).toBeNull();
+
+    el.remove();
+    document.body.appendChild(el);
+    // No microtask gap: the user perceives the in-between frame.
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.querySelector('.loading')).toBeNull();
+    expect(el.shadowRoot!.querySelector('timeline-editor')).not.toBeNull();
+  });
+
+  it('preserves already-rendered transitions when a re-subscribe errors', async () => {
+    const subscribeMessage = vi
+      .fn()
+      .mockImplementationOnce(async (cb: (event: { schedule: ProfileSchedule | null }) => void) => {
+        // First subscribe: succeed with initial data.
+        Promise.resolve().then(() =>
+          cb({
+            schedule: {
+              baseline: [{ at: '06:00', low: 20, high: 23 }],
+              current: [],
+            },
+          }),
+        );
+        return () => {};
+      })
+      .mockRejectedValueOnce(new Error('network down'));
+
+    const hass: HomeAssistant = {
+      states: {
+        'select.comfort_band_profiles_active_profile': {
+          entity_id: 'select.comfort_band_profiles_active_profile',
+          state: 'home',
+          attributes: { options: ['home', 'away', 'sleep'] },
+          last_changed: '',
+          last_updated: '',
+        },
+      },
+      devices: {
+        'dev-pm': {
+          id: 'dev-pm',
+          identifiers: [['comfort_band', 'profile_manager']],
+          name: 'Comfort Band Profiles',
+          name_by_user: null,
+          area_id: null,
+        },
+      },
+      entities: {
+        'select.comfort_band_profiles_active_profile': {
+          entity_id: 'select.comfort_band_profiles_active_profile',
+          platform: 'comfort_band',
+          device_id: 'dev-pm',
+          area_id: null,
+          hidden: false,
+          entity_category: null,
+          translation_key: 'active_profile',
+          name: null,
+        },
+      },
+      connection: {
+        subscribeMessage: subscribeMessage as unknown as HassConnection['subscribeMessage'],
+      },
+      callService: vi.fn(),
+      callWS: vi.fn(),
+    };
+
+    const el = await mount('comfort-band-schedule-tab', { hass, zone: 'gym' });
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+    // First subscribe delivered one transition.
+    expect(
+      el.shadowRoot!.querySelector('timeline-editor')!.shadowRoot!.querySelectorAll('.point')
+        .length,
+    ).toBe(1);
+
+    // Flip the profile so the second (failing) subscribe runs.
+    hass.states['select.comfort_band_profiles_active_profile'] = {
+      ...hass.states['select.comfort_band_profiles_active_profile'],
+      state: 'away',
+    };
+    el.hass = { ...hass };
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+
+    // Error overlay replaces the editor (existing render contract), but
+    // the underlying _transitions are preserved so the next successful
+    // subscribe can render them again without a wipe-and-refetch.
+    const errorDiv = el.shadowRoot!.querySelector('.error');
+    expect(errorDiv).not.toBeNull();
+    expect(errorDiv!.textContent).toContain('network down');
+  });
+
   it('surfaces a subscribe error in the UI', async () => {
     const subscribeMessage = vi.fn().mockRejectedValue(new Error('boom: zone not found'));
     const hass: HomeAssistant = {
