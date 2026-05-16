@@ -81,6 +81,19 @@ export class ComfortBandProfilesTab extends LitElement {
     super.disconnectedCallback();
   }
 
+  protected override updated(changed: Map<string | number | symbol, unknown>): void {
+    // When the overflow menu first opens, move keyboard focus into it so
+    // `role="menu"`'s arrow-key contract has somewhere to operate from.
+    // Skip if the menu just closed (`_openMenu === null`).
+    if (changed.has('_openMenu') && this._openMenu !== null) {
+      requestAnimationFrame(() => {
+        this.shadowRoot
+          ?.querySelector<HTMLButtonElement>('.menu button[role="menuitem"]:not([disabled])')
+          ?.focus();
+      });
+    }
+  }
+
   public static override styles = [
     tokens,
     css`
@@ -93,6 +106,16 @@ export class ComfortBandProfilesTab extends LitElement {
         font-size: 13px;
         text-align: center;
         padding: var(--cb-gap-lg);
+      }
+      .upgrade-hint {
+        margin: var(--cb-gap-md) 0 0;
+        font-size: 12px;
+        color: var(--cb-text-secondary, var(--secondary-text-color, #727272));
+        text-align: center;
+      }
+      .upgrade-hint code {
+        font-family: ui-monospace, SFMono-Regular, monospace;
+        font-size: 11px;
       }
       .error {
         color: var(--error-color, #b71c1c);
@@ -202,7 +225,8 @@ export class ComfortBandProfilesTab extends LitElement {
       .menu {
         position: absolute;
         top: calc(100% - 4px);
-        right: var(--cb-gap-md);
+        /* inset-inline-end (not "right") flips correctly under RTL layouts. */
+        inset-inline-end: var(--cb-gap-md);
         z-index: 5;
         min-width: 140px;
         padding: 4px;
@@ -323,14 +347,24 @@ export class ComfortBandProfilesTab extends LitElement {
   /** Keyboard navigation inside the open overflow menu — Escape closes,
    *  ArrowUp/ArrowDown moves focus, satisfying ARIA's `role="menu"` contract. */
   private _onMenuKeydown(e: KeyboardEvent, profile: string): void {
+    // Tab closes the menu (per ARIA menu pattern) and lets default tab order
+    // proceed. Escape closes and returns focus to the ⋮ button.
+    if (e.key === 'Tab') {
+      this._openMenu = null;
+      return;
+    }
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
       this._openMenu = null;
       // Return focus to the originating overflow button so keyboard
-      // users don't lose their place in the list.
+      // users don't lose their place in the list. Profile names are
+      // user-supplied and may contain `"` / `]` / other CSS-syntax chars
+      // (the backend only caps length, not character set), so we walk
+      // the DOM by data-attribute match rather than building a selector.
       requestAnimationFrame(() => {
-        const li = this.shadowRoot?.querySelector<HTMLLIElement>(`li[data-profile="${profile}"]`);
+        const rows = this.shadowRoot?.querySelectorAll<HTMLLIElement>('li[data-profile]');
+        const li = rows ? Array.from(rows).find((el) => el.dataset.profile === profile) : undefined;
         li?.querySelector<HTMLButtonElement>('.overflow')?.focus();
       });
       return;
@@ -441,7 +475,7 @@ export class ComfortBandProfilesTab extends LitElement {
 
     if (this._mode === 'create' || this._mode === 'clone' || this._mode === 'rename') {
       return html`
-        ${this._error ? html`<div class="error">${this._error}</div>` : null}
+        ${this._error ? html`<div class="error" role="alert">${this._error}</div>` : null}
         <profile-edit-dialog
           .mode=${this._mode}
           .existingName=${this._target ?? ''}
@@ -465,7 +499,7 @@ export class ComfortBandProfilesTab extends LitElement {
                   <strong>${defaultProfile}</strong>.`
               : ''}
           </p>
-          ${this._error ? html`<div class="error">${this._error}</div>` : null}
+          ${this._error ? html`<div class="error" role="alert">${this._error}</div>` : null}
           <div class="confirm-actions">
             <button class="button secondary" ?disabled=${this._busy} @click=${this._onDialogCancel}>
               Cancel
@@ -483,7 +517,7 @@ export class ComfortBandProfilesTab extends LitElement {
     }
 
     return html`
-      ${this._error ? html`<div class="error">${this._error}</div>` : null}
+      ${this._error ? html`<div class="error" role="alert">${this._error}</div>` : null}
       ${crudAvailable
         ? html`<button class="new-profile" type="button" @click=${this._onNew}>
             + New profile
@@ -494,6 +528,12 @@ export class ComfortBandProfilesTab extends LitElement {
           this._renderRow(profile, active, defaultProfile, descriptions, crudAvailable),
         )}
       </ul>
+      ${!crudAvailable
+        ? html`<p class="upgrade-hint">
+            Profile management (create, clone, rename, delete) requires the
+            <code>comfort_band</code> integration v0.3.0 or later.
+          </p>`
+        : nothing}
     `;
   }
 

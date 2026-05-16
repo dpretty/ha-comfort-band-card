@@ -347,6 +347,75 @@ describe('comfort-band-profiles-tab', () => {
     expect(el.shadowRoot!.activeElement).toBe(items[1]);
   });
 
+  it('ArrowDown wraps around at the end of the menu', async () => {
+    // Use a non-default profile so the Delete item is enabled (we want
+    // 3 enabled items so wrap is meaningfully visible).
+    const el = await profilesTab(
+      makeHass({ options: ['home', 'away', 'vacation'], defaultProfile: 'home' }),
+    );
+    el.shadowRoot!.querySelectorAll<HTMLLIElement>('li')[2]
+      .querySelector<HTMLButtonElement>('.overflow')!
+      .click();
+    await el.updateComplete;
+    const menu = el.shadowRoot!.querySelector('.menu')!;
+    const items = menu.querySelectorAll<HTMLButtonElement>(
+      'button[role="menuitem"]:not([disabled])',
+    );
+    items[items.length - 1].focus();
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.activeElement).toBe(items[0]);
+  });
+
+  it('Tab inside the menu closes it', async () => {
+    const el = await profilesTab(makeHass({ options: ['home', 'away'] }));
+    el.shadowRoot!.querySelectorAll<HTMLLIElement>('li')[0]
+      .querySelector<HTMLButtonElement>('.overflow')!
+      .click();
+    await el.updateComplete;
+    const menu = el.shadowRoot!.querySelector('.menu')!;
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('.menu')).toBeNull();
+  });
+
+  it('confirm-delete stays open with an error message when delete_profile rejects', async () => {
+    const hass = makeHass({ options: ['home', 'away', 'vacation'] });
+    (hass.callService as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Backend rejected'),
+    );
+    const el = await profilesTab(hass);
+    el.shadowRoot!.querySelectorAll<HTMLLIElement>('li')[2]
+      .querySelector<HTMLButtonElement>('.overflow')!
+      .click();
+    await el.updateComplete;
+    findMenuButton(el, 'Delete')!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLButtonElement>('.confirm-actions .danger')!.click();
+    // Allow the rejected promise + re-render to settle.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('.confirm-delete')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
+      'Backend rejected',
+    );
+  });
+
+  it('a profile name containing CSS-special characters does not break Escape focus restore', async () => {
+    // Profile name with `"` and `]` — the Escape handler used to interpolate
+    // these into a querySelector and throw. The DOM-walk fallback handles it.
+    const el = await profilesTab(makeHass({ options: ['home', 'weird"name]'] }));
+    el.shadowRoot!.querySelectorAll<HTMLLIElement>('li')[1]
+      .querySelector<HTMLButtonElement>('.overflow')!
+      .click();
+    await el.updateComplete;
+    expect(() => {
+      el.shadowRoot!.querySelector('.menu')!.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      );
+    }).not.toThrow();
+  });
+
   it('renders an error and stays in the dialog when create_profile rejects', async () => {
     const hass = makeHass({ options: ['home', 'away'] });
     (hass.callService as ReturnType<typeof vi.fn>).mockRejectedValueOnce(

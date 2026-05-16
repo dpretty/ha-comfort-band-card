@@ -115,4 +115,31 @@ describe('profile-edit-dialog', () => {
     await el.updateComplete;
     expect(cancel).toHaveBeenCalledOnce();
   });
+
+  it('busy=true disables both action buttons and changes the Save label', async () => {
+    const el = await dialog('create');
+    el.busy = true;
+    await el.updateComplete;
+    const save = el.shadowRoot!.querySelector<HTMLButtonElement>('.button.primary')!;
+    const cancel = el.shadowRoot!.querySelector<HTMLButtonElement>('.button.secondary')!;
+    expect(save.hasAttribute('disabled')).toBe(true);
+    expect(cancel.hasAttribute('disabled')).toBe(true);
+    expect(save.textContent?.trim()).toBe('Saving…');
+  });
+
+  it('busy=true blocks dialog-save / dialog-cancel from firing on click', async () => {
+    const el = await dialog('create');
+    el.busy = true;
+    await el.updateComplete;
+    const save = vi.fn();
+    const cancel = vi.fn();
+    el.addEventListener('dialog-save', save);
+    el.addEventListener('dialog-cancel', cancel);
+    setInput(el, 'name', 'weekend');
+    click(el, '.button.primary');
+    click(el, '.button.secondary');
+    await el.updateComplete;
+    expect(save).not.toHaveBeenCalled();
+    expect(cancel).not.toHaveBeenCalled();
+  });
 });
