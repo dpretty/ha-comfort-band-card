@@ -20,6 +20,12 @@
  * Profile mutations (create/clone/rename/delete) call the matching
  * `comfort_band.*` service; the backend fires `SIGNAL_PROFILE_LIST_CHANGED`
  * which re-pushes the select entity's state, triggering this tab to re-render.
+ *
+ * Note: `data-profile` on each <li> is load-bearing — the Escape handler in
+ * `_onMenuKeydown` walks the DOM by this attribute to restore focus to the
+ * ⋮ button after the menu closes. Profile names can contain CSS-syntax
+ * characters (`"`, `]`), so we deliberately avoid a `querySelector` selector
+ * that would otherwise need `CSS.escape`-ing.
  */
 
 import { LitElement, html, css, nothing } from 'lit';
@@ -54,6 +60,10 @@ export class ComfortBandProfilesTab extends LitElement {
   /** True while a service call is in flight. Disables action buttons to
    *  prevent double-submit. */
   @state() private _busy = false;
+  /** Whether the most-recent menu open was keyboard-triggered. Only when
+   *  this is true do we shift focus into the menu (per ARIA APG guidance:
+   *  pointer-opened menus shouldn't hijack focus from the user's pointer). */
+  private _menuOpenedByKeyboard = false;
 
   private _onDocumentClick = (e: MouseEvent): void => {
     if (this._openMenu === null) return;
@@ -82,10 +92,10 @@ export class ComfortBandProfilesTab extends LitElement {
   }
 
   protected override updated(changed: Map<string | number | symbol, unknown>): void {
-    // When the overflow menu first opens, move keyboard focus into it so
-    // `role="menu"`'s arrow-key contract has somewhere to operate from.
-    // Skip if the menu just closed (`_openMenu === null`).
-    if (changed.has('_openMenu') && this._openMenu !== null) {
+    // Move keyboard focus into the menu only when it was opened by the
+    // keyboard. Pointer (mouse / touch) opens already have a sensible
+    // focus target (the ⋮ button); stealing it would surprise the user.
+    if (changed.has('_openMenu') && this._openMenu !== null && this._menuOpenedByKeyboard) {
       requestAnimationFrame(() => {
         this.shadowRoot
           ?.querySelector<HTMLButtonElement>('.menu button[role="menuitem"]:not([disabled])')
@@ -110,7 +120,7 @@ export class ComfortBandProfilesTab extends LitElement {
       .upgrade-hint {
         margin: var(--cb-gap-md) 0 0;
         font-size: 12px;
-        color: var(--cb-text-secondary, var(--secondary-text-color, #727272));
+        color: var(--cb-text-secondary);
         text-align: center;
       }
       .upgrade-hint code {
@@ -272,7 +282,7 @@ export class ComfortBandProfilesTab extends LitElement {
       .confirm-delete p {
         margin: 0 0 var(--cb-gap-md);
         font-size: 13px;
-        color: var(--cb-text-secondary, var(--secondary-text-color, #727272));
+        color: var(--cb-text-secondary);
       }
       .confirm-actions {
         display: flex;
@@ -282,6 +292,8 @@ export class ComfortBandProfilesTab extends LitElement {
       .button {
         font: inherit;
         padding: 6px 12px;
+        /* WCAG 2.5.5: 44×44 minimum touch target on action buttons. */
+        min-height: 44px;
         border-radius: var(--cb-radius-pill);
         border: 1px solid transparent;
         cursor: pointer;
@@ -341,6 +353,12 @@ export class ComfortBandProfilesTab extends LitElement {
 
   private _toggleMenu(profile: string, e: Event): void {
     e.stopPropagation();
+    // `detail === 0` on a MouseEvent is the cross-browser heuristic for
+    // "this click was synthesised by a keyboard activation" — real pointer
+    // clicks always have a positive detail. Reset on close so a future
+    // pointer-open doesn't inherit the previous keyboard flag.
+    this._menuOpenedByKeyboard =
+      this._openMenu !== profile && e instanceof MouseEvent && e.detail === 0;
     this._openMenu = this._openMenu === profile ? null : profile;
   }
 

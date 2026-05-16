@@ -343,7 +343,7 @@ export class ComfortBandScheduleTab extends LitElement {
       ${this._loading
         ? html`<div class="loading">Loading schedule…</div>`
         : this._error
-          ? html`<div class="error">${this._error}</div>`
+          ? html`<div class="error" role="alert">${this._error}</div>`
           : html`
               <comfort-band-schedule-chart
                 .transitions=${this._transitions}

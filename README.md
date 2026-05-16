@@ -4,7 +4,7 @@ A Lovelace card for the [Comfort Band](https://github.com/dpretty/ha-comfort-ban
 
 Compact tile + expanded modal with **Now / Schedule / Profiles / Insights** tabs. Replaces a dashboard full of sliders, input_numbers, and `browser_mod` popups with one element per zone.
 
-> Requires the `comfort_band` integration ≥ **v0.1.0**.
+> Requires the `comfort_band` integration ≥ **v0.1.0** for tile + Now / Schedule / Insights, or **≥ v0.3.0** for full profile management (create / clone / rename / delete).
 
 ## What you get
 

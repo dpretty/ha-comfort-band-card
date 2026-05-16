@@ -367,6 +367,40 @@ describe('comfort-band-profiles-tab', () => {
     expect(el.shadowRoot!.activeElement).toBe(items[0]);
   });
 
+  it('mouse-opened menu does NOT steal focus into a menu item', async () => {
+    const el = await profilesTab(makeHass({ options: ['home', 'away'] }));
+    const overflow = el
+      .shadowRoot!.querySelectorAll<HTMLLIElement>('li')[1]
+      .querySelector<HTMLButtonElement>('.overflow')!;
+    // Real pointer click → detail >= 1. Synthesise one so our keyboard heuristic
+    // (`detail === 0`) treats this as a mouse open.
+    overflow.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, detail: 1 }));
+    await el.updateComplete;
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    const menuItems = el.shadowRoot!.querySelectorAll<HTMLButtonElement>(
+      '.menu button[role="menuitem"]',
+    );
+    expect(menuItems.length).toBeGreaterThan(0);
+    // No menu item should be the activeElement — focus stays on the ⋮ button.
+    expect(el.shadowRoot!.activeElement).not.toBe(menuItems[0]);
+  });
+
+  it('keyboard-opened menu (Enter on ⋮) DOES focus the first menu item', async () => {
+    const el = await profilesTab(makeHass({ options: ['home', 'away'] }));
+    const overflow = el
+      .shadowRoot!.querySelectorAll<HTMLLIElement>('li')[1]
+      .querySelector<HTMLButtonElement>('.overflow')!;
+    // Synthesise a "keyboard activation" — `detail: 0` mirrors what real
+    // browsers dispatch when Enter / Space on a <button> fires its click.
+    overflow.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, detail: 0 }));
+    await el.updateComplete;
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    const firstItem = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      '.menu button[role="menuitem"]:not([disabled])',
+    );
+    expect(el.shadowRoot!.activeElement).toBe(firstItem);
+  });
+
   it('Tab inside the menu closes it', async () => {
     const el = await profilesTab(makeHass({ options: ['home', 'away'] }));
     el.shadowRoot!.querySelectorAll<HTMLLIElement>('li')[0]
