@@ -1742,7 +1742,13 @@ let ii = class extends Ut {
     if (this._mode === "confirm-delete" && this._target) {
       const l = this._target === i;
       return M`
-        <div class="confirm-delete">
+        <div
+          class="confirm-delete"
+          @keydown=${(h) => {
+        h.key === "Escape" && !this._busy && (h.preventDefault(), this._onDialogCancel());
+      }}
+          tabindex="-1"
+        >
           <h3>Delete profile?</h3>
           <p>
             Delete <strong>${this._target}</strong>?${" "}

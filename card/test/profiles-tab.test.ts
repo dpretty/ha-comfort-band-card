@@ -291,6 +291,23 @@ describe('comfort-band-profiles-tab', () => {
     expect(text).toContain('home'); // default fallback
   });
 
+  it('Escape inside confirm-delete cancels the deletion', async () => {
+    const hass = makeHass({ options: ['home', 'away', 'vacation'] });
+    const el = await profilesTab(hass);
+    el.shadowRoot!.querySelectorAll<HTMLLIElement>('li')[2]
+      .querySelector<HTMLButtonElement>('.overflow')!
+      .click();
+    await el.updateComplete;
+    findMenuButton(el, 'Delete')!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector('.confirm-delete')!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    await el.updateComplete;
+    expect(hass.callService).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector('.confirm-delete')).toBeNull();
+  });
+
   it('cancel from confirm-delete returns to the list without a service call', async () => {
     const hass = makeHass({ options: ['home', 'away', 'vacation'] });
     const el = await profilesTab(hass);

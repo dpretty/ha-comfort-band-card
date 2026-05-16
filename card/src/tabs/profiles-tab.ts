@@ -561,7 +561,19 @@ export class ComfortBandProfilesTab extends LitElement {
     if (this._mode === 'confirm-delete' && this._target) {
       const isActive = this._target === active;
       return html`
-        <div class="confirm-delete">
+        <div
+          class="confirm-delete"
+          @keydown=${(e: KeyboardEvent) => {
+            // Escape = "no, don't delete" — the standard confirm-dialog
+            // pattern. Skipped during a save-in-flight so the user can't
+            // accidentally tear down state mid-await.
+            if (e.key === 'Escape' && !this._busy) {
+              e.preventDefault();
+              this._onDialogCancel();
+            }
+          }}
+          tabindex="-1"
+        >
           <h3>Delete profile?</h3>
           <p>
             Delete <strong>${this._target}</strong>?${' '}
