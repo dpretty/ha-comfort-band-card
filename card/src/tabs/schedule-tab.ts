@@ -38,8 +38,12 @@ export class ComfortBandScheduleTab extends LitElement {
   @state() private _mode: Mode = 'list';
   @state() private _editing: Transition | null = null;
   @state() private _newAt = '06:00';
-  @state() private _newLow: number | undefined;
-  @state() private _newHigh: number | undefined;
+  // Plain fields — `_mode` is the @state that drives re-renders; these are
+  // read once when the dialog opens. Marking them @state would re-render on
+  // every assignment from `_onAdd`, which always sets them before flipping
+  // `_mode = 'add'`.
+  private _newLow: number | undefined;
+  private _newHigh: number | undefined;
   private _unsub?: UnsubscribeFunc;
   // Incremented on every (re)subscribe and unsubscribe so stale callbacks
   // and slow `subscribeMessage` round-trips from a superseded attempt can

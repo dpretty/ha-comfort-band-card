@@ -332,6 +332,27 @@ export class ComfortBandScheduleChart extends LitElement {
     }
   };
 
+  /** pointercancel: tear down state silently. The browser fires this when
+   *  the OS / scroll gesture takes over the touch — we must NOT interpret
+   *  it as a tap (would open the edit dialog) or as a drag-release (would
+   *  persist a partial-drag position). */
+  private _onHandlePointerCancel = (event: PointerEvent) => {
+    const drag = this._drag;
+    if (!drag || drag.kind !== 'handle') return;
+    const target = event.currentTarget as SVGElement;
+    try {
+      target.releasePointerCapture(event.pointerId);
+    } catch {
+      // jsdom may throw if capture was never set; safe to ignore.
+    }
+    if (drag.longPressTimer !== null) {
+      window.clearTimeout(drag.longPressTimer);
+      drag.longPressTimer = null;
+    }
+    this._drag = null;
+    this._preview = null;
+  };
+
   private _onBackgroundPointerDown = (event: PointerEvent) => {
     const svgEl = this._svg();
     if (!svgEl) return;
@@ -366,8 +387,9 @@ export class ComfortBandScheduleChart extends LitElement {
       // jsdom may throw if capture was never set; safe to ignore.
     }
     const moved = drag.moved;
+    const cancelled = event.type === 'pointercancel';
     this._drag = null;
-    if (moved || !svgEl) return;
+    if (cancelled || moved || !svgEl) return;
     const rect = svgEl.getBoundingClientRect();
     const atMins = this._clientToMinutes(event.clientX, rect);
     // Don't fire if the tap lands on an existing transition's `at` snap-slot.
@@ -444,8 +466,12 @@ export class ComfortBandScheduleChart extends LitElement {
   // ----- render -----
 
   private _renderedTransitions(): Transition[] {
-    // Sort and apply preview override if a handle is being dragged.
-    const sorted = [...this.transitions].sort((a, b) => a.at.localeCompare(b.at));
+    // Sort numerically (parseTime) to match every other sort in the file, so a
+    // mid-drag preview that swaps `at` values can't desync from the polyline
+    // build order. (The render order would only diverge from lexicographic if
+    // a transition's `at` wasn't zero-padded, but every caller in the card
+    // produces zero-padded strings — defensive consistency.)
+    const sorted = [...this.transitions].sort((a, b) => parseTime(a.at) - parseTime(b.at));
     if (!this._preview || !this._drag || this._drag.kind !== 'handle') return sorted;
     const drag = this._drag;
     return sorted.map((t) =>
@@ -540,14 +566,14 @@ export class ComfortBandScheduleChart extends LitElement {
                 cy=${lowY}
                 r="8"
                 tabindex="0"
-                role="slider"
+                role="button"
                 aria-label=${ariaLow}
                 data-at=${t.at}
                 data-handle="low"
                 @pointerdown=${(e: PointerEvent) => this._onHandlePointerDown(e, t, 'low')}
                 @pointermove=${this._onHandlePointerMove}
                 @pointerup=${(e: PointerEvent) => this._onHandlePointerUp(e, t)}
-                @pointercancel=${(e: PointerEvent) => this._onHandlePointerUp(e, t)}
+                @pointercancel=${this._onHandlePointerCancel}
                 @keydown=${(e: KeyboardEvent) => this._onHandleKeyDown(e, t, 'low')}
                 @focus=${() => this._onHandleFocus(t, 'low')}
                 @blur=${this._onHandleBlur}
@@ -558,14 +584,14 @@ export class ComfortBandScheduleChart extends LitElement {
                 cy=${highY}
                 r="8"
                 tabindex="0"
-                role="slider"
+                role="button"
                 aria-label=${ariaHigh}
                 data-at=${t.at}
                 data-handle="high"
                 @pointerdown=${(e: PointerEvent) => this._onHandlePointerDown(e, t, 'high')}
                 @pointermove=${this._onHandlePointerMove}
                 @pointerup=${(e: PointerEvent) => this._onHandlePointerUp(e, t)}
-                @pointercancel=${(e: PointerEvent) => this._onHandlePointerUp(e, t)}
+                @pointercancel=${this._onHandlePointerCancel}
                 @keydown=${(e: KeyboardEvent) => this._onHandleKeyDown(e, t, 'high')}
                 @focus=${() => this._onHandleFocus(t, 'high')}
                 @blur=${this._onHandleBlur}

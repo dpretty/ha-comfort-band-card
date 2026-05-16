@@ -30,15 +30,6 @@ async function chart(transitions: Transition[] = SCHEDULE): Promise<ComfortBandS
   const el = await mount('comfort-band-schedule-chart', { transitions });
   const svg = el.shadowRoot!.querySelector('svg') as SVGElement;
   Object.defineProperty(svg, 'getBoundingClientRect', { value: () => RECT, configurable: true });
-  // setPointerCapture / releasePointerCapture aren't in jsdom; no-op them.
-  (svg as unknown as { setPointerCapture: (id: number) => void }).setPointerCapture = () => {};
-  (svg as unknown as { releasePointerCapture: (id: number) => void }).releasePointerCapture =
-    () => {};
-  for (const handle of el.shadowRoot!.querySelectorAll<SVGCircleElement>('.handle')) {
-    (handle as unknown as { setPointerCapture: (id: number) => void }).setPointerCapture = () => {};
-    (handle as unknown as { releasePointerCapture: (id: number) => void }).releasePointerCapture =
-      () => {};
-  }
   return el;
 }
 
@@ -256,5 +247,60 @@ describe('comfort-band-schedule-chart', () => {
     handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(fire).toHaveBeenCalledOnce();
     expect(fire.mock.calls[0][0].detail).toEqual({ transition: SCHEDULE[0] });
+  });
+
+  it('pointercancel mid-drag tears down state without firing any event', async () => {
+    const el = await chart();
+    const update = vi.fn();
+    const edit = vi.fn();
+    el.addEventListener('transition-update', update);
+    el.addEventListener('transition-edit', edit);
+    const handle = el.shadowRoot!.querySelector('.handle.low') as SVGElement;
+    handle.dispatchEvent(pointer('pointerdown', xFromTime('06:00'), yFromTemp(20)));
+    handle.dispatchEvent(pointer('pointermove', xFromTime('06:00'), yFromTemp(21)));
+    handle.dispatchEvent(pointer('pointercancel', xFromTime('06:00'), yFromTemp(21)));
+    expect(update).not.toHaveBeenCalled();
+    expect(edit).not.toHaveBeenCalled();
+  });
+
+  it('pointercancel before any movement does not fire transition-edit', async () => {
+    const el = await chart();
+    const edit = vi.fn();
+    el.addEventListener('transition-edit', edit);
+    const handle = el.shadowRoot!.querySelector('.handle.low') as SVGElement;
+    handle.dispatchEvent(pointer('pointerdown', xFromTime('06:00'), yFromTemp(20)));
+    handle.dispatchEvent(pointer('pointercancel', xFromTime('06:00'), yFromTemp(20)));
+    expect(edit).not.toHaveBeenCalled();
+  });
+
+  it('drags a handle horizontally with only one transition (no collision clamp over-restricts)', async () => {
+    const el = await chart([{ at: '06:00', low: 20, high: 23 }]);
+    const fire = vi.fn();
+    el.addEventListener('transition-update', fire);
+    const handle = el.shadowRoot!.querySelector('.handle.low') as SVGElement;
+    const startY = yFromTemp(20);
+    handle.dispatchEvent(pointer('pointerdown', xFromTime('06:00'), startY));
+    handle.dispatchEvent(pointer('pointermove', xFromTime('14:00'), startY));
+    handle.dispatchEvent(pointer('pointerup', xFromTime('14:00'), startY));
+    expect(fire).toHaveBeenCalledOnce();
+    expect(fire.mock.calls[0][0].detail.transition.at).toBe('14:00');
+  });
+
+  it('keyboard: ArrowLeft at 00:00 is clamped (no event)', async () => {
+    const el = await chart([{ at: '00:00', low: 20, high: 23 }]);
+    const fire = vi.fn();
+    el.addEventListener('transition-update', fire);
+    const handle = el.shadowRoot!.querySelector('.handle.low') as SVGElement;
+    handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    expect(fire).not.toHaveBeenCalled();
+  });
+
+  it('keyboard: ArrowRight at 23:45 is clamped (no event)', async () => {
+    const el = await chart([{ at: '23:45', low: 20, high: 23 }]);
+    const fire = vi.fn();
+    el.addEventListener('transition-update', fire);
+    const handle = el.shadowRoot!.querySelector('.handle.low') as SVGElement;
+    handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    expect(fire).not.toHaveBeenCalled();
   });
 });
