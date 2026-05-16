@@ -64,8 +64,13 @@ export function parseTime(at: string): number {
 }
 
 function formatTime(mins: number): string {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
+  // Defensive ceiling — every caller clamps to MAX_MINUTES first, but
+  // formatTime(1440) would produce "24:00", which the backend's
+  // `^[0-2]\d:[0-5]\d$` validator rejects. Guard here too so a future
+  // caller that skips the clamp can't silently produce an invalid value.
+  const clamped = Math.max(0, Math.min(MAX_MINUTES, mins));
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }
 

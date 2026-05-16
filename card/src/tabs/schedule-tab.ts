@@ -361,17 +361,29 @@ export class ComfortBandScheduleTab extends LitElement {
     if (this._transitions.length === 0) return nothing;
     return html`
       <ul class="list">
-        ${this._transitions.map(
-          (t) => html`
+        ${this._transitions.map((t) => {
+          const open = () =>
+            this._onEdit(new CustomEvent('transition-edit', { detail: { transition: t } }));
+          return html`
             <li
-              @click=${() =>
-                this._onEdit(new CustomEvent('transition-edit', { detail: { transition: t } }))}
+              role="button"
+              tabindex="0"
+              aria-label="Edit transition at ${t.at}, ${t.low.toFixed(1)} to ${t.high.toFixed(
+                1,
+              )} degrees"
+              @click=${open}
+              @keydown=${(e: KeyboardEvent) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  open();
+                }
+              }}
             >
               <span class="at">${t.at}</span>
               <span>${t.low.toFixed(1)}° – ${t.high.toFixed(1)}°</span>
             </li>
-          `,
-        )}
+          `;
+        })}
       </ul>
     `;
   }
