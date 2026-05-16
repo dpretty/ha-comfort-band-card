@@ -292,16 +292,22 @@ export class ComfortBandScheduleTab extends LitElement {
 
   private async _writeSchedule(transitions: Transition[]): Promise<void> {
     if (!this.hass) return;
+    // Apply the optimistic update BEFORE the await so a rapidly-fired
+    // second call (e.g. holding ArrowRight on a chart handle) reads the
+    // post-write state rather than the stale pre-write snapshot. The
+    // subscription will echo the persisted (and normalised) state right
+    // after; on failure the catch restores via `_error` and the next echo
+    // will overwrite `_transitions` back to the server's authoritative copy.
+    const previous = this._transitions;
+    this._transitions = transitions;
     try {
       await setSchedule(this.hass, {
         zone: this.zone,
         profile: this._profile,
         transitions,
       });
-      // Optimistic update; the subscription will echo the persisted (and
-      // normalised) state right after.
-      this._transitions = transitions;
     } catch (err) {
+      this._transitions = previous;
       this._error = err instanceof Error ? err.message : 'Failed to save schedule.';
     }
   }

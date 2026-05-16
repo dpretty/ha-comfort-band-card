@@ -239,6 +239,16 @@ describe('comfort-band-schedule-chart', () => {
     expect(fire.mock.calls[0][0].detail).toEqual({ at: '06:00' });
   });
 
+  it('keyboard: Backspace on a focused handle also emits transition-delete', async () => {
+    const el = await chart();
+    const fire = vi.fn();
+    el.addEventListener('transition-delete', fire);
+    const handle = el.shadowRoot!.querySelector('.handle.low') as SVGElement;
+    handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+    expect(fire).toHaveBeenCalledOnce();
+    expect(fire.mock.calls[0][0].detail).toEqual({ at: '06:00' });
+  });
+
   it('keyboard: Enter on a focused handle emits transition-edit', async () => {
     const el = await chart();
     const fire = vi.fn();

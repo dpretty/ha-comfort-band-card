@@ -17,7 +17,7 @@
 import { LitElement, css, html, svg } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { tokens } from './styles.js';
-import type { Transition } from './types.js';
+import type { BandHandle, Transition } from './types.js';
 
 const SNAP_MINUTES = 15;
 const SNAP_TEMP_C = 0.5;
@@ -34,11 +34,9 @@ const MAX_MINUTES = 24 * 60 - SNAP_MINUTES;
 const HOUR_TICKS = [0, 6, 12, 18, 24];
 const TEMP_TICKS = [14, 18, 22, 26];
 
-type Handle = 'low' | 'high';
-
 interface HandleDrag {
   kind: 'handle';
-  handle: Handle;
+  handle: BandHandle;
   origin: Transition;
   startX: number;
   startY: number;
@@ -92,7 +90,7 @@ export class ComfortBandScheduleChart extends LitElement {
   // (keyed by the original `at`) instead of from the prop.
   @state() private _preview: { at: string; low: number; high: number } | null = null;
   @state() private _focusedAt: string | null = null;
-  @state() private _focusedHandle: Handle | null = null;
+  @state() private _focusedHandle: BandHandle | null = null;
 
   public static override styles = [
     tokens,
@@ -191,6 +189,13 @@ export class ComfortBandScheduleChart extends LitElement {
     if (this._drag && this._drag.kind === 'handle' && this._drag.longPressTimer !== null) {
       window.clearTimeout(this._drag.longPressTimer);
     }
+    // Drop in-flight drag context so a re-attached element doesn't pick up
+    // residual `_drag`/`_preview` and mistake the next pointer event for a
+    // continuation. Pointer capture is browser-bound to the disconnecting
+    // element so it's released automatically — no releasePointerCapture
+    // call needed here.
+    this._drag = null;
+    this._preview = null;
     super.disconnectedCallback();
   }
 
@@ -246,7 +251,11 @@ export class ComfortBandScheduleChart extends LitElement {
 
   // ----- pointer handlers -----
 
-  private _onHandlePointerDown = (event: PointerEvent, transition: Transition, handle: Handle) => {
+  private _onHandlePointerDown = (
+    event: PointerEvent,
+    transition: Transition,
+    handle: BandHandle,
+  ) => {
     event.stopPropagation();
     event.preventDefault();
     const target = event.currentTarget as SVGElement;
@@ -293,7 +302,14 @@ export class ComfortBandScheduleChart extends LitElement {
     }
 
     const svgEl = this._svg();
-    if (!svgEl) return;
+    if (!svgEl) {
+      // Shouldn't happen in practice (Lit guarantees `shadowRoot` is ready
+      // by the time pointer handlers can fire) but if it does, preserve
+      // the origin so a subsequent pointerup with no preview still fires
+      // an idempotent `transition-update` rather than silently dropping.
+      this._preview = { at: drag.origin.at, low: drag.origin.low, high: drag.origin.high };
+      return;
+    }
     const rect = svgEl.getBoundingClientRect();
 
     const range = this._timeRangeFor(drag.origin.at);
@@ -429,7 +445,7 @@ export class ComfortBandScheduleChart extends LitElement {
 
   // ----- keyboard handlers -----
 
-  private _onHandleKeyDown = (event: KeyboardEvent, transition: Transition, handle: Handle) => {
+  private _onHandleKeyDown = (event: KeyboardEvent, transition: Transition, handle: BandHandle) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       this._fire('transition-edit', { transition });
@@ -484,7 +500,7 @@ export class ComfortBandScheduleChart extends LitElement {
     });
   };
 
-  private _onHandleFocus = (transition: Transition, handle: Handle) => {
+  private _onHandleFocus = (transition: Transition, handle: BandHandle) => {
     this._focusedAt = transition.at;
     this._focusedHandle = handle;
   };
