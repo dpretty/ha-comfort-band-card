@@ -7,7 +7,7 @@ import type {
   HassEntity,
   HomeAssistant,
 } from '../src/types.js';
-import { mount, teardown } from './_fixture.js';
+import { mount, stubConnection, teardown } from './_fixture.js';
 
 afterEach(teardown);
 
@@ -62,6 +62,7 @@ function makeHass(zone: string): HomeAssistant {
     },
     devices: { [device.id]: device },
     entities: Object.fromEntries(entities.map((e) => [e.entity_id, e])),
+    connection: stubConnection(),
     callService: vi.fn().mockResolvedValue(undefined),
     callWS: vi.fn().mockResolvedValue(undefined),
   };
@@ -109,6 +110,7 @@ describe('comfort-band-card', () => {
       states: {},
       devices: {},
       entities: {},
+      connection: stubConnection(),
       callService: vi.fn(),
       callWS: vi.fn(),
     };

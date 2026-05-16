@@ -49,10 +49,20 @@ export interface DeviceRegistryEntry {
   area_id: string | null;
 }
 
+export type UnsubscribeFunc = () => void;
+
+export interface HassConnection {
+  subscribeMessage<T>(
+    callback: (event: T) => void,
+    msg: { type: string } & Record<string, unknown>,
+  ): Promise<UnsubscribeFunc>;
+}
+
 export interface HomeAssistant {
   states: Record<string, HassEntity>;
   entities: Record<string, EntityRegistryEntry>;
   devices: Record<string, DeviceRegistryEntry>;
+  connection: HassConnection;
   callService(
     domain: string,
     service: string,

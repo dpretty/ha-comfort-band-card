@@ -1,7 +1,13 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import '../src/tabs/schedule-tab.js';
 import type { ComfortBandScheduleTab } from '../src/tabs/schedule-tab.js';
-import type { HomeAssistant, ProfileSchedule, Transition } from '../src/types.js';
+import type {
+  HassConnection,
+  HomeAssistant,
+  ProfileSchedule,
+  Transition,
+  UnsubscribeFunc,
+} from '../src/types.js';
 import { mount, teardown } from './_fixture.js';
 
 afterEach(teardown);
@@ -11,12 +17,33 @@ interface FakeHassOptions {
   active?: string;
 }
 
-function makeHass(opts: FakeHassOptions = {}): HomeAssistant {
+interface FakeHass {
+  hass: HomeAssistant;
+  subscribeMessage: ReturnType<typeof vi.fn>;
+  pushUpdate: (schedule: ProfileSchedule | null) => void;
+  unsub: ReturnType<typeof vi.fn>;
+}
+
+function makeHass(opts: FakeHassOptions = {}): FakeHass {
   let stored: ProfileSchedule | null = opts.initialSchedule ?? null;
-  const callWS = vi.fn(async (msg: { type: string } & Record<string, unknown>) => {
-    if (msg.type === 'comfort_band/get_schedule') return stored;
-    return null;
+  let activeCallback: ((event: { schedule: ProfileSchedule | null }) => void) | null = null;
+
+  const unsub = vi.fn(() => {
+    activeCallback = null;
   });
+
+  const subscribeMessage = vi.fn(
+    async (
+      callback: (event: { schedule: ProfileSchedule | null }) => void,
+      _msg: { type: string } & Record<string, unknown>,
+    ): Promise<UnsubscribeFunc> => {
+      activeCallback = callback;
+      // Backend sends the initial value immediately after the ack.
+      Promise.resolve().then(() => callback({ schedule: stored }));
+      return unsub;
+    },
+  );
+
   const callService = vi.fn(
     async (_domain: string, service: string, data?: Record<string, unknown>) => {
       if (service === 'set_schedule' && data) {
@@ -24,10 +51,14 @@ function makeHass(opts: FakeHassOptions = {}): HomeAssistant {
           baseline: [...((data.transitions as Transition[]) ?? [])],
           current: [...((data.transitions as Transition[]) ?? [])],
         };
+        // Echo via the active subscription on a microtask, matching the real
+        // backend's async dispatcher → WS frame → client delivery timing.
+        Promise.resolve().then(() => activeCallback?.({ schedule: stored }));
       }
     },
   );
-  return {
+
+  const hass: HomeAssistant = {
     states: {
       'select.comfort_band_profiles_active_profile': {
         entity_id: 'select.comfort_band_profiles_active_profile',
@@ -58,37 +89,43 @@ function makeHass(opts: FakeHassOptions = {}): HomeAssistant {
         name: null,
       },
     },
+    connection: {
+      subscribeMessage: subscribeMessage as unknown as HassConnection['subscribeMessage'],
+    },
     callService,
-    callWS: callWS as HomeAssistant['callWS'],
+    callWS: vi.fn(),
+  };
+  return {
+    hass,
+    subscribeMessage,
+    pushUpdate: (schedule) => activeCallback?.({ schedule }),
+    unsub,
   };
 }
 
 async function tab(hass: HomeAssistant, zone = 'gym'): Promise<ComfortBandScheduleTab> {
   const el = await mount('comfort-band-schedule-tab', { hass, zone });
-  // Allow the async fetch in willUpdate to resolve.
+  // Allow the async subscribe + initial-value microtask to resolve.
   await new Promise((r) => setTimeout(r, 0));
   await el.updateComplete;
   return el;
 }
 
 describe('comfort-band-schedule-tab', () => {
-  it('fetches the schedule for the active profile via callWS', async () => {
-    const hass = makeHass({
-      initialSchedule: {
-        baseline: [{ at: '06:00', low: 20, high: 23 }],
-        current: [{ at: '06:00', low: 20, high: 23 }],
-      },
-    });
+  it('opens a subscription for the active (zone, profile) on mount', async () => {
+    const { hass, subscribeMessage } = makeHass();
     await tab(hass);
-    expect(hass.callWS).toHaveBeenCalledWith({
-      type: 'comfort_band/get_schedule',
+    expect(subscribeMessage).toHaveBeenCalledTimes(1);
+    const [, msg] = subscribeMessage.mock.calls[0];
+    expect(msg).toEqual({
+      type: 'comfort_band/subscribe_schedule',
       zone: 'gym',
       profile: 'home',
     });
   });
 
-  it('renders transitions from the fetched schedule', async () => {
-    const hass = makeHass({
+  it('renders transitions delivered by the initial subscription event', async () => {
+    const { hass } = makeHass({
       initialSchedule: {
         baseline: [
           { at: '06:00', low: 20, high: 23 },
@@ -104,16 +141,37 @@ describe('comfort-band-schedule-tab', () => {
     expect(points.length).toBe(2);
   });
 
+  it('re-renders when the subscription pushes a live update', async () => {
+    const fake = makeHass({
+      initialSchedule: { baseline: [], current: [] },
+    });
+    const el = await tab(fake.hass);
+    expect(
+      el.shadowRoot!.querySelector('timeline-editor')!.shadowRoot!.querySelectorAll('.point')
+        .length,
+    ).toBe(0);
+
+    fake.pushUpdate({
+      baseline: [{ at: '07:00', low: 19.5, high: 22.5 }],
+      current: [],
+    });
+    await el.updateComplete;
+    expect(
+      el.shadowRoot!.querySelector('timeline-editor')!.shadowRoot!.querySelectorAll('.point')
+        .length,
+    ).toBe(1);
+  });
+
   it('handles a null schedule (zone has no profile schedule yet) without error', async () => {
-    const hass = makeHass({ initialSchedule: null });
+    const { hass } = makeHass({ initialSchedule: null });
     const el = await tab(hass);
     expect(el.shadowRoot!.textContent).not.toContain('Failed');
     const editor = el.shadowRoot!.querySelector('timeline-editor');
     expect(editor).not.toBeNull();
   });
 
-  it('persists deletions via comfort_band.set_schedule', async () => {
-    const hass = makeHass({
+  it('persists deletions via comfort_band.set_schedule (no extra get_schedule call)', async () => {
+    const { hass } = makeHass({
       initialSchedule: {
         baseline: [
           { at: '06:00', low: 20, high: 23 },
@@ -138,10 +196,11 @@ describe('comfort-band-schedule-tab', () => {
       profile: 'home',
       transitions: [{ at: '06:00', low: 20, high: 23 }],
     });
+    expect(hass.callWS).not.toHaveBeenCalled();
   });
 
   it('opens the dialog on transition-edit then persists the new values on save', async () => {
-    const hass = makeHass({
+    const { hass } = makeHass({
       initialSchedule: {
         baseline: [{ at: '06:00', low: 20, high: 23 }],
         current: [],
@@ -178,7 +237,7 @@ describe('comfort-band-schedule-tab', () => {
   });
 
   it('opens the add dialog on transition-add and persists the new transition on save', async () => {
-    const hass = makeHass({ initialSchedule: null });
+    const { hass } = makeHass({ initialSchedule: null });
     const el = await tab(hass);
 
     const editor1 = el.shadowRoot!.querySelector('timeline-editor')!;
@@ -210,7 +269,7 @@ describe('comfort-band-schedule-tab', () => {
   });
 
   it('cancel returns to the list mode without writing', async () => {
-    const hass = makeHass({ initialSchedule: null });
+    const { hass } = makeHass({ initialSchedule: null });
     const el = await tab(hass);
     const editor2 = el.shadowRoot!.querySelector('timeline-editor')!;
     editor2.dispatchEvent(
@@ -226,5 +285,333 @@ describe('comfort-band-schedule-tab', () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('transition-edit-dialog')).toBeNull();
     expect(hass.callService).not.toHaveBeenCalled();
+  });
+
+  it('resubscribes when the active profile flips', async () => {
+    const fake = makeHass({ active: 'home', initialSchedule: null });
+    const el = await tab(fake.hass);
+    expect(fake.subscribeMessage).toHaveBeenCalledTimes(1);
+    expect(fake.unsub).not.toHaveBeenCalled();
+
+    // Simulate a profile flip via the existing hass-prop pattern.
+    fake.hass.states['select.comfort_band_profiles_active_profile'] = {
+      ...fake.hass.states['select.comfort_band_profiles_active_profile'],
+      state: 'away',
+    };
+    el.hass = { ...fake.hass };
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+
+    expect(fake.unsub).toHaveBeenCalledTimes(1);
+    expect(fake.subscribeMessage).toHaveBeenCalledTimes(2);
+    const [, msg] = fake.subscribeMessage.mock.calls[1];
+    expect(msg).toMatchObject({ zone: 'gym', profile: 'away' });
+  });
+
+  it('keeps the editor visible (no .loading flash) across a profile flip', async () => {
+    // Stale data is in place when the flip happens — we must NOT drop back
+    // to the "Loading schedule…" placeholder while the new subscription
+    // resolves; that would be a visible flash.
+    const fake = makeHass({
+      active: 'home',
+      initialSchedule: {
+        baseline: [{ at: '06:00', low: 20, high: 23 }],
+        current: [],
+      },
+    });
+    const el = await tab(fake.hass);
+    expect(el.shadowRoot!.querySelector('.loading')).toBeNull();
+
+    fake.hass.states['select.comfort_band_profiles_active_profile'] = {
+      ...fake.hass.states['select.comfort_band_profiles_active_profile'],
+      state: 'away',
+    };
+    el.hass = { ...fake.hass };
+    await el.updateComplete;
+
+    // Before any new initial event arrives we should still see the editor,
+    // not the loading placeholder.
+    expect(el.shadowRoot!.querySelector('.loading')).toBeNull();
+    expect(el.shadowRoot!.querySelector('timeline-editor')).not.toBeNull();
+  });
+
+  it('unsubscribes when the element is removed from the DOM', async () => {
+    const fake = makeHass();
+    const el = await tab(fake.hass);
+    expect(fake.unsub).not.toHaveBeenCalled();
+    el.remove();
+    expect(fake.unsub).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-subscribes when reattached to the DOM after a disconnect', async () => {
+    const fake = makeHass();
+    const el = await tab(fake.hass);
+    expect(fake.subscribeMessage).toHaveBeenCalledTimes(1);
+
+    el.remove();
+    expect(fake.unsub).toHaveBeenCalledTimes(1);
+
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+
+    expect(fake.subscribeMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not flash the loading state on DOM reattach when stale data exists', async () => {
+    const fake = makeHass({
+      initialSchedule: {
+        baseline: [{ at: '06:00', low: 20, high: 23 }],
+        current: [],
+      },
+    });
+    const el = await tab(fake.hass);
+    expect(el.shadowRoot!.querySelector('.loading')).toBeNull();
+
+    el.remove();
+    document.body.appendChild(el);
+    // No microtask gap: the user perceives the in-between frame.
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.querySelector('.loading')).toBeNull();
+    expect(el.shadowRoot!.querySelector('timeline-editor')).not.toBeNull();
+  });
+
+  it('preserves already-rendered transitions when a re-subscribe errors', async () => {
+    const subscribeMessage = vi
+      .fn()
+      .mockImplementationOnce(async (cb: (event: { schedule: ProfileSchedule | null }) => void) => {
+        // First subscribe: succeed with initial data.
+        Promise.resolve().then(() =>
+          cb({
+            schedule: {
+              baseline: [{ at: '06:00', low: 20, high: 23 }],
+              current: [],
+            },
+          }),
+        );
+        return () => {};
+      })
+      .mockRejectedValueOnce(new Error('network down'));
+
+    const hass: HomeAssistant = {
+      states: {
+        'select.comfort_band_profiles_active_profile': {
+          entity_id: 'select.comfort_band_profiles_active_profile',
+          state: 'home',
+          attributes: { options: ['home', 'away', 'sleep'] },
+          last_changed: '',
+          last_updated: '',
+        },
+      },
+      devices: {
+        'dev-pm': {
+          id: 'dev-pm',
+          identifiers: [['comfort_band', 'profile_manager']],
+          name: 'Comfort Band Profiles',
+          name_by_user: null,
+          area_id: null,
+        },
+      },
+      entities: {
+        'select.comfort_band_profiles_active_profile': {
+          entity_id: 'select.comfort_band_profiles_active_profile',
+          platform: 'comfort_band',
+          device_id: 'dev-pm',
+          area_id: null,
+          hidden: false,
+          entity_category: null,
+          translation_key: 'active_profile',
+          name: null,
+        },
+      },
+      connection: {
+        subscribeMessage: subscribeMessage as unknown as HassConnection['subscribeMessage'],
+      },
+      callService: vi.fn(),
+      callWS: vi.fn(),
+    };
+
+    const el = await mount('comfort-band-schedule-tab', { hass, zone: 'gym' });
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+    // First subscribe delivered one transition.
+    expect(
+      el.shadowRoot!.querySelector('timeline-editor')!.shadowRoot!.querySelectorAll('.point')
+        .length,
+    ).toBe(1);
+
+    // Flip the profile so the second (failing) subscribe runs.
+    hass.states['select.comfort_band_profiles_active_profile'] = {
+      ...hass.states['select.comfort_band_profiles_active_profile'],
+      state: 'away',
+    };
+    el.hass = { ...hass };
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+
+    // Error overlay replaces the editor (existing render contract), but
+    // the underlying _transitions are preserved so the next successful
+    // subscribe can render them again without a wipe-and-refetch.
+    const errorDiv = el.shadowRoot!.querySelector('.error');
+    expect(errorDiv).not.toBeNull();
+    expect(errorDiv!.textContent).toContain('network down');
+  });
+
+  it('surfaces a subscribe error in the UI', async () => {
+    const subscribeMessage = vi.fn().mockRejectedValue(new Error('boom: zone not found'));
+    const hass: HomeAssistant = {
+      states: {
+        'select.comfort_band_profiles_active_profile': {
+          entity_id: 'select.comfort_band_profiles_active_profile',
+          state: 'home',
+          attributes: { options: ['home', 'away', 'sleep'] },
+          last_changed: '',
+          last_updated: '',
+        },
+      },
+      devices: {
+        'dev-pm': {
+          id: 'dev-pm',
+          identifiers: [['comfort_band', 'profile_manager']],
+          name: 'Comfort Band Profiles',
+          name_by_user: null,
+          area_id: null,
+        },
+      },
+      entities: {
+        'select.comfort_band_profiles_active_profile': {
+          entity_id: 'select.comfort_band_profiles_active_profile',
+          platform: 'comfort_band',
+          device_id: 'dev-pm',
+          area_id: null,
+          hidden: false,
+          entity_category: null,
+          translation_key: 'active_profile',
+          name: null,
+        },
+      },
+      connection: {
+        subscribeMessage: subscribeMessage as unknown as HassConnection['subscribeMessage'],
+      },
+      callService: vi.fn(),
+      callWS: vi.fn(),
+    };
+
+    const el = await mount('comfort-band-schedule-tab', { hass, zone: 'gym' });
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+
+    const errorDiv = el.shadowRoot!.querySelector('.error');
+    expect(errorDiv).not.toBeNull();
+    expect(errorDiv!.textContent).toContain('boom');
+  });
+
+  it('surfaces a save error without clobbering already-rendered transitions', async () => {
+    const fake = makeHass({
+      initialSchedule: {
+        baseline: [{ at: '06:00', low: 20, high: 23 }],
+        current: [],
+      },
+    });
+    (fake.hass.callService as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('save failed'),
+    );
+    const el = await tab(fake.hass);
+
+    const editor = el.shadowRoot!.querySelector('timeline-editor')!;
+    editor.dispatchEvent(
+      new CustomEvent('transition-delete', {
+        detail: { at: '06:00' },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+
+    const errorDiv = el.shadowRoot!.querySelector('.error');
+    expect(errorDiv).not.toBeNull();
+    expect(errorDiv!.textContent).toContain('save failed');
+  });
+
+  it('cancels an in-flight subscribe when superseded by a profile flip', async () => {
+    let resolveFirst: ((u: UnsubscribeFunc) => void) | null = null;
+    const firstUnsub = vi.fn();
+    const secondUnsub = vi.fn();
+
+    const subscribeMessage = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<UnsubscribeFunc>((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(async () => secondUnsub);
+
+    const hass: HomeAssistant = {
+      states: {
+        'select.comfort_band_profiles_active_profile': {
+          entity_id: 'select.comfort_band_profiles_active_profile',
+          state: 'home',
+          attributes: { options: ['home', 'away', 'sleep'] },
+          last_changed: '',
+          last_updated: '',
+        },
+      },
+      devices: {
+        'dev-pm': {
+          id: 'dev-pm',
+          identifiers: [['comfort_band', 'profile_manager']],
+          name: 'Comfort Band Profiles',
+          name_by_user: null,
+          area_id: null,
+        },
+      },
+      entities: {
+        'select.comfort_band_profiles_active_profile': {
+          entity_id: 'select.comfort_band_profiles_active_profile',
+          platform: 'comfort_band',
+          device_id: 'dev-pm',
+          area_id: null,
+          hidden: false,
+          entity_category: null,
+          translation_key: 'active_profile',
+          name: null,
+        },
+      },
+      connection: {
+        subscribeMessage: subscribeMessage as unknown as HassConnection['subscribeMessage'],
+      },
+      callService: vi.fn(),
+      callWS: vi.fn(),
+    };
+
+    const el = await mount('comfort-band-schedule-tab', { hass, zone: 'gym' });
+    // First subscribe is still pending. Trigger a profile flip.
+    el.hass = {
+      ...hass,
+      states: {
+        'select.comfort_band_profiles_active_profile': {
+          ...hass.states['select.comfort_band_profiles_active_profile'],
+          state: 'away',
+        },
+      },
+    };
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(subscribeMessage).toHaveBeenCalledTimes(2);
+    expect(firstUnsub).not.toHaveBeenCalled();
+
+    // Now resolve the first subscribe with its unsub handle. Because the gen
+    // counter has advanced, the subscribe must tear itself down rather than
+    // overwriting `_unsub`.
+    resolveFirst!(firstUnsub);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(firstUnsub).toHaveBeenCalledTimes(1);
   });
 });

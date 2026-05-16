@@ -2,7 +2,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import '../src/history-chart.js';
 import type { ComfortBandHistoryChart } from '../src/history-chart.js';
 import type { HomeAssistant } from '../src/types.js';
-import { mount, teardown } from './_fixture.js';
+import { mount, stubConnection, teardown } from './_fixture.js';
 
 afterEach(teardown);
 
@@ -11,6 +11,7 @@ function makeHass(callWS: HomeAssistant['callWS']): HomeAssistant {
     states: {},
     devices: {},
     entities: {},
+    connection: stubConnection(),
     callService: vi.fn(),
     callWS,
   };

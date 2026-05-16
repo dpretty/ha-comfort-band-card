@@ -2,15 +2,16 @@
  * `<comfort-band-schedule-tab>` — Schedule tab content.
  *
  * Workflow:
- *   1. On first render, fetch the current profile's schedule via the
- *      `comfort_band/get_schedule` websocket command.
+ *   1. On mount, open a `comfort_band/subscribe_schedule` subscription for
+ *      the active (zone, profile). The backend sends the current state
+ *      immediately, then one event per future change — from any source.
  *   2. Render the timeline editor + the transitions.
  *   3. User taps empty timeline → add dialog (inline). User taps a
  *      transition → edit dialog. Long-press → delete event.
  *   4. All edits persist via `comfort_band.set_schedule` (full schedule
  *      replacement — atomic and simpler than per-transition mutations).
- *   5. After write, re-fetch via getSchedule so the displayed list
- *      stays in sync with the store (which may have normalised values).
+ *      The subscription delivers the echo, so two cards on different
+ *      dashboards stay in sync without polling.
  */
 
 import { LitElement, html, css, nothing } from 'lit';
@@ -19,8 +20,8 @@ import { customElement, property, state } from 'lit/decorators.js';
 import '../timeline-editor.js';
 import '../transition-edit-dialog.js';
 import { findActiveProfileEntity } from '../helpers.js';
-import { getSchedule, setSchedule } from '../services.js';
-import type { HomeAssistant, Transition } from '../types.js';
+import { setSchedule, subscribeSchedule } from '../services.js';
+import type { HomeAssistant, Transition, UnsubscribeFunc } from '../types.js';
 import { tokens } from '../styles.js';
 
 type Mode = 'list' | 'add' | 'edit';
@@ -32,11 +33,16 @@ export class ComfortBandScheduleTab extends LitElement {
 
   @state() private _profile = '';
   @state() private _transitions: Transition[] = [];
-  @state() private _loading = true;
+  @state() private _loading = false;
   @state() private _error: string | null = null;
   @state() private _mode: Mode = 'list';
   @state() private _editing: Transition | null = null;
   @state() private _newAt = '06:00';
+  private _unsub?: UnsubscribeFunc;
+  // Incremented on every (re)subscribe and unsubscribe so stale callbacks
+  // and slow `subscribeMessage` round-trips from a superseded attempt can
+  // detect that they should bail out instead of leaking a subscription.
+  private _subscribeGen = 0;
 
   public static override styles = [
     tokens,
@@ -102,7 +108,7 @@ export class ComfortBandScheduleTab extends LitElement {
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has('hass') && this.hass && this._profile === '') {
       this._profile = readActiveProfile(this.hass) ?? 'home';
-      void this._refresh();
+      void this._subscribe();
     }
   }
 
@@ -111,26 +117,80 @@ export class ComfortBandScheduleTab extends LitElement {
       const next = readActiveProfile(this.hass);
       if (next && next !== this._profile) {
         this._profile = next;
-        void this._refresh();
+        void this._resubscribe();
       }
     }
   }
 
-  private async _refresh(): Promise<void> {
-    if (!this.hass || !this.zone || !this._profile) return;
-    this._loading = true;
+  public override connectedCallback(): void {
+    super.connectedCallback();
+    // Re-subscribe after a DOM detach/reattach (e.g. switching dashboard
+    // tabs). `willUpdate`'s `_profile === ''` guard doesn't fire here
+    // because `_profile` is already set from the prior mount. On the very
+    // first mount this is a no-op: `_profile` is still the empty string
+    // (falsy), so willUpdate owns the initial subscribe.
+    if (this.hass && this.zone && this._profile && !this._unsub) {
+      void this._subscribe();
+    }
+  }
+
+  public override disconnectedCallback(): void {
+    this._unsubscribe();
+    super.disconnectedCallback();
+  }
+
+  private async _subscribe(): Promise<void> {
+    if (!this.hass || !this.zone || !this._profile) {
+      // Defensive: a misconfigured or torn-down element should never sit
+      // in the "Loading…" state. Callers always check these conditions
+      // before us, so this branch is unreachable in practice.
+      this._loading = false;
+      return;
+    }
+    const gen = ++this._subscribeGen;
+    // Only show the loading state when we have nothing to display. On a
+    // re-subscribe (profile flip, reconnect) keep the stale data visible
+    // so the tab doesn't flash empty.
+    if (this._transitions.length === 0) this._loading = true;
     this._error = null;
     try {
-      const schedule = await getSchedule(this.hass, {
-        zone: this.zone,
-        profile: this._profile,
-      });
-      this._transitions = schedule?.baseline ? [...schedule.baseline] : [];
+      const unsub = await subscribeSchedule(
+        this.hass,
+        { zone: this.zone, profile: this._profile },
+        (schedule) => {
+          if (gen !== this._subscribeGen) return;
+          this._transitions = schedule?.baseline ? [...schedule.baseline] : [];
+          this._loading = false;
+        },
+      );
+      if (gen !== this._subscribeGen) {
+        // Superseded while awaiting the round-trip — release the
+        // dangling server-side subscription instead of leaking it.
+        unsub();
+        return;
+      }
+      this._unsub = unsub;
     } catch (err) {
-      this._error = err instanceof Error ? err.message : 'Failed to load schedule.';
-    } finally {
+      if (gen !== this._subscribeGen) return;
+      this._error = err instanceof Error ? err.message : 'Failed to subscribe.';
       this._loading = false;
     }
+  }
+
+  private _unsubscribe(): void {
+    // Bumping the gen here (in addition to `_subscribe()`'s bump) is
+    // load-bearing: it invalidates an in-flight subscribe whose
+    // `await subscribeSchedule(...)` may resolve after we've already
+    // unsubscribed. Without it, the resolved handle would overwrite
+    // `_unsub` for an element that already tore itself down.
+    this._subscribeGen++;
+    this._unsub?.();
+    this._unsub = undefined;
+  }
+
+  private _resubscribe(): Promise<void> {
+    this._unsubscribe();
+    return this._subscribe();
   }
 
   private _onAdd = (event: CustomEvent<{ at: string }>) => {
@@ -195,8 +255,9 @@ export class ComfortBandScheduleTab extends LitElement {
         profile: this._profile,
         transitions,
       });
+      // Optimistic update; the subscription will echo the persisted (and
+      // normalised) state right after.
       this._transitions = transitions;
-      void this._refresh();
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to save schedule.';
     }
