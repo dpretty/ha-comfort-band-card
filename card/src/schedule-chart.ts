@@ -260,9 +260,10 @@ export class ComfortBandScheduleChart extends LitElement {
       longPressed: false,
     };
     drag.longPressTimer = window.setTimeout(() => {
+      drag.longPressTimer = null;
       if (this._drag === drag && !drag.moved) {
         drag.longPressed = true;
-        this._fire('transition-delete', { at: transition.at });
+        this._fire('transition-delete', { at: drag.origin.at });
       }
     }, LONG_PRESS_MS);
     this._drag = drag;
@@ -303,7 +304,7 @@ export class ComfortBandScheduleChart extends LitElement {
     this._preview = { at: formatTime(newAtMins), low, high };
   };
 
-  private _onHandlePointerUp = (event: PointerEvent, transition: Transition) => {
+  private _onHandlePointerUp = (event: PointerEvent) => {
     const drag = this._drag;
     if (!drag || drag.kind !== 'handle') return;
     const target = event.currentTarget as SVGElement;
@@ -320,13 +321,17 @@ export class ComfortBandScheduleChart extends LitElement {
     this._drag = null;
     this._preview = null;
     if (drag.longPressed) return;
+    // Source identity from `drag.origin`, not from a render-time closure
+    // capture of the live transition prop — a subscription echo could
+    // re-render the chart mid-drag and re-bind the closure to a new
+    // object, leaving the tap/update referencing the wrong `at`.
     if (!drag.moved) {
-      this._fire('transition-edit', { transition });
+      this._fire('transition-edit', { transition: drag.origin });
       return;
     }
     if (preview) {
       this._fire('transition-update', {
-        oldAt: transition.at,
+        oldAt: drag.origin.at,
         transition: { at: preview.at, low: preview.low, high: preview.high },
       });
     }
@@ -391,7 +396,11 @@ export class ComfortBandScheduleChart extends LitElement {
     this._drag = null;
     if (cancelled || moved || !svgEl) return;
     const rect = svgEl.getBoundingClientRect();
-    const atMins = this._clientToMinutes(event.clientX, rect);
+    // Clamp before formatting — a tap at the right-most pixel maps to
+    // snapMinutes(1440) which would format as "24:00", an invalid HH:MM
+    // string the backend would reject. MAX_MINUTES (23:45) is the latest
+    // valid slot.
+    const atMins = clamp(this._clientToMinutes(event.clientX, rect), MIN_MINUTES, MAX_MINUTES);
     // Don't fire if the tap lands on an existing transition's `at` snap-slot.
     for (const t of this.transitions) if (parseTime(t.at) === atMins) return;
     const tempCentre = this._clientToTemp(event.clientY, rect);
@@ -483,13 +492,14 @@ export class ComfortBandScheduleChart extends LitElement {
 
   /** Collect (x, y) corners of a stepped line over one day. The day wraps:
    *  the value held from 00:00 until the first transition fires is the
-   *  same as the value held from the last transition until 24:00. */
+   *  same as the value held from the last transition until 24:00.
+   *  Assumes `transitions` is already sorted by `at` ascending — every
+   *  caller goes through `_renderedTransitions()` which sorts. */
   private _stepPoints(transitions: Transition[], pick: 'low' | 'high'): Array<[number, number]> {
-    const sorted = [...transitions].sort((a, b) => parseTime(a.at) - parseTime(b.at));
-    const wrap = sorted[sorted.length - 1][pick];
+    const wrap = transitions[transitions.length - 1][pick];
     const pts: Array<[number, number]> = [[0, this._tempToY(wrap)]];
     let current = wrap;
-    for (const t of sorted) {
+    for (const t of transitions) {
       const x = this._timeToX(parseTime(t.at));
       pts.push([x, this._tempToY(current)]);
       pts.push([x, this._tempToY(t[pick])]);
@@ -529,7 +539,6 @@ export class ComfortBandScheduleChart extends LitElement {
         <svg
           viewBox="0 0 ${VIEW_W} ${VIEW_H}"
           preserveAspectRatio="none"
-          role="img"
           aria-label="Schedule chart: drag the circular handles to adjust each transition's time and band."
           @pointerdown=${this._onBackgroundPointerDown}
           @pointermove=${this._onBackgroundPointerMove}
@@ -572,7 +581,7 @@ export class ComfortBandScheduleChart extends LitElement {
                 data-handle="low"
                 @pointerdown=${(e: PointerEvent) => this._onHandlePointerDown(e, t, 'low')}
                 @pointermove=${this._onHandlePointerMove}
-                @pointerup=${(e: PointerEvent) => this._onHandlePointerUp(e, t)}
+                @pointerup=${this._onHandlePointerUp}
                 @pointercancel=${this._onHandlePointerCancel}
                 @keydown=${(e: KeyboardEvent) => this._onHandleKeyDown(e, t, 'low')}
                 @focus=${() => this._onHandleFocus(t, 'low')}
@@ -590,7 +599,7 @@ export class ComfortBandScheduleChart extends LitElement {
                 data-handle="high"
                 @pointerdown=${(e: PointerEvent) => this._onHandlePointerDown(e, t, 'high')}
                 @pointermove=${this._onHandlePointerMove}
-                @pointerup=${(e: PointerEvent) => this._onHandlePointerUp(e, t)}
+                @pointerup=${this._onHandlePointerUp}
                 @pointercancel=${this._onHandlePointerCancel}
                 @keydown=${(e: KeyboardEvent) => this._onHandleKeyDown(e, t, 'high')}
                 @focus=${() => this._onHandleFocus(t, 'high')}

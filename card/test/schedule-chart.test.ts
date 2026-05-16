@@ -263,6 +263,30 @@ describe('comfort-band-schedule-chart', () => {
     expect(edit).not.toHaveBeenCalled();
   });
 
+  it('pointercancel on the SVG background does not fire transition-add', async () => {
+    const el = await chart();
+    const fire = vi.fn();
+    el.addEventListener('transition-add', fire);
+    const svg = el.shadowRoot!.querySelector('svg') as SVGElement;
+    const x = xFromTime('12:00');
+    const y = yFromTemp(21);
+    svg.dispatchEvent(pointer('pointerdown', x, y));
+    svg.dispatchEvent(pointer('pointercancel', x, y));
+    expect(fire).not.toHaveBeenCalled();
+  });
+
+  it('tap on the right edge clamps to 23:45 rather than emitting "24:00"', async () => {
+    const el = await chart([]);
+    const fire = vi.fn();
+    el.addEventListener('transition-add', fire);
+    const svg = el.shadowRoot!.querySelector('svg') as SVGElement;
+    // Rightmost pixel — would otherwise format to "24:00" which is invalid.
+    svg.dispatchEvent(pointer('pointerdown', 600, yFromTemp(21)));
+    svg.dispatchEvent(pointer('pointerup', 600, yFromTemp(21)));
+    expect(fire).toHaveBeenCalledOnce();
+    expect(fire.mock.calls[0][0].detail.at).toBe('23:45');
+  });
+
   it('pointercancel before any movement does not fire transition-edit', async () => {
     const el = await chart();
     const edit = vi.fn();
