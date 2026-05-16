@@ -51,6 +51,9 @@ export class ComfortBandProfilesTab extends LitElement {
   /** Which row's overflow menu is open. */
   @state() private _openMenu: string | null = null;
   @state() private _error: string | null = null;
+  /** True while a service call is in flight. Disables action buttons to
+   *  prevent double-submit. */
+  @state() private _busy = false;
 
   private _onDocumentClick = (e: MouseEvent): void => {
     if (this._openMenu === null) return;
@@ -178,7 +181,10 @@ export class ComfortBandProfilesTab extends LitElement {
         background: transparent;
         border: none;
         cursor: pointer;
-        padding: 4px 8px;
+        /* WCAG 2.5.5: 44×44 minimum touch target. */
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0 8px;
         border-radius: var(--cb-radius-pill);
         color: inherit;
         opacity: 0.7;
@@ -275,6 +281,11 @@ export class ComfortBandProfilesTab extends LitElement {
     active: string;
     defaultProfile: string;
     descriptions: Record<string, string>;
+    /** True when the backend has been upgraded to ≥ v0.3.0 (the version
+     *  that exposes `default_profile` + per-profile descriptions). On
+     *  older backends we hide the CRUD affordances so the user doesn't
+     *  see buttons that always error. */
+    crudAvailable: boolean;
   } | null {
     if (!this.hass) return null;
     const entityId = findActiveProfileEntity(this.hass);
@@ -287,9 +298,8 @@ export class ComfortBandProfilesTab extends LitElement {
       : [];
     const active = typeof state.state === 'string' ? state.state : '';
     const defaultAttr = state.attributes.default_profile;
-    // Fall back to "home" if the backend hasn't been upgraded yet so the
-    // UI degrades gracefully.
-    const defaultProfile = typeof defaultAttr === 'string' && defaultAttr ? defaultAttr : 'home';
+    const crudAvailable = typeof defaultAttr === 'string' && !!defaultAttr;
+    const defaultProfile = crudAvailable ? (defaultAttr as string) : 'home';
     const descAttr = state.attributes.descriptions;
     const descriptions: Record<string, string> = {};
     if (descAttr && typeof descAttr === 'object' && !Array.isArray(descAttr)) {
@@ -297,7 +307,7 @@ export class ComfortBandProfilesTab extends LitElement {
         if (typeof v === 'string') descriptions[k] = v;
       }
     }
-    return { options, active, defaultProfile, descriptions };
+    return { options, active, defaultProfile, descriptions, crudAvailable };
   }
 
   private _onSelect(profile: string): void {
@@ -308,6 +318,39 @@ export class ComfortBandProfilesTab extends LitElement {
   private _toggleMenu(profile: string, e: Event): void {
     e.stopPropagation();
     this._openMenu = this._openMenu === profile ? null : profile;
+  }
+
+  /** Keyboard navigation inside the open overflow menu — Escape closes,
+   *  ArrowUp/ArrowDown moves focus, satisfying ARIA's `role="menu"` contract. */
+  private _onMenuKeydown(e: KeyboardEvent, profile: string): void {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      this._openMenu = null;
+      // Return focus to the originating overflow button so keyboard
+      // users don't lose their place in the list.
+      requestAnimationFrame(() => {
+        const li = this.shadowRoot?.querySelector<HTMLLIElement>(`li[data-profile="${profile}"]`);
+        li?.querySelector<HTMLButtonElement>('.overflow')?.focus();
+      });
+      return;
+    }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    e.stopPropagation();
+    const items = Array.from(
+      (e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>(
+        'button[role="menuitem"]:not([disabled])',
+      ),
+    );
+    if (items.length === 0) return;
+    const activeEl = this.shadowRoot?.activeElement as HTMLElement | null;
+    const idx = activeEl ? items.indexOf(activeEl as HTMLButtonElement) : -1;
+    const next =
+      e.key === 'ArrowDown'
+        ? items[(idx + 1) % items.length]
+        : items[(idx - 1 + items.length) % items.length];
+    next.focus();
   }
 
   private _onNew(): void {
@@ -344,10 +387,11 @@ export class ComfortBandProfilesTab extends LitElement {
   };
 
   private _onDialogSave = async (e: DialogSaveEvent): Promise<void> => {
-    if (!this.hass) return;
+    if (!this.hass || this._busy) return;
     const { name, description } = e.detail;
     const mode = this._mode;
     const target = this._target;
+    this._busy = true;
     try {
       if (mode === 'create') {
         await createProfile(this.hass, { name, description });
@@ -366,12 +410,15 @@ export class ComfortBandProfilesTab extends LitElement {
       this._error = null;
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to save profile.';
+    } finally {
+      this._busy = false;
     }
   };
 
   private _onConfirmDelete = async (): Promise<void> => {
-    if (!this.hass || !this._target) return;
+    if (!this.hass || !this._target || this._busy) return;
     const target = this._target;
+    this._busy = true;
     try {
       await deleteProfile(this.hass, { name: target });
       this._mode = 'list';
@@ -379,6 +426,8 @@ export class ComfortBandProfilesTab extends LitElement {
       this._error = null;
     } catch (err) {
       this._error = err instanceof Error ? err.message : 'Failed to delete profile.';
+    } finally {
+      this._busy = false;
     }
   };
 
@@ -388,7 +437,7 @@ export class ComfortBandProfilesTab extends LitElement {
     if (state === null) {
       return html`<div class="empty">Profile manager not registered yet.</div>`;
     }
-    const { options, active, defaultProfile, descriptions } = state;
+    const { options, active, defaultProfile, descriptions, crudAvailable } = state;
 
     if (this._mode === 'create' || this._mode === 'clone' || this._mode === 'rename') {
       return html`
@@ -397,6 +446,7 @@ export class ComfortBandProfilesTab extends LitElement {
           .mode=${this._mode}
           .existingName=${this._target ?? ''}
           .existingNames=${options}
+          .busy=${this._busy}
           @dialog-save=${this._onDialogSave}
           @dialog-cancel=${this._onDialogCancel}
         ></profile-edit-dialog>
@@ -417,8 +467,12 @@ export class ComfortBandProfilesTab extends LitElement {
           </p>
           ${this._error ? html`<div class="error">${this._error}</div>` : null}
           <div class="confirm-actions">
-            <button class="button secondary" @click=${this._onDialogCancel}>Cancel</button>
-            <button class="button danger" @click=${this._onConfirmDelete}>Delete</button>
+            <button class="button secondary" ?disabled=${this._busy} @click=${this._onDialogCancel}>
+              Cancel
+            </button>
+            <button class="button danger" ?disabled=${this._busy} @click=${this._onConfirmDelete}>
+              Delete
+            </button>
           </div>
         </div>
       `;
@@ -430,9 +484,15 @@ export class ComfortBandProfilesTab extends LitElement {
 
     return html`
       ${this._error ? html`<div class="error">${this._error}</div>` : null}
-      <button class="new-profile" type="button" @click=${this._onNew}>+ New profile</button>
+      ${crudAvailable
+        ? html`<button class="new-profile" type="button" @click=${this._onNew}>
+            + New profile
+          </button>`
+        : nothing}
       <ul role="listbox" aria-label="Profiles">
-        ${options.map((profile) => this._renderRow(profile, active, defaultProfile, descriptions))}
+        ${options.map((profile) =>
+          this._renderRow(profile, active, defaultProfile, descriptions, crudAvailable),
+        )}
       </ul>
     `;
   }
@@ -442,12 +502,14 @@ export class ComfortBandProfilesTab extends LitElement {
     active: string,
     defaultProfile: string,
     descriptions: Record<string, string>,
+    crudAvailable: boolean,
   ) {
     const isActive = profile === active;
     const isDefault = profile === defaultProfile;
     const description = descriptions[profile] ?? '';
     return html`
       <li
+        data-profile=${profile}
         role="option"
         tabindex="0"
         class=${isActive ? 'active' : ''}
@@ -465,19 +527,26 @@ export class ComfortBandProfilesTab extends LitElement {
           ${description ? html`<span class="description">${description}</span>` : nothing}
         </span>
         ${isActive ? html`<span class="badge">Active</span>` : nothing}
-        <button
-          class="overflow"
-          type="button"
-          aria-label="More actions for ${profile}"
-          aria-haspopup="menu"
-          aria-expanded=${this._openMenu === profile}
-          @click=${(e: Event) => this._toggleMenu(profile, e)}
-        >
-          ⋮
-        </button>
+        ${crudAvailable
+          ? html`<button
+              class="overflow"
+              type="button"
+              aria-label="More actions for ${profile}"
+              aria-haspopup="menu"
+              aria-expanded=${this._openMenu === profile}
+              @click=${(e: Event) => this._toggleMenu(profile, e)}
+            >
+              ⋮
+            </button>`
+          : nothing}
         ${this._openMenu === profile
           ? html`
-              <div class="menu" role="menu" @click=${(e: Event) => e.stopPropagation()}>
+              <div
+                class="menu"
+                role="menu"
+                @click=${(e: Event) => e.stopPropagation()}
+                @keydown=${(e: KeyboardEvent) => this._onMenuKeydown(e, profile)}
+              >
                 <button
                   role="menuitem"
                   @click=${(e: Event) => {

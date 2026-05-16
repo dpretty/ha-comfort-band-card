@@ -27,6 +27,9 @@ export class ProfileEditDialog extends LitElement {
   @property({ type: String }) public existingName = '';
   /** Existing profile names — used for collision validation. */
   @property({ type: Array }) public existingNames: string[] = [];
+  /** True while the parent is awaiting a service call. Disables action buttons
+   *  to prevent double-submit. */
+  @property({ type: Boolean }) public busy = false;
 
   @state() private _name = '';
   @state() private _description = '';
@@ -125,14 +128,21 @@ export class ProfileEditDialog extends LitElement {
     }
   }
 
-  protected override firstUpdated(): void {
-    queueMicrotask(() => {
-      this._nameInput?.focus();
-      this._nameInput?.select();
-    });
+  protected override updated(changed: Map<string | number | symbol, unknown>): void {
+    // Re-focus on every mode/target change so a Clone→Cancel→Rename
+    // sequence (which reuses this element) puts the cursor back in the
+    // name input. Skip when only `busy` toggles so we don't yank focus
+    // away while the user is reading an error.
+    if (changed.has('mode') || changed.has('existingName')) {
+      queueMicrotask(() => {
+        this._nameInput?.focus();
+        this._nameInput?.select();
+      });
+    }
   }
 
   private _onSave = (): void => {
+    if (this.busy) return;
     if (!this._validate()) return;
     this.dispatchEvent(
       new CustomEvent('dialog-save', {
@@ -144,6 +154,7 @@ export class ProfileEditDialog extends LitElement {
   };
 
   private _onCancel = (): void => {
+    if (this.busy) return;
     this.dispatchEvent(new CustomEvent('dialog-cancel', { bubbles: true, composed: true }));
   };
 
@@ -215,8 +226,12 @@ export class ProfileEditDialog extends LitElement {
         : null}
       ${this._error ? html`<div class="error">${this._error}</div>` : null}
       <div class="actions">
-        <button class="button secondary" @click=${this._onCancel}>Cancel</button>
-        <button class="button primary" @click=${this._onSave}>Save</button>
+        <button class="button secondary" ?disabled=${this.busy} @click=${this._onCancel}>
+          Cancel
+        </button>
+        <button class="button primary" ?disabled=${this.busy} @click=${this._onSave}>
+          ${this.busy ? 'Saving…' : 'Save'}
+        </button>
       </div>
     `;
   }

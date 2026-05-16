@@ -319,4 +319,98 @@ describe('comfort-band-profiles-tab', () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('.menu')).toBeNull();
   });
+
+  it('Escape inside the menu closes it', async () => {
+    const el = await profilesTab(makeHass({ options: ['home', 'away'] }));
+    el.shadowRoot!.querySelectorAll<HTMLLIElement>('li')[0]
+      .querySelector<HTMLButtonElement>('.overflow')!
+      .click();
+    await el.updateComplete;
+    const menu = el.shadowRoot!.querySelector('.menu')!;
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('.menu')).toBeNull();
+  });
+
+  it('ArrowDown in the menu moves focus to the next menu item', async () => {
+    const el = await profilesTab(makeHass({ options: ['home', 'away'] }));
+    el.shadowRoot!.querySelectorAll<HTMLLIElement>('li')[1]
+      .querySelector<HTMLButtonElement>('.overflow')!
+      .click();
+    await el.updateComplete;
+    const menu = el.shadowRoot!.querySelector('.menu')!;
+    const items = menu.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]');
+    items[0].focus();
+    expect(el.shadowRoot!.activeElement).toBe(items[0]);
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.activeElement).toBe(items[1]);
+  });
+
+  it('renders an error and stays in the dialog when create_profile rejects', async () => {
+    const hass = makeHass({ options: ['home', 'away'] });
+    (hass.callService as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Backend exploded'),
+    );
+    const el = await profilesTab(hass);
+    el.shadowRoot!.querySelector<HTMLButtonElement>('.new-profile')!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector('profile-edit-dialog')!.dispatchEvent(
+      new CustomEvent('dialog-save', {
+        detail: { name: 'weekend', description: '' },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    // Wait for the async failure + re-render.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('.error')!.textContent).toContain('Backend exploded');
+    // Stays in the dialog so the user can correct + retry.
+    expect(el.shadowRoot!.querySelector('profile-edit-dialog')).not.toBeNull();
+  });
+
+  it('hides the + New profile button and overflow menus on old backends (no default_profile attr)', async () => {
+    // makeHass with `defaultProfile` undefined still adds default_profile to
+    // attributes (default '/home'); build a custom state for this case.
+    const entityId = 'select.comfort_band_profiles_active_profile';
+    const hass: HomeAssistant = {
+      states: {
+        [entityId]: {
+          entity_id: entityId,
+          state: 'home',
+          attributes: { options: ['home', 'away'] }, // no default_profile, no descriptions
+          last_changed: '',
+          last_updated: '',
+        },
+      } as HomeAssistant['states'],
+      entities: {
+        [entityId]: {
+          entity_id: entityId,
+          platform: 'comfort_band',
+          device_id: 'dev-pm',
+          area_id: null,
+          hidden: false,
+          entity_category: null,
+          translation_key: 'active_profile',
+          name: null,
+        },
+      } as HomeAssistant['entities'],
+      devices: {
+        'dev-pm': {
+          id: 'dev-pm',
+          identifiers: [['comfort_band', 'profile_manager']],
+          name: 'Comfort Band Profiles',
+          name_by_user: null,
+          area_id: null,
+        },
+      } as HomeAssistant['devices'],
+      connection: stubConnection(),
+      callService: vi.fn().mockResolvedValue(undefined),
+      callWS: vi.fn().mockResolvedValue(undefined),
+    };
+    const el = await profilesTab(hass);
+    expect(el.shadowRoot!.querySelector('.new-profile')).toBeNull();
+    expect(el.shadowRoot!.querySelector('.overflow')).toBeNull();
+  });
 });
