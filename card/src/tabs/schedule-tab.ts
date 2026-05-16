@@ -17,7 +17,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import type { PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import '../timeline-editor.js';
+import '../schedule-chart.js';
 import '../transition-edit-dialog.js';
 import { findActiveProfileEntity } from '../helpers.js';
 import { setSchedule, subscribeSchedule } from '../services.js';
@@ -38,6 +38,8 @@ export class ComfortBandScheduleTab extends LitElement {
   @state() private _mode: Mode = 'list';
   @state() private _editing: Transition | null = null;
   @state() private _newAt = '06:00';
+  @state() private _newLow: number | undefined;
+  @state() private _newHigh: number | undefined;
   private _unsub?: UnsubscribeFunc;
   // Incremented on every (re)subscribe and unsubscribe so stale callbacks
   // and slow `subscribeMessage` round-trips from a superseded attempt can
@@ -193,8 +195,10 @@ export class ComfortBandScheduleTab extends LitElement {
     return this._subscribe();
   }
 
-  private _onAdd = (event: CustomEvent<{ at: string }>) => {
+  private _onAdd = (event: CustomEvent<{ at: string; low?: number; high?: number }>) => {
     this._newAt = event.detail.at;
+    this._newLow = event.detail.low;
+    this._newHigh = event.detail.high;
     this._editing = null;
     this._mode = 'add';
   };
@@ -207,6 +211,20 @@ export class ComfortBandScheduleTab extends LitElement {
   private _onDelete = async (event: CustomEvent<{ at: string }>) => {
     if (!this.hass) return;
     const next = this._transitions.filter((t) => t.at !== event.detail.at);
+    await this._writeSchedule(next);
+  };
+
+  private _onUpdate = async (
+    event: CustomEvent<{ oldAt: string; transition: Transition }>,
+  ): Promise<void> => {
+    if (!this.hass) return;
+    const { oldAt, transition } = event.detail;
+    // Drop the original entry by its old `at`, drop any collision at the new
+    // `at`, then insert and sort. Same shape as `_onDialogSave`.
+    const next = this._transitions
+      .filter((t) => t.at !== oldAt && t.at !== transition.at)
+      .concat(transition)
+      .sort((a, b) => a.at.localeCompare(b.at));
     await this._writeSchedule(next);
   };
 
@@ -233,6 +251,8 @@ export class ComfortBandScheduleTab extends LitElement {
     await this._writeSchedule(next);
     this._mode = 'list';
     this._editing = null;
+    this._newLow = undefined;
+    this._newHigh = undefined;
   };
 
   private _onDialogDelete = async (event: CustomEvent<{ at: string }>): Promise<void> => {
@@ -240,11 +260,15 @@ export class ComfortBandScheduleTab extends LitElement {
     await this._writeSchedule(next);
     this._mode = 'list';
     this._editing = null;
+    this._newLow = undefined;
+    this._newHigh = undefined;
   };
 
   private _onDialogCancel = () => {
     this._mode = 'list';
     this._editing = null;
+    this._newLow = undefined;
+    this._newHigh = undefined;
   };
 
   private async _writeSchedule(transitions: Transition[]): Promise<void> {
@@ -272,8 +296,8 @@ export class ComfortBandScheduleTab extends LitElement {
           ? this._editing
           : {
               at: this._newAt,
-              low: defaultLow(this._transitions),
-              high: defaultHigh(this._transitions),
+              low: this._newLow ?? defaultLow(this._transitions),
+              high: this._newHigh ?? defaultHigh(this._transitions),
             };
       return html`
         <transition-edit-dialog
@@ -296,12 +320,13 @@ export class ComfortBandScheduleTab extends LitElement {
         : this._error
           ? html`<div class="error">${this._error}</div>`
           : html`
-              <timeline-editor
+              <comfort-band-schedule-chart
                 .transitions=${this._transitions}
                 @transition-add=${this._onAdd}
                 @transition-edit=${this._onEdit}
                 @transition-delete=${this._onDelete}
-              ></timeline-editor>
+                @transition-update=${this._onUpdate}
+              ></comfort-band-schedule-chart>
               ${this._renderList()}
             `}
     `;
