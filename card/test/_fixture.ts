@@ -5,6 +5,8 @@
  * properties, await `updateComplete`. This file just dries up the boilerplate.
  */
 
+import type { HassConnection } from '../src/types.js';
+
 interface LitLike extends HTMLElement {
   updateComplete: Promise<boolean>;
 }
@@ -22,4 +24,14 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 
 export function teardown(): void {
   document.body.innerHTML = '';
+}
+
+/**
+ * No-op `HassConnection` stub for tests that don't exercise subscriptions
+ * but still need to satisfy the `HomeAssistant` type.
+ */
+export function stubConnection(): HassConnection {
+  return {
+    subscribeMessage: async () => () => {},
+  };
 }

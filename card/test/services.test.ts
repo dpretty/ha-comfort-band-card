@@ -9,6 +9,7 @@ import {
   updateTransition,
 } from '../src/services.js';
 import type { HomeAssistant } from '../src/types.js';
+import { stubConnection } from './_fixture.js';
 
 function makeMockHass() {
   const callService = vi.fn().mockResolvedValue(undefined);
@@ -16,6 +17,7 @@ function makeMockHass() {
     states: {},
     entities: {},
     devices: {},
+    connection: stubConnection(),
     callService,
     callWS: vi.fn().mockResolvedValue(undefined),
   };

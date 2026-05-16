@@ -3,7 +3,7 @@ import '../src/tabs/insights-tab.js';
 import type { ComfortBandInsightsTab } from '../src/tabs/insights-tab.js';
 import type { ZoneEntities } from '../src/helpers.js';
 import type { HomeAssistant } from '../src/types.js';
-import { mount, teardown } from './_fixture.js';
+import { mount, stubConnection, teardown } from './_fixture.js';
 
 afterEach(teardown);
 
@@ -34,6 +34,7 @@ function makeHass(): HomeAssistant {
     states: {},
     devices: {},
     entities: {},
+    connection: stubConnection(),
     callService: vi.fn(),
     callWS: vi.fn().mockResolvedValue({}),
   };

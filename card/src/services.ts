@@ -5,7 +5,7 @@
  * the promise from `hass.callService` so callers can `await` for the round-trip.
  */
 
-import type { HomeAssistant, ProfileSchedule, Transition } from './types.js';
+import type { HomeAssistant, ProfileSchedule, Transition, UnsubscribeFunc } from './types.js';
 
 const DOMAIN = 'comfort_band';
 
@@ -17,6 +17,17 @@ export function getSchedule(
     type: 'comfort_band/get_schedule',
     ...args,
   });
+}
+
+export function subscribeSchedule(
+  hass: HomeAssistant,
+  args: { zone: string; profile: string },
+  callback: (schedule: ProfileSchedule | null) => void,
+): Promise<UnsubscribeFunc> {
+  return hass.connection.subscribeMessage<{ schedule: ProfileSchedule | null }>(
+    (event) => callback(event.schedule),
+    { type: 'comfort_band/subscribe_schedule', ...args },
+  );
 }
 
 export function setSchedule(

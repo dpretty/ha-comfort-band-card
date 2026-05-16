@@ -3,7 +3,7 @@ import '../src/tabs/now-tab.js';
 import type { ComfortBandNowTab } from '../src/tabs/now-tab.js';
 import type { ZoneEntities } from '../src/helpers.js';
 import type { HomeAssistant } from '../src/types.js';
-import { mount, teardown } from './_fixture.js';
+import { mount, stubConnection, teardown } from './_fixture.js';
 
 afterEach(teardown);
 
@@ -56,6 +56,7 @@ function makeHass(overrides: Partial<Record<string, string>> = {}): HomeAssistan
     ),
     devices: {},
     entities: {},
+    connection: stubConnection(),
     callService: vi.fn().mockResolvedValue(undefined),
     callWS: vi.fn().mockResolvedValue(undefined),
   };

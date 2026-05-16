@@ -2,7 +2,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import '../src/tabs/profiles-tab.js';
 import type { ComfortBandProfilesTab } from '../src/tabs/profiles-tab.js';
 import type { HomeAssistant } from '../src/types.js';
-import { mount, teardown } from './_fixture.js';
+import { mount, stubConnection, teardown } from './_fixture.js';
 
 afterEach(teardown);
 
@@ -43,6 +43,7 @@ function makeHass(opts: {
     states: states as HomeAssistant['states'],
     entities: entities as HomeAssistant['entities'],
     devices: devices as HomeAssistant['devices'],
+    connection: stubConnection(),
     callService: vi.fn().mockResolvedValue(undefined),
     callWS: vi.fn().mockResolvedValue(undefined),
   };

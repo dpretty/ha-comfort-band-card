@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { findActiveProfileEntity, findZoneEntities } from '../src/helpers.js';
 import type { DeviceRegistryEntry, EntityRegistryEntry, HomeAssistant } from '../src/types.js';
+import { stubConnection } from './_fixture.js';
 
 function makeEntity(
   entity_id: string,
@@ -33,6 +34,7 @@ function makeHass(devices: DeviceRegistryEntry[], entities: EntityRegistryEntry[
     states: {},
     devices: Object.fromEntries(devices.map((d) => [d.id, d])),
     entities: Object.fromEntries(entities.map((e) => [e.entity_id, e])),
+    connection: stubConnection(),
     callService: () => Promise.resolve(),
     callWS: () => Promise.resolve() as Promise<never>,
   };

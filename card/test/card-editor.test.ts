@@ -2,7 +2,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import '../src/card-editor.js';
 import type { ComfortBandCardEditor } from '../src/card-editor.js';
 import type { HomeAssistant } from '../src/types.js';
-import { mount, teardown } from './_fixture.js';
+import { mount, stubConnection, teardown } from './_fixture.js';
 
 afterEach(teardown);
 
@@ -22,6 +22,7 @@ function makeHass(zones: string[]): HomeAssistant {
         },
       ]),
     ),
+    connection: stubConnection(),
     callService: vi.fn(),
     callWS: vi.fn(),
   };
