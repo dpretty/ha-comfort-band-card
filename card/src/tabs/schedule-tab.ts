@@ -39,6 +39,10 @@ export class ComfortBandScheduleTab extends LitElement {
   @state() private _editing: Transition | null = null;
   @state() private _newAt = '06:00';
   private _unsub?: UnsubscribeFunc;
+  // Incremented on every (re)subscribe and unsubscribe so stale callbacks
+  // and slow `subscribeMessage` round-trips from a superseded attempt can
+  // detect that they should bail out instead of leaking a subscription.
+  private _subscribeGen = 0;
 
   public static override styles = [
     tokens,
@@ -118,6 +122,16 @@ export class ComfortBandScheduleTab extends LitElement {
     }
   }
 
+  public override connectedCallback(): void {
+    super.connectedCallback();
+    // Re-subscribe after a DOM detach/reattach (e.g. switching dashboard
+    // tabs). `willUpdate`'s `_profile === ''` guard doesn't fire here
+    // because `_profile` is already set from the prior mount.
+    if (this.hass && this.zone && this._profile && !this._unsub) {
+      void this._subscribe();
+    }
+  }
+
   public override disconnectedCallback(): void {
     this._unsubscribe();
     super.disconnectedCallback();
@@ -125,24 +139,40 @@ export class ComfortBandScheduleTab extends LitElement {
 
   private async _subscribe(): Promise<void> {
     if (!this.hass || !this.zone || !this._profile) return;
-    this._loading = true;
+    const gen = ++this._subscribeGen;
+    // Only show the loading state when we have nothing to display. On a
+    // re-subscribe (profile flip, reconnect) keep the stale data visible
+    // so the tab doesn't flash empty.
+    if (this._transitions.length === 0) this._loading = true;
     this._error = null;
     try {
-      this._unsub = await subscribeSchedule(
+      const unsub = await subscribeSchedule(
         this.hass,
         { zone: this.zone, profile: this._profile },
         (schedule) => {
+          if (gen !== this._subscribeGen) return;
           this._transitions = schedule?.baseline ? [...schedule.baseline] : [];
           this._loading = false;
         },
       );
+      if (gen !== this._subscribeGen) {
+        // Superseded while awaiting the round-trip — release the
+        // dangling server-side subscription instead of leaking it.
+        unsub();
+        return;
+      }
+      this._unsub = unsub;
     } catch (err) {
+      if (gen !== this._subscribeGen) return;
       this._error = err instanceof Error ? err.message : 'Failed to subscribe.';
       this._loading = false;
     }
   }
 
   private _unsubscribe(): void {
+    // Bumping the gen invalidates any in-flight subscribe attempt so its
+    // returned unsub gets called when it eventually resolves.
+    this._subscribeGen++;
     this._unsub?.();
     this._unsub = undefined;
   }

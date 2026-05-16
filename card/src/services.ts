@@ -9,16 +9,6 @@ import type { HomeAssistant, ProfileSchedule, Transition, UnsubscribeFunc } from
 
 const DOMAIN = 'comfort_band';
 
-export function getSchedule(
-  hass: HomeAssistant,
-  args: { zone: string; profile: string },
-): Promise<ProfileSchedule | null> {
-  return hass.callWS<ProfileSchedule | null>({
-    type: 'comfort_band/get_schedule',
-    ...args,
-  });
-}
-
 export function subscribeSchedule(
   hass: HomeAssistant,
   args: { zone: string; profile: string },

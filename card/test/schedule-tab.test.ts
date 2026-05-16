@@ -51,8 +51,9 @@ function makeHass(opts: FakeHassOptions = {}): FakeHass {
           baseline: [...((data.transitions as Transition[]) ?? [])],
           current: [...((data.transitions as Transition[]) ?? [])],
         };
-        // Echo via the active subscription, like the backend dispatcher does.
-        activeCallback?.({ schedule: stored });
+        // Echo via the active subscription on a microtask, matching the real
+        // backend's async dispatcher → WS frame → client delivery timing.
+        Promise.resolve().then(() => activeCallback?.({ schedule: stored }));
       }
     },
   );
@@ -313,5 +314,99 @@ describe('comfort-band-schedule-tab', () => {
     expect(fake.unsub).not.toHaveBeenCalled();
     el.remove();
     expect(fake.unsub).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-subscribes when reattached to the DOM after a disconnect', async () => {
+    const fake = makeHass();
+    const el = await tab(fake.hass);
+    expect(fake.subscribeMessage).toHaveBeenCalledTimes(1);
+
+    el.remove();
+    expect(fake.unsub).toHaveBeenCalledTimes(1);
+
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+
+    expect(fake.subscribeMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels an in-flight subscribe when superseded by a profile flip', async () => {
+    let resolveFirst: ((u: UnsubscribeFunc) => void) | null = null;
+    const firstUnsub = vi.fn();
+    const secondUnsub = vi.fn();
+
+    const subscribeMessage = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<UnsubscribeFunc>((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(async () => secondUnsub);
+
+    const hass: HomeAssistant = {
+      states: {
+        'select.comfort_band_profiles_active_profile': {
+          entity_id: 'select.comfort_band_profiles_active_profile',
+          state: 'home',
+          attributes: { options: ['home', 'away', 'sleep'] },
+          last_changed: '',
+          last_updated: '',
+        },
+      },
+      devices: {
+        'dev-pm': {
+          id: 'dev-pm',
+          identifiers: [['comfort_band', 'profile_manager']],
+          name: 'Comfort Band Profiles',
+          name_by_user: null,
+          area_id: null,
+        },
+      },
+      entities: {
+        'select.comfort_band_profiles_active_profile': {
+          entity_id: 'select.comfort_band_profiles_active_profile',
+          platform: 'comfort_band',
+          device_id: 'dev-pm',
+          area_id: null,
+          hidden: false,
+          entity_category: null,
+          translation_key: 'active_profile',
+          name: null,
+        },
+      },
+      connection: {
+        subscribeMessage: subscribeMessage as unknown as HassConnection['subscribeMessage'],
+      },
+      callService: vi.fn(),
+      callWS: vi.fn(),
+    };
+
+    const el = await mount('comfort-band-schedule-tab', { hass, zone: 'gym' });
+    // First subscribe is still pending. Trigger a profile flip.
+    el.hass = {
+      ...hass,
+      states: {
+        'select.comfort_band_profiles_active_profile': {
+          ...hass.states['select.comfort_band_profiles_active_profile'],
+          state: 'away',
+        },
+      },
+    };
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(subscribeMessage).toHaveBeenCalledTimes(2);
+    expect(firstUnsub).not.toHaveBeenCalled();
+
+    // Now resolve the first subscribe with its unsub handle. Because the gen
+    // counter has advanced, the subscribe must tear itself down rather than
+    // overwriting `_unsub`.
+    resolveFirst!(firstUnsub);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(firstUnsub).toHaveBeenCalledTimes(1);
   });
 });

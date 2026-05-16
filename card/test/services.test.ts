@@ -6,9 +6,10 @@ import {
   setProfile,
   setSchedule,
   startOverride,
+  subscribeSchedule,
   updateTransition,
 } from '../src/services.js';
-import type { HomeAssistant } from '../src/types.js';
+import type { HassConnection, HomeAssistant, ProfileSchedule } from '../src/types.js';
 import { stubConnection } from './_fixture.js';
 
 function makeMockHass() {
@@ -145,5 +146,39 @@ describe('service wrappers', () => {
     expect(callService).toHaveBeenCalledWith('comfort_band', 'set_profile', {
       profile: 'away',
     });
+  });
+
+  it('subscribeSchedule wires the WS subscription and unwraps the event payload', async () => {
+    const unsub = vi.fn();
+    const subscribeMessage = vi.fn(async (cb: (event: unknown) => void, _msg: unknown) => {
+      // Simulate the backend pushing one event right after the ack.
+      Promise.resolve().then(() => cb({ schedule: { baseline: [], current: [] } }));
+      return unsub;
+    });
+    const hass: HomeAssistant = {
+      states: {},
+      entities: {},
+      devices: {},
+      connection: {
+        subscribeMessage: subscribeMessage as unknown as HassConnection['subscribeMessage'],
+      },
+      callService: vi.fn(),
+      callWS: vi.fn(),
+    };
+
+    const received: (ProfileSchedule | null)[] = [];
+    const returned = await subscribeSchedule(hass, { zone: 'gym', profile: 'home' }, (s) =>
+      received.push(s),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(subscribeMessage).toHaveBeenCalledTimes(1);
+    expect(subscribeMessage.mock.calls[0][1]).toEqual({
+      type: 'comfort_band/subscribe_schedule',
+      zone: 'gym',
+      profile: 'home',
+    });
+    expect(received).toEqual([{ baseline: [], current: [] }]);
+    expect(returned).toBe(unsub);
   });
 });
