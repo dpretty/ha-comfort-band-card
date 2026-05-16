@@ -342,6 +342,29 @@ describe('comfort-band-schedule-tab', () => {
     });
   });
 
+  it('transition-add with seeded low/high pre-fills the dialog', async () => {
+    // The new chart's tap-on-empty path emits low/high based on the tap
+    // position; schedule-tab should pass those through as dialog defaults
+    // rather than always falling back to defaultLow/defaultHigh.
+    const { hass } = makeHass({ initialSchedule: null });
+    const el = await tab(hass);
+
+    const chartEl = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
+    chartEl.dispatchEvent(
+      new CustomEvent('transition-add', {
+        detail: { at: '07:00', low: 17.5, high: 20.5 },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    const dlg = el.shadowRoot!.querySelector('transition-edit-dialog') as HTMLElement & {
+      transition: { at: string; low: number; high: number } | null;
+    };
+    expect(dlg).not.toBeNull();
+    expect(dlg.transition).toEqual({ at: '07:00', low: 17.5, high: 20.5 });
+  });
+
   it('cancel returns to the list mode without writing', async () => {
     const { hass } = makeHass({ initialSchedule: null });
     const el = await tab(hass);

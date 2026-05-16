@@ -259,6 +259,35 @@ describe('comfort-band-schedule-chart', () => {
     expect(fire.mock.calls[0][0].detail).toEqual({ transition: SCHEDULE[0] });
   });
 
+  it('keyboard: Space on a focused handle also emits transition-edit', async () => {
+    const el = await chart();
+    const fire = vi.fn();
+    el.addEventListener('transition-edit', fire);
+    const handle = el.shadowRoot!.querySelector('.handle.low') as SVGElement;
+    handle.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    expect(fire).toHaveBeenCalledOnce();
+    expect(fire.mock.calls[0][0].detail).toEqual({ transition: SCHEDULE[0] });
+  });
+
+  it('disconnectedCallback during a pending long-press does not throw', async () => {
+    vi.useFakeTimers();
+    try {
+      const el = await chart();
+      const fire = vi.fn();
+      el.addEventListener('transition-delete', fire);
+      const handle = el.shadowRoot!.querySelector('.handle.low') as SVGElement;
+      handle.dispatchEvent(pointer('pointerdown', xFromTime('06:00'), yFromTemp(20)));
+      // Remove the element BEFORE the 500 ms long-press timer fires; the
+      // cleanup in disconnectedCallback should clear the timer so the
+      // delayed callback never reaches a torn-down element.
+      el.remove();
+      vi.advanceTimersByTime(600);
+      expect(fire).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('pointercancel mid-drag tears down state without firing any event', async () => {
     const el = await chart();
     const update = vi.fn();
