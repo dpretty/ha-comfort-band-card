@@ -44,7 +44,8 @@ async function editor(
 describe('comfort-band-card-editor', () => {
   it('lists every Comfort Band zone in the dropdown, sorted', async () => {
     const el = await editor(makeHass(['mbr', 'gym', 'office']));
-    const options = el.shadowRoot!.querySelectorAll('option:not([disabled])');
+    const zoneSelect = el.shadowRoot!.querySelectorAll('select')[0] as HTMLSelectElement;
+    const options = zoneSelect.querySelectorAll('option:not([disabled])');
     const values = Array.from(options).map((o) => (o as HTMLOptionElement).value);
     expect(values).toEqual(['gym', 'mbr', 'office']);
   });
@@ -95,6 +96,42 @@ describe('comfort-band-card-editor', () => {
     const checkbox = el.shadowRoot!.querySelector('input[type="checkbox"]') as HTMLInputElement;
     checkbox.checked = false;
     checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(fire.mock.calls[0][0].detail.config).toEqual({
+      type: 'custom:comfort-band-card',
+      zone: 'gym',
+    });
+  });
+
+  it('sets variant: mini when the variant dropdown changes', async () => {
+    const el = await editor(makeHass(['gym']), {
+      type: 'custom:comfort-band-card',
+      zone: 'gym',
+    });
+    const fire = vi.fn();
+    el.addEventListener('config-changed', fire);
+    const selects = el.shadowRoot!.querySelectorAll('select');
+    const variantSelect = selects[1] as HTMLSelectElement;
+    variantSelect.value = 'mini';
+    variantSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(fire.mock.calls[0][0].detail.config).toEqual({
+      type: 'custom:comfort-band-card',
+      zone: 'gym',
+      variant: 'mini',
+    });
+  });
+
+  it('removes variant from the config when set back to tile', async () => {
+    const el = await editor(makeHass(['gym']), {
+      type: 'custom:comfort-band-card',
+      zone: 'gym',
+      variant: 'mini',
+    });
+    const fire = vi.fn();
+    el.addEventListener('config-changed', fire);
+    const selects = el.shadowRoot!.querySelectorAll('select');
+    const variantSelect = selects[1] as HTMLSelectElement;
+    variantSelect.value = 'tile';
+    variantSelect.dispatchEvent(new Event('change', { bubbles: true }));
     expect(fire.mock.calls[0][0].detail.config).toEqual({
       type: 'custom:comfort-band-card',
       zone: 'gym',

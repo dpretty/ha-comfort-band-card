@@ -93,4 +93,71 @@ describe('comfort-band-tile', () => {
     expect(gauge.room).toBe(21);
     expect(gauge.action).toBe('cooling');
   });
+
+  describe('mini variant', () => {
+    it('renders only the room temperature, with no zone name or band-gauge', async () => {
+      const el = await tile({
+        variant: 'mini',
+        zoneName: 'Gym',
+        roomTemp: 21.4,
+        low: 19,
+        high: 23,
+        action: 'idle',
+      });
+      const sr = el.shadowRoot!;
+      expect(sr.querySelector('.tile')).toBeNull();
+      expect(sr.querySelector('band-gauge')).toBeNull();
+      expect(sr.querySelector('.zone-name')).toBeNull();
+      const mini = sr.querySelector('.mini')!;
+      expect(mini.textContent).toContain('21.4°');
+    });
+
+    it('tints the background when heating or cooling', async () => {
+      const heat = await tile({ variant: 'mini', roomTemp: 22, action: 'heating' });
+      const heatEl = heat.shadowRoot!.querySelector('.mini') as HTMLElement;
+      expect(heatEl.classList.contains('tinted')).toBe(true);
+      expect(heatEl.getAttribute('style')).toContain('--cb-action-heating');
+      teardown();
+      const cool = await tile({ variant: 'mini', roomTemp: 22, action: 'cooling' });
+      const coolEl = cool.shadowRoot!.querySelector('.mini') as HTMLElement;
+      expect(coolEl.classList.contains('tinted')).toBe(true);
+      expect(coolEl.getAttribute('style')).toContain('--cb-action-cooling');
+    });
+
+    it('does not tint when idle', async () => {
+      const el = await tile({ variant: 'mini', roomTemp: 22, action: 'idle' });
+      const mini = el.shadowRoot!.querySelector('.mini') as HTMLElement;
+      expect(mini.classList.contains('tinted')).toBe(false);
+    });
+
+    it('fires comfort-band-tile-tap on click', async () => {
+      const el = await tile({ variant: 'mini', roomTemp: 22, action: 'idle' });
+      const listener = vi.fn();
+      el.addEventListener('comfort-band-tile-tap', listener);
+      (el.shadowRoot!.querySelector('.mini') as HTMLElement).click();
+      expect(listener).toHaveBeenCalledOnce();
+    });
+
+    it('does not fire a tap event in noExpand mode', async () => {
+      const el = await tile({ variant: 'mini', roomTemp: 22, action: 'idle', noExpand: true });
+      const listener = vi.fn();
+      el.addEventListener('comfort-band-tile-tap', listener);
+      (el.shadowRoot!.querySelector('.mini') as HTMLElement).click();
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('exposes the zone name and temp through aria-label', async () => {
+      const el = await tile({
+        variant: 'mini',
+        zoneName: 'Gym',
+        roomTemp: 21.4,
+        action: 'heating',
+      });
+      const mini = el.shadowRoot!.querySelector('.mini')!;
+      const label = mini.getAttribute('aria-label')!;
+      expect(label).toContain('Gym');
+      expect(label).toContain('21.4°');
+      expect(label).toContain('Heating');
+    });
+  });
 });

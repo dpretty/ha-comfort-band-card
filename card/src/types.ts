@@ -108,9 +108,15 @@ export type ComfortBandAction = 'heating' | 'cooling' | 'idle' | 'unknown';
 
 // ---------- Card config ----------
 
+/** Visual variant of the card. `tile` is the default full-size tile;
+ *  `mini` is a tiny number-only chip suitable for floorplan overlays. */
+export type ComfortBandCardVariant = 'tile' | 'mini';
+
 export interface ComfortBandCardConfig {
   type: string;
   zone: string;
   /** Compact mode locks the tile (no expand-on-tap). */
   compact?: boolean;
+  /** Visual variant. Defaults to `tile`. */
+  variant?: ComfortBandCardVariant;
 }

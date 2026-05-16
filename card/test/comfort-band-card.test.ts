@@ -119,6 +119,19 @@ describe('comfort-band-card', () => {
     expect(el.shadowRoot!.querySelector('comfort-band-tile')).toBeNull();
   });
 
+  it('forwards variant: mini to the tile and reports a card size of 1', async () => {
+    const hass = makeHass('gym');
+    const el = await mount('comfort-band-card');
+    el.setConfig({ type: 'custom:comfort-band-card', zone: 'gym', variant: 'mini' });
+    el.hass = hass;
+    await el.updateComplete;
+    const tile = el.shadowRoot!.querySelector('comfort-band-tile') as HTMLElement & {
+      variant: string;
+    };
+    expect(tile.variant).toBe('mini');
+    expect(el.getCardSize()).toBe(1);
+  });
+
   it('forwards override state from binary_sensor + sensor pair', async () => {
     const hass = makeHass('gym');
     const future = new Date(Date.now() + 60 * 60_000).toISOString();

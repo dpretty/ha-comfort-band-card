@@ -57,7 +57,11 @@ export class ComfortBandModal extends LitElement {
         padding: 0;
         border: none;
         border-radius: var(--cb-radius-card);
-        background: var(--ha-card-background, var(--card-background-color, #ffffff));
+        /* Use --card-background-color (general HA surface), NOT
+           --ha-card-background, so the dialog stays readable when the
+           parent card has a transparent-bg theme override (e.g. a
+           picture-elements floorplan overlay). */
+        background: var(--card-background-color, var(--primary-background-color, #ffffff));
         color: var(--cb-text-primary);
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
         overflow: hidden;

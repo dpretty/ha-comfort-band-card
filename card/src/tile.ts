@@ -9,6 +9,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import './band-gauge.js';
+import type { ComfortBandCardVariant } from './types.js';
 import { tokens, actionColorVar, asAction, actionLabel } from './styles.js';
 
 @customElement('comfort-band-tile')
@@ -23,12 +24,17 @@ export class ComfortBandTile extends LitElement {
   @property({ type: String }) public overrideEnds: string | null = null;
   /** Disable the tap-to-expand affordance. Used for compact embeds. */
   @property({ type: Boolean }) public noExpand = false;
+  /** Visual variant. `mini` renders a content-sized number-only chip. */
+  @property({ type: String, reflect: true }) public variant: ComfortBandCardVariant = 'tile';
 
   public static override styles = [
     tokens,
     css`
       :host {
         display: block;
+      }
+      :host([variant='mini']) {
+        display: inline-block;
       }
       .tile {
         display: flex;
@@ -48,6 +54,38 @@ export class ComfortBandTile extends LitElement {
         transform: translateY(-1px);
       }
       .tile:focus-visible {
+        outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
+        outline-offset: 2px;
+      }
+      .mini {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 10px;
+        border-radius: var(--cb-radius-pill);
+        background: var(
+          --cb-mini-bg,
+          var(--ha-card-background, var(--card-background-color, #ffffff))
+        );
+        color: var(--cb-mini-fg, var(--cb-text-primary));
+        box-shadow: var(--ha-card-box-shadow, none);
+        font-size: 18px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        line-height: 1;
+        cursor: pointer;
+        transition: transform 0.12s ease;
+      }
+      .mini.no-expand {
+        cursor: default;
+      }
+      .mini.tinted {
+        --cb-mini-fg: var(--cb-text-on-action, #ffffff);
+      }
+      .mini:not(.no-expand):hover {
+        transform: translateY(-1px);
+      }
+      .mini:focus-visible {
         outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
         outline-offset: 2px;
       }
@@ -128,6 +166,7 @@ export class ComfortBandTile extends LitElement {
   }
 
   protected override render() {
+    if (this.variant === 'mini') return this._renderMini();
     return html`
       <div
         class="tile ${this.noExpand ? 'no-expand' : ''}"
@@ -152,6 +191,29 @@ export class ComfortBandTile extends LitElement {
           </div>
         </div>
         ${this._renderOverridePill()}
+      </div>
+    `;
+  }
+
+  private _renderMini() {
+    const action = asAction(this.action);
+    const tinted = action === 'heating' || action === 'cooling';
+    const style = tinted ? `--cb-mini-bg:${actionColorVar(action)}` : '';
+    const label = `${this.zoneName || 'Zone'} ${this._renderRoomTemp()}${
+      tinted ? `, ${actionLabel(action)}` : ''
+    }`;
+    return html`
+      <div
+        class="mini ${this.noExpand ? 'no-expand' : ''} ${tinted ? 'tinted' : ''}"
+        style=${style}
+        role="${this.noExpand ? 'group' : 'button'}"
+        tabindex="${this.noExpand ? -1 : 0}"
+        aria-label=${label}
+        title=${label}
+        @click=${this._onTap}
+        @keydown=${this._onTap}
+      >
+        ${this._renderRoomTemp()}
       </div>
     `;
   }

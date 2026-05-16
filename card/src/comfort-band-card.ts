@@ -33,7 +33,7 @@ export class ComfortBandCard extends LitElement {
 
   /** HA's panel/grid uses this to size the card. ~1 row per ~50 px of content. */
   public getCardSize(): number {
-    return 2;
+    return this._config?.variant === 'mini' ? 1 : 2;
   }
 
   /** HA dashboard editor: tells HA which custom element to render as the
@@ -92,6 +92,7 @@ export class ComfortBandCard extends LitElement {
     }
 
     const compact = this._config.compact === true;
+    const variant = this._config.variant === 'mini' ? 'mini' : 'tile';
     const view = this._buildView(this.hass, entities);
 
     return html`
@@ -104,6 +105,7 @@ export class ComfortBandCard extends LitElement {
         .overrideActive=${view.overrideActive}
         .overrideEnds=${view.overrideEnds}
         .noExpand=${compact}
+        .variant=${variant}
         @comfort-band-tile-tap=${this._onTileTap}
       ></comfort-band-tile>
       ${compact
