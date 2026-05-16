@@ -220,6 +220,7 @@ export class ProfileEditDialog extends LitElement {
               name="description"
               type="text"
               autocomplete="off"
+              spellcheck="false"
               .value=${this._description}
               @input=${(e: Event) => (this._description = (e.target as HTMLInputElement).value)}
               @keydown=${this._onKey}

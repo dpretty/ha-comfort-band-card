@@ -1399,6 +1399,7 @@ let ze = class extends Ut {
               name="description"
               type="text"
               autocomplete="off"
+              spellcheck="false"
               .value=${this._description}
               @input=${(t) => this._description = t.target.value}
               @keydown=${this._onKey}
@@ -1611,7 +1612,7 @@ let ii = class extends Ut {
     }, this._onDialogSave = async (t) => {
       if (!this.hass || this._busy) return;
       const { name: e, description: i } = t.detail, n = this._mode, o = this._target;
-      this._busy = !0;
+      this._busy = !0, this._error = null;
       try {
         if (n === "create")
           await Hc(this.hass, { name: e, description: i });
@@ -1630,7 +1631,7 @@ let ii = class extends Ut {
     }, this._onConfirmDelete = async () => {
       if (!this.hass || !this._target || this._busy) return;
       const t = this._target;
-      this._busy = !0;
+      this._busy = !0, this._error = null;
       try {
         await Fc(this.hass, { name: t }), this._mode = "list", this._target = null, this._error = null, this._restoreFocusAfterDialog();
       } catch (e) {
@@ -1649,6 +1650,8 @@ let ii = class extends Ut {
   updated(t) {
     t.has("_openMenu") && this._openMenu !== null && this._menuOpenedByKeyboard && requestAnimationFrame(() => {
       !this._menuOpenedByKeyboard || this._openMenu === null || this.shadowRoot?.querySelector('.menu button[role="menuitem"]:not([disabled])')?.focus();
+    }), t.has("_mode") && this._mode === "confirm-delete" && requestAnimationFrame(() => {
+      this.shadowRoot?.querySelector(".confirm-delete")?.focus();
     });
   }
   _readState() {

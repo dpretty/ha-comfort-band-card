@@ -109,6 +109,14 @@ export class ComfortBandProfilesTab extends LitElement {
           ?.focus();
       });
     }
+    // When the confirm-delete panel replaces the list view, focus the
+    // container so keyboard users don't lose their place. The div has
+    // tabindex="-1" specifically so it can receive programmatic focus.
+    if (changed.has('_mode') && this._mode === 'confirm-delete') {
+      requestAnimationFrame(() => {
+        this.shadowRoot?.querySelector<HTMLDivElement>('.confirm-delete')?.focus();
+      });
+    }
   }
 
   public static override styles = [
@@ -493,6 +501,9 @@ export class ComfortBandProfilesTab extends LitElement {
     const mode = this._mode;
     const target = this._target;
     this._busy = true;
+    // Clear any prior error so "Saving…" doesn't render alongside a
+    // stale error message during a retry.
+    this._error = null;
     try {
       if (mode === 'create') {
         await createProfile(this.hass, { name, description });
@@ -521,6 +532,8 @@ export class ComfortBandProfilesTab extends LitElement {
     if (!this.hass || !this._target || this._busy) return;
     const target = this._target;
     this._busy = true;
+    // Same retry-stale-error rationale as `_onDialogSave`.
+    this._error = null;
     try {
       await deleteProfile(this.hass, { name: target });
       this._mode = 'list';
