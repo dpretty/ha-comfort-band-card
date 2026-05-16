@@ -115,6 +115,12 @@ export class ComfortBandScheduleChart extends LitElement {
         height: 200px;
         user-select: none;
         touch-action: none;
+        /* Reserve a left gutter so the Y-axis temperature labels sit
+           inside the chart's bounding box. Without this they overflow
+           the schedule-tab's 12 px padding and the modal clips their
+           leading digit ("25°" rendered as "5°"). */
+        padding-left: 32px;
+        box-sizing: border-box;
       }
       svg {
         display: block;
@@ -176,7 +182,7 @@ export class ComfortBandScheduleChart extends LitElement {
         transform: translateX(-100%);
       }
       .axis-label.y {
-        left: -28px;
+        left: 4px;
         transform: translateY(-50%);
         text-align: right;
         width: 24px;
