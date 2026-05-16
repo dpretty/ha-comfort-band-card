@@ -346,6 +346,24 @@ describe('comfort-band-schedule-chart', () => {
     expect(fire).not.toHaveBeenCalled();
   });
 
+  it('applies the .dragging class to the active handle during a drag and clears it on release', async () => {
+    const el = await chart();
+    const handle = el.shadowRoot!.querySelector('.handle.low') as SVGElement;
+    const startX = xFromTime('06:00');
+    const startY = yFromTemp(20);
+    handle.dispatchEvent(pointer('pointerdown', startX, startY));
+    handle.dispatchEvent(pointer('pointermove', startX, yFromTemp(21)));
+    await el.updateComplete;
+    // After the pointermove crosses the drag threshold the chart re-renders;
+    // re-query because Lit may have created a new element.
+    const movingHandle = el.shadowRoot!.querySelector('.handle.low') as SVGElement;
+    expect(movingHandle.classList.contains('dragging')).toBe(true);
+    handle.dispatchEvent(pointer('pointerup', startX, yFromTemp(21)));
+    await el.updateComplete;
+    const releasedHandle = el.shadowRoot!.querySelector('.handle.low') as SVGElement;
+    expect(releasedHandle.classList.contains('dragging')).toBe(false);
+  });
+
   it('focus on a handle applies the .focused class; blur removes it', async () => {
     // The .focused class is a Lit-managed fallback so jsdom (which doesn't
     // honour :focus-visible reliably) still surfaces the ring in screenshots.

@@ -281,6 +281,10 @@ export class ComfortBandScheduleChart extends LitElement {
     const dy = event.clientY - drag.startY;
     if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
     if (!drag.moved) {
+      // Direct mutation on the non-@state `drag.moved` flag — Lit's dirty
+      // check is reference-based, so mutating a property of `_drag`'s
+      // value object doesn't trigger a re-render. The first `_preview`
+      // write below is what schedules the render for this drag tick.
       drag.moved = true;
       if (drag.longPressTimer !== null) {
         window.clearTimeout(drag.longPressTimer);
@@ -333,6 +337,10 @@ export class ComfortBandScheduleChart extends LitElement {
       return;
     }
     if (preview) {
+      // Carry focus across the drag: if this handle was focused, the
+      // re-render keys off `_focusedAt`/`_focusedHandle` and the new
+      // transition's `at` is `preview.at`, not `drag.origin.at`.
+      if (this._focusedAt === drag.origin.at) this._focusedAt = preview.at;
       this._fire('transition-update', {
         oldAt: drag.origin.at,
         transition: { at: preview.at, low: preview.low, high: preview.high },
@@ -466,9 +474,13 @@ export class ComfortBandScheduleChart extends LitElement {
       high === transition.high
     )
       return;
+    const newAt = formatTime(newAtMins);
+    // Carry focus across the rename so the .focused class stays applied
+    // after the WS echo re-renders with the new `at`.
+    if (this._focusedAt === transition.at) this._focusedAt = newAt;
     this._fire('transition-update', {
       oldAt: transition.at,
-      transition: { at: formatTime(newAtMins), low, high },
+      transition: { at: newAt, low, high },
     });
   };
 

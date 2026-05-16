@@ -174,7 +174,13 @@ export class ComfortBandScheduleTab extends LitElement {
         { zone: this.zone, profile: this._profile },
         (schedule) => {
           if (gen !== this._subscribeGen) return;
-          this._transitions = schedule?.baseline ? [...schedule.baseline] : [];
+          // Sort defensively — the backend normalises and sorts on every
+          // write, but the WS payload type is `Transition[]` with no order
+          // guarantee, and the list view below renders straight from this
+          // array.
+          this._transitions = schedule?.baseline
+            ? [...schedule.baseline].sort(compareTransitions)
+            : [];
           this._loading = false;
         },
       );

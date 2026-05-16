@@ -238,6 +238,10 @@ describe('comfort-band-schedule-tab', () => {
     });
   });
 
+  // The chart's own clamp prevents a drag from ever firing this exact event
+  // (it would clamp `at` to a non-collision slot), but the schedule-tab's
+  // collision drop has to be tolerant in case a YAML automation or future
+  // call path bypasses the chart. Test the tab's logic via a synthetic event.
   it('drops a collision when a drag-update lands on another transition at', async () => {
     const { hass } = makeHass({
       initialSchedule: {
