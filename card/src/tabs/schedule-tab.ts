@@ -20,19 +20,16 @@ import { customElement, property, state } from 'lit/decorators.js';
 import '../schedule-chart.js';
 import '../transition-edit-dialog.js';
 import { findActiveProfileEntity } from '../helpers.js';
+import { parseTime } from '../schedule-chart.js';
 import { setSchedule, subscribeSchedule } from '../services.js';
 import type { HomeAssistant, Transition, UnsubscribeFunc } from '../types.js';
 import { tokens } from '../styles.js';
 
-/** Compare two transitions by `at` as minutes-since-midnight. Numeric so a
+/** Compare transitions by `at` numerically (minutes-since-midnight) so a
  *  non-zero-padded `at` ever produced by an external integration sorts
- *  correctly (e.g. `"9:00"` would rank after `"10:00"` under localeCompare). */
+ *  correctly — `"9:00"` would rank after `"10:00"` under localeCompare. */
 function compareTransitions(a: Transition, b: Transition): number {
-  const toMins = (at: string): number => {
-    const m = /^(\d{1,2}):(\d{2})$/.exec(at);
-    return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : 0;
-  };
-  return toMins(a.at) - toMins(b.at);
+  return parseTime(a.at) - parseTime(b.at);
 }
 
 type Mode = 'list' | 'add' | 'edit';

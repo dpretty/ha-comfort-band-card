@@ -56,7 +56,10 @@ interface EmptyDrag {
 
 type DragState = HandleDrag | EmptyDrag | null;
 
-function parseTime(at: string): number {
+/** Parse an `HH:MM` (or `H:MM`) string to minutes-since-midnight.
+ *  Exported so other modules (e.g. `schedule-tab.ts`) sort the same way the
+ *  chart renders, instead of re-implementing the same regex. */
+export function parseTime(at: string): number {
   const m = /^(\d{1,2}):(\d{2})$/.exec(at);
   if (!m) return 0;
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
@@ -377,6 +380,8 @@ export class ComfortBandScheduleChart extends LitElement {
     if (drag.moved) return;
     const dx = event.clientX - drag.startX;
     const dy = event.clientY - drag.startY;
+    // Plain mutation on the non-@state drag context — moved-ness only gates
+    // the tap/no-tap decision at pointerup, no render needed.
     if (Math.hypot(dx, dy) >= DRAG_THRESHOLD_PX) drag.moved = true;
   };
 
@@ -483,6 +488,10 @@ export class ComfortBandScheduleChart extends LitElement {
     const sorted = [...this.transitions].sort((a, b) => parseTime(a.at) - parseTime(b.at));
     if (!this._preview || !this._drag || this._drag.kind !== 'handle') return sorted;
     const drag = this._drag;
+    // Substituting the preview value in-place keeps the array sorted because
+    // `_timeRangeFor` clamps the preview's `at` to the open interval between
+    // this transition's neighbours — the dragging handle can never jump past
+    // a neighbour into a different slot in the ordering.
     return sorted.map((t) =>
       t.at === drag.origin.at
         ? { at: this._preview!.at, low: this._preview!.low, high: this._preview!.high }
@@ -571,11 +580,17 @@ export class ComfortBandScheduleChart extends LitElement {
             const highY = this._tempToY(t.high);
             const focusedLow = this._focusedAt === t.at && this._focusedHandle === 'low';
             const focusedHigh = this._focusedAt === t.at && this._focusedHandle === 'high';
+            const dragHandle =
+              this._drag?.kind === 'handle' && this._drag.origin.at === t.at
+                ? this._drag.handle
+                : null;
             const ariaLow = `Low handle at ${t.at}, ${t.low.toFixed(1)} °C. Arrow keys to nudge, Enter to edit, Delete to remove.`;
             const ariaHigh = `High handle at ${t.at}, ${t.high.toFixed(1)} °C. Arrow keys to nudge, Enter to edit, Delete to remove.`;
+            const lowCls = `handle low${focusedLow ? ' focused' : ''}${dragHandle === 'low' ? ' dragging' : ''}`;
+            const highCls = `handle high${focusedHigh ? ' focused' : ''}${dragHandle === 'high' ? ' dragging' : ''}`;
             return svg`
               <circle
-                class=${`handle low${focusedLow ? ' focused' : ''}`}
+                class=${lowCls}
                 cx=${x}
                 cy=${lowY}
                 r="8"
@@ -593,7 +608,7 @@ export class ComfortBandScheduleChart extends LitElement {
                 @blur=${this._onHandleBlur}
               ></circle>
               <circle
-                class=${`handle high${focusedHigh ? ' focused' : ''}`}
+                class=${highCls}
                 cx=${x}
                 cy=${highY}
                 r="8"
