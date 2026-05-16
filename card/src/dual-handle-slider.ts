@@ -12,8 +12,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';
 import { tokens } from './styles.js';
-
-type Handle = 'low' | 'high';
+import type { BandHandle } from './types.js';
 
 @customElement('dual-handle-slider')
 export class DualHandleSlider extends LitElement {
@@ -24,7 +23,7 @@ export class DualHandleSlider extends LitElement {
   @property({ type: Number }) public high = 22;
   @property({ type: String }) public unit = '°';
 
-  @state() private _dragging: Handle | null = null;
+  @state() private _dragging: BandHandle | null = null;
 
   @query('.track') private _track?: HTMLElement;
 
@@ -103,7 +102,7 @@ export class DualHandleSlider extends LitElement {
     return Math.max(this.min, Math.min(this.max, stepped));
   }
 
-  private _setHandle(handle: Handle, raw: number): boolean {
+  private _setHandle(handle: BandHandle, raw: number): boolean {
     const value = this._snap(raw);
     if (handle === 'low') {
       const clamped = Math.min(value, this.high - this.step);
@@ -124,7 +123,7 @@ export class DualHandleSlider extends LitElement {
     return this.min + ratio * (this.max - this.min);
   }
 
-  private _onThumbPointerDown = (event: PointerEvent, handle: Handle) => {
+  private _onThumbPointerDown = (event: PointerEvent, handle: BandHandle) => {
     event.preventDefault();
     const target = event.currentTarget as HTMLElement;
     target.setPointerCapture(event.pointerId);
@@ -152,11 +151,11 @@ export class DualHandleSlider extends LitElement {
     if ((event.target as HTMLElement).classList.contains('thumb')) return;
     const value = this._xToValue(event.clientX);
     const mid = (this.low + this.high) / 2;
-    const handle: Handle = value < mid ? 'low' : 'high';
+    const handle: BandHandle = value < mid ? 'low' : 'high';
     if (this._setHandle(handle, value)) this._fire('change');
   };
 
-  private _onKeyDown = (event: KeyboardEvent, handle: Handle) => {
+  private _onKeyDown = (event: KeyboardEvent, handle: BandHandle) => {
     let delta = 0;
     switch (event.key) {
       case 'ArrowLeft':

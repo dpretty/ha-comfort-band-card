@@ -106,6 +106,10 @@ export interface StoredZone {
 /** Values of `sensor.{zone}_current_action`. Mirrors const.py ACTION_*. */
 export type ComfortBandAction = 'heating' | 'cooling' | 'idle' | 'unknown';
 
+/** Identifies which edge of a band a control affects. Used by both
+ *  `<dual-handle-slider>` and `<comfort-band-schedule-chart>`. */
+export type BandHandle = 'low' | 'high';
+
 // ---------- Card config ----------
 
 /** Visual variant of the card. `tile` is the default full-size tile;

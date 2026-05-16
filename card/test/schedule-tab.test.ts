@@ -135,10 +135,11 @@ describe('comfort-band-schedule-tab', () => {
       },
     });
     const el = await tab(hass);
-    const points = el
-      .shadowRoot!.querySelector('timeline-editor')!
-      .shadowRoot!.querySelectorAll('.point');
-    expect(points.length).toBe(2);
+    // Two handles per transition (low + high).
+    const handles = el
+      .shadowRoot!.querySelector('comfort-band-schedule-chart')!
+      .shadowRoot!.querySelectorAll('.handle');
+    expect(handles.length).toBe(4);
   });
 
   it('re-renders when the subscription pushes a live update', async () => {
@@ -147,26 +148,30 @@ describe('comfort-band-schedule-tab', () => {
     });
     const el = await tab(fake.hass);
     expect(
-      el.shadowRoot!.querySelector('timeline-editor')!.shadowRoot!.querySelectorAll('.point')
-        .length,
+      el
+        .shadowRoot!.querySelector('comfort-band-schedule-chart')!
+        .shadowRoot!.querySelectorAll('.handle').length,
     ).toBe(0);
+    // (After the live update we expect 2 handles for the new 1-transition schedule.)
 
     fake.pushUpdate({
       baseline: [{ at: '07:00', low: 19.5, high: 22.5 }],
       current: [],
     });
     await el.updateComplete;
+    // Two handles per transition (low + high).
     expect(
-      el.shadowRoot!.querySelector('timeline-editor')!.shadowRoot!.querySelectorAll('.point')
-        .length,
-    ).toBe(1);
+      el
+        .shadowRoot!.querySelector('comfort-band-schedule-chart')!
+        .shadowRoot!.querySelectorAll('.handle').length,
+    ).toBe(2);
   });
 
   it('handles a null schedule (zone has no profile schedule yet) without error', async () => {
     const { hass } = makeHass({ initialSchedule: null });
     const el = await tab(hass);
     expect(el.shadowRoot!.textContent).not.toContain('Failed');
-    const editor = el.shadowRoot!.querySelector('timeline-editor');
+    const editor = el.shadowRoot!.querySelector('comfort-band-schedule-chart');
     expect(editor).not.toBeNull();
   });
 
@@ -181,7 +186,7 @@ describe('comfort-band-schedule-tab', () => {
       },
     });
     const el = await tab(hass);
-    const editor = el.shadowRoot!.querySelector('timeline-editor')!;
+    const editor = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
     editor.dispatchEvent(
       new CustomEvent('transition-delete', {
         detail: { at: '22:00' },
@@ -199,6 +204,75 @@ describe('comfort-band-schedule-tab', () => {
     expect(hass.callWS).not.toHaveBeenCalled();
   });
 
+  it('persists a drag-update via comfort_band.set_schedule', async () => {
+    const { hass } = makeHass({
+      initialSchedule: {
+        baseline: [
+          { at: '06:00', low: 20, high: 23 },
+          { at: '22:00', low: 18, high: 21 },
+        ],
+        current: [],
+      },
+    });
+    const el = await tab(hass);
+    const chartEl = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
+    chartEl.dispatchEvent(
+      new CustomEvent('transition-update', {
+        detail: {
+          oldAt: '06:00',
+          transition: { at: '06:15', low: 20.5, high: 23 },
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+    expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'set_schedule', {
+      zone: 'gym',
+      profile: 'home',
+      transitions: [
+        { at: '06:15', low: 20.5, high: 23 },
+        { at: '22:00', low: 18, high: 21 },
+      ],
+    });
+  });
+
+  // The chart's own clamp prevents a drag from ever firing this exact event
+  // (it would clamp `at` to a non-collision slot), but the schedule-tab's
+  // collision drop has to be tolerant in case a YAML automation or future
+  // call path bypasses the chart. Test the tab's logic via a synthetic event.
+  it('drops a collision when a drag-update lands on another transition at', async () => {
+    const { hass } = makeHass({
+      initialSchedule: {
+        baseline: [
+          { at: '06:00', low: 20, high: 23 },
+          { at: '08:00', low: 19, high: 22 },
+        ],
+        current: [],
+      },
+    });
+    const el = await tab(hass);
+    const chartEl = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
+    chartEl.dispatchEvent(
+      new CustomEvent('transition-update', {
+        detail: {
+          oldAt: '06:00',
+          transition: { at: '08:00', low: 21, high: 24 },
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+    expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'set_schedule', {
+      zone: 'gym',
+      profile: 'home',
+      transitions: [{ at: '08:00', low: 21, high: 24 }],
+    });
+  });
+
   it('opens the dialog on transition-edit then persists the new values on save', async () => {
     const { hass } = makeHass({
       initialSchedule: {
@@ -208,7 +282,7 @@ describe('comfort-band-schedule-tab', () => {
     });
     const el = await tab(hass);
 
-    const editor = el.shadowRoot!.querySelector('timeline-editor')!;
+    const editor = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
     editor.dispatchEvent(
       new CustomEvent('transition-edit', {
         detail: { transition: { at: '06:00', low: 20, high: 23 } },
@@ -240,7 +314,7 @@ describe('comfort-band-schedule-tab', () => {
     const { hass } = makeHass({ initialSchedule: null });
     const el = await tab(hass);
 
-    const editor1 = el.shadowRoot!.querySelector('timeline-editor')!;
+    const editor1 = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
     editor1.dispatchEvent(
       new CustomEvent('transition-add', {
         detail: { at: '07:00' },
@@ -268,10 +342,33 @@ describe('comfort-band-schedule-tab', () => {
     });
   });
 
+  it('transition-add with seeded low/high pre-fills the dialog', async () => {
+    // The new chart's tap-on-empty path emits low/high based on the tap
+    // position; schedule-tab should pass those through as dialog defaults
+    // rather than always falling back to defaultLow/defaultHigh.
+    const { hass } = makeHass({ initialSchedule: null });
+    const el = await tab(hass);
+
+    const chartEl = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
+    chartEl.dispatchEvent(
+      new CustomEvent('transition-add', {
+        detail: { at: '07:00', low: 17.5, high: 20.5 },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    const dlg = el.shadowRoot!.querySelector('transition-edit-dialog') as HTMLElement & {
+      transition: { at: string; low: number; high: number } | null;
+    };
+    expect(dlg).not.toBeNull();
+    expect(dlg.transition).toEqual({ at: '07:00', low: 17.5, high: 20.5 });
+  });
+
   it('cancel returns to the list mode without writing', async () => {
     const { hass } = makeHass({ initialSchedule: null });
     const el = await tab(hass);
-    const editor2 = el.shadowRoot!.querySelector('timeline-editor')!;
+    const editor2 = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
     editor2.dispatchEvent(
       new CustomEvent('transition-add', {
         detail: { at: '08:00' },
@@ -332,7 +429,7 @@ describe('comfort-band-schedule-tab', () => {
     // Before any new initial event arrives we should still see the editor,
     // not the loading placeholder.
     expect(el.shadowRoot!.querySelector('.loading')).toBeNull();
-    expect(el.shadowRoot!.querySelector('timeline-editor')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('comfort-band-schedule-chart')).not.toBeNull();
   });
 
   it('unsubscribes when the element is removed from the DOM', async () => {
@@ -374,7 +471,7 @@ describe('comfort-band-schedule-tab', () => {
     await el.updateComplete;
 
     expect(el.shadowRoot!.querySelector('.loading')).toBeNull();
-    expect(el.shadowRoot!.querySelector('timeline-editor')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('comfort-band-schedule-chart')).not.toBeNull();
   });
 
   it('preserves already-rendered transitions when a re-subscribe errors', async () => {
@@ -435,11 +532,12 @@ describe('comfort-band-schedule-tab', () => {
     const el = await mount('comfort-band-schedule-tab', { hass, zone: 'gym' });
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
-    // First subscribe delivered one transition.
+    // First subscribe delivered one transition → two handles (low + high).
     expect(
-      el.shadowRoot!.querySelector('timeline-editor')!.shadowRoot!.querySelectorAll('.point')
-        .length,
-    ).toBe(1);
+      el
+        .shadowRoot!.querySelector('comfort-band-schedule-chart')!
+        .shadowRoot!.querySelectorAll('.handle').length,
+    ).toBe(2);
 
     // Flip the profile so the second (failing) subscribe runs.
     hass.states['select.comfort_band_profiles_active_profile'] = {
@@ -520,7 +618,7 @@ describe('comfort-band-schedule-tab', () => {
     );
     const el = await tab(fake.hass);
 
-    const editor = el.shadowRoot!.querySelector('timeline-editor')!;
+    const editor = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
     editor.dispatchEvent(
       new CustomEvent('transition-delete', {
         detail: { at: '06:00' },

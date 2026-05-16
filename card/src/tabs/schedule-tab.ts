@@ -17,12 +17,20 @@
 import { LitElement, html, css, nothing } from 'lit';
 import type { PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import '../timeline-editor.js';
+import '../schedule-chart.js';
 import '../transition-edit-dialog.js';
 import { findActiveProfileEntity } from '../helpers.js';
+import { parseTime } from '../schedule-chart.js';
 import { setSchedule, subscribeSchedule } from '../services.js';
 import type { HomeAssistant, Transition, UnsubscribeFunc } from '../types.js';
 import { tokens } from '../styles.js';
+
+/** Compare transitions by `at` numerically (minutes-since-midnight) so a
+ *  non-zero-padded `at` ever produced by an external integration sorts
+ *  correctly — `"9:00"` would rank after `"10:00"` under localeCompare. */
+function compareTransitions(a: Transition, b: Transition): number {
+  return parseTime(a.at) - parseTime(b.at);
+}
 
 type Mode = 'list' | 'add' | 'edit';
 
@@ -38,6 +46,13 @@ export class ComfortBandScheduleTab extends LitElement {
   @state() private _mode: Mode = 'list';
   @state() private _editing: Transition | null = null;
   @state() private _newAt = '06:00';
+  // Plain fields — `_mode` is the @state that drives re-renders; these are
+  // read once when the dialog opens. Marking them @state would re-render on
+  // every assignment. **Contract:** any handler that sets these MUST set
+  // them BEFORE flipping `_mode = 'add'`, otherwise the dialog renders with
+  // stale defaults. `_onAdd` and the dialog-close handlers honour this.
+  private _newLow: number | undefined;
+  private _newHigh: number | undefined;
   private _unsub?: UnsubscribeFunc;
   // Incremented on every (re)subscribe and unsubscribe so stale callbacks
   // and slow `subscribeMessage` round-trips from a superseded attempt can
@@ -159,7 +174,13 @@ export class ComfortBandScheduleTab extends LitElement {
         { zone: this.zone, profile: this._profile },
         (schedule) => {
           if (gen !== this._subscribeGen) return;
-          this._transitions = schedule?.baseline ? [...schedule.baseline] : [];
+          // Sort defensively — the backend normalises and sorts on every
+          // write, but the WS payload type is `Transition[]` with no order
+          // guarantee, and the list view below renders straight from this
+          // array.
+          this._transitions = schedule?.baseline
+            ? [...schedule.baseline].sort(compareTransitions)
+            : [];
           this._loading = false;
         },
       );
@@ -193,8 +214,10 @@ export class ComfortBandScheduleTab extends LitElement {
     return this._subscribe();
   }
 
-  private _onAdd = (event: CustomEvent<{ at: string }>) => {
+  private _onAdd = (event: CustomEvent<{ at: string; low?: number; high?: number }>) => {
     this._newAt = event.detail.at;
+    this._newLow = event.detail.low;
+    this._newHigh = event.detail.high;
     this._editing = null;
     this._mode = 'add';
   };
@@ -207,6 +230,20 @@ export class ComfortBandScheduleTab extends LitElement {
   private _onDelete = async (event: CustomEvent<{ at: string }>) => {
     if (!this.hass) return;
     const next = this._transitions.filter((t) => t.at !== event.detail.at);
+    await this._writeSchedule(next);
+  };
+
+  private _onUpdate = async (
+    event: CustomEvent<{ oldAt: string; transition: Transition }>,
+  ): Promise<void> => {
+    if (!this.hass) return;
+    const { oldAt, transition } = event.detail;
+    // Drop the original entry by its old `at`, drop any collision at the new
+    // `at`, then insert and sort. Same shape as `_onDialogSave`.
+    const next = this._transitions
+      .filter((t) => t.at !== oldAt && t.at !== transition.at)
+      .concat(transition)
+      .sort(compareTransitions);
     await this._writeSchedule(next);
   };
 
@@ -229,10 +266,12 @@ export class ComfortBandScheduleTab extends LitElement {
       }
       next.push(incoming);
     }
-    next.sort((a, b) => a.at.localeCompare(b.at));
+    next.sort(compareTransitions);
     await this._writeSchedule(next);
     this._mode = 'list';
     this._editing = null;
+    this._newLow = undefined;
+    this._newHigh = undefined;
   };
 
   private _onDialogDelete = async (event: CustomEvent<{ at: string }>): Promise<void> => {
@@ -240,25 +279,35 @@ export class ComfortBandScheduleTab extends LitElement {
     await this._writeSchedule(next);
     this._mode = 'list';
     this._editing = null;
+    this._newLow = undefined;
+    this._newHigh = undefined;
   };
 
   private _onDialogCancel = () => {
     this._mode = 'list';
     this._editing = null;
+    this._newLow = undefined;
+    this._newHigh = undefined;
   };
 
   private async _writeSchedule(transitions: Transition[]): Promise<void> {
     if (!this.hass) return;
+    // Apply the optimistic update BEFORE the await so a rapidly-fired
+    // second call (e.g. holding ArrowRight on a chart handle) reads the
+    // post-write state rather than the stale pre-write snapshot. The
+    // subscription will echo the persisted (and normalised) state right
+    // after; on failure the catch restores via `_error` and the next echo
+    // will overwrite `_transitions` back to the server's authoritative copy.
+    const previous = this._transitions;
+    this._transitions = transitions;
     try {
       await setSchedule(this.hass, {
         zone: this.zone,
         profile: this._profile,
         transitions,
       });
-      // Optimistic update; the subscription will echo the persisted (and
-      // normalised) state right after.
-      this._transitions = transitions;
     } catch (err) {
+      this._transitions = previous;
       this._error = err instanceof Error ? err.message : 'Failed to save schedule.';
     }
   }
@@ -272,8 +321,8 @@ export class ComfortBandScheduleTab extends LitElement {
           ? this._editing
           : {
               at: this._newAt,
-              low: defaultLow(this._transitions),
-              high: defaultHigh(this._transitions),
+              low: this._newLow ?? defaultLow(this._transitions),
+              high: this._newHigh ?? defaultHigh(this._transitions),
             };
       return html`
         <transition-edit-dialog
@@ -296,12 +345,13 @@ export class ComfortBandScheduleTab extends LitElement {
         : this._error
           ? html`<div class="error">${this._error}</div>`
           : html`
-              <timeline-editor
+              <comfort-band-schedule-chart
                 .transitions=${this._transitions}
                 @transition-add=${this._onAdd}
                 @transition-edit=${this._onEdit}
                 @transition-delete=${this._onDelete}
-              ></timeline-editor>
+                @transition-update=${this._onUpdate}
+              ></comfort-band-schedule-chart>
               ${this._renderList()}
             `}
     `;
@@ -311,17 +361,29 @@ export class ComfortBandScheduleTab extends LitElement {
     if (this._transitions.length === 0) return nothing;
     return html`
       <ul class="list">
-        ${this._transitions.map(
-          (t) => html`
+        ${this._transitions.map((t) => {
+          const open = () =>
+            this._onEdit(new CustomEvent('transition-edit', { detail: { transition: t } }));
+          return html`
             <li
-              @click=${() =>
-                this._onEdit(new CustomEvent('transition-edit', { detail: { transition: t } }))}
+              role="button"
+              tabindex="0"
+              aria-label="Edit transition at ${t.at}, ${t.low.toFixed(1)} to ${t.high.toFixed(
+                1,
+              )} degrees"
+              @click=${open}
+              @keydown=${(e: KeyboardEvent) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  open();
+                }
+              }}
             >
               <span class="at">${t.at}</span>
               <span>${t.low.toFixed(1)}° – ${t.high.toFixed(1)}°</span>
             </li>
-          `,
-        )}
+          `;
+        })}
       </ul>
     `;
   }

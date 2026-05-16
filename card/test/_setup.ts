@@ -33,3 +33,13 @@ if (!('ResizeObserver' in window)) {
       disconnect(): void {}
     } as unknown as typeof ResizeObserver;
 }
+
+// jsdom doesn't implement Pointer Events fully — `setPointerCapture` /
+// `releasePointerCapture` throw "Not implemented." No-op them so drag tests
+// using these APIs (e.g. `schedule-chart`) don't need per-test stubbing.
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = function () {};
+}
+if (!Element.prototype.releasePointerCapture) {
+  Element.prototype.releasePointerCapture = function () {};
+}
