@@ -20,16 +20,18 @@ import './tabs/now-tab.js';
 import './tabs/profiles-tab.js';
 import './tabs/insights-tab.js';
 import './tabs/schedule-tab.js';
+import './tabs/settings-tab.js';
 import type { ZoneEntities } from './helpers.js';
 import type { HomeAssistant } from './types.js';
 import { tokens } from './styles.js';
 
-type TabId = 'now' | 'schedule' | 'profiles' | 'insights';
+type TabId = 'now' | 'schedule' | 'profiles' | 'settings' | 'insights';
 
 const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: 'now', label: 'Now' },
   { id: 'schedule', label: 'Schedule' },
   { id: 'profiles', label: 'Profiles' },
+  { id: 'settings', label: 'Settings' },
   { id: 'insights', label: 'Insights' },
 ];
 
@@ -199,6 +201,12 @@ export class ComfortBandModal extends LitElement {
         ></comfort-band-schedule-tab>`;
       case 'profiles':
         return html`<comfort-band-profiles-tab .hass=${this.hass}></comfort-band-profiles-tab>`;
+      case 'settings':
+        return html`<comfort-band-settings-tab
+          .hass=${this.hass}
+          .zone=${this.zone}
+          .entities=${this.entities}
+        ></comfort-band-settings-tab>`;
       case 'insights':
         return html`<comfort-band-insights-tab
           .hass=${this.hass}

@@ -57,6 +57,32 @@ export class ComfortBandNowTab extends LitElement {
         font-variant-numeric: tabular-nums;
         line-height: 1;
       }
+      .feels-like {
+        margin-top: 4px;
+        margin-bottom: var(--cb-gap-sm);
+        font-size: 12px;
+        color: var(--cb-text-secondary);
+        display: flex;
+        align-items: center;
+        gap: var(--cb-gap-sm);
+        /* Narrow Lovelace tiles (~180 px in a 2-column grid) overflow
+           when "Feels like 23.5°" sits next to the "DRIVING DECISIONS"
+           pill; wrap so the badge drops to its own line cleanly. */
+        flex-wrap: wrap;
+      }
+      .feels-like .driving {
+        font-size: 10px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 1px 6px;
+        border-radius: var(--cb-radius-pill);
+        background: var(--cb-accent, var(--primary-color, #03a9f4));
+        color: #ffffff;
+      }
+      .feels-like .muted-warn {
+        font-style: italic;
+      }
       .action-chip {
         font-size: 11px;
         font-weight: 500;
@@ -172,9 +198,16 @@ export class ComfortBandNowTab extends LitElement {
     const effLow = this._numericState(this.entities.effectiveLow);
     const effHigh = this._numericState(this.entities.effectiveHigh);
     const room = this._numericState(this.entities.roomTemperature);
+    const apparent = this._numericState(this.entities.apparentTemperature);
     const overrideHours = this._numericState(this.entities.overrideHours);
     const action = this._stateOf(this.entities.currentAction)?.state ?? 'unknown';
     const overrideActive = this._stateOf(this.entities.overrideActive)?.state === 'on';
+    const useApparentOn = this._stateOf(this.entities.useApparentTemperature)?.state === 'on';
+    // Only show "Feels like" when apparent is meaningfully different from
+    // the raw reading — otherwise it's noise. 0.1 °C tolerance because both
+    // sensors round to 1 decimal.
+    const showFeelsLike =
+      Number.isFinite(room) && Number.isFinite(apparent) && Math.abs(apparent - room) >= 0.1;
 
     const sliderLow = this._pendingLow ?? (Number.isFinite(lowState) ? lowState : 19);
     const sliderHigh = this._pendingHigh ?? (Number.isFinite(highState) ? highState : 22);
@@ -191,6 +224,7 @@ export class ComfortBandNowTab extends LitElement {
             >`
           : nothing}
       </div>
+      ${this._renderFeelsLikeRow({ apparent, showFeelsLike, useApparentOn })}
       <div class="gauge-row">
         <band-gauge .low=${effLow} .high=${effHigh} .room=${room} .action=${action}></band-gauge>
       </div>
@@ -225,6 +259,43 @@ export class ComfortBandNowTab extends LitElement {
         </div>
       </section>
     `;
+  }
+
+  private _renderFeelsLikeRow(opts: {
+    apparent: number;
+    showFeelsLike: boolean;
+    useApparentOn: boolean;
+  }) {
+    const { apparent, showFeelsLike, useApparentOn } = opts;
+    // The "Driving decisions" badge is decoupled from `showFeelsLike` so
+    // it stays visible at mid-humidity bands where the 1-decimal rounding
+    // on both sensors collapses the apparent/room delta below the 0.1 °C
+    // threshold. Without this, the user would lose all card-side
+    // feedback that apparent mode is the active decision input.
+    const showBadge = useApparentOn && Number.isFinite(apparent);
+    if (showFeelsLike) {
+      return html`<div class="feels-like">
+        <span>Feels like ${apparent.toFixed(1)}°</span>
+        ${showBadge ? html`<span class="driving">Driving decisions</span>` : nothing}
+      </div>`;
+    }
+    if (showBadge) {
+      // Apparent mode is on but the value matches the room temp this
+      // tick (within rounding). Suppress the redundant "Feels like X°"
+      // text; the badge alone tells the user apparent is still in charge.
+      return html`<div class="feels-like">
+        <span class="driving">Driving decisions</span>
+      </div>`;
+    }
+    if (useApparentOn) {
+      return html`<div class="feels-like">
+        <span class="muted-warn">
+          Apparent temperature mode is on but no humidity reading is available — decisions are using
+          the raw room temperature.
+        </span>
+      </div>`;
+    }
+    return nothing;
   }
 
   private _renderHoursSection(overrideHours: number) {

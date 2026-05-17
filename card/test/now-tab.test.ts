@@ -12,6 +12,7 @@ function makeEntities(zone = 'gym'): ZoneEntities {
     effectiveLow: `sensor.${zone}_effective_low`,
     effectiveHigh: `sensor.${zone}_effective_high`,
     roomTemperature: `sensor.${zone}_room_temperature`,
+    apparentTemperature: `sensor.${zone}_apparent_temperature`,
     overrideEnds: `sensor.${zone}_override_ends`,
     currentAction: `sensor.${zone}_current_action`,
     overrideActive: `binary_sensor.${zone}_override_active`,
@@ -23,6 +24,8 @@ function makeEntities(zone = 'gym'): ZoneEntities {
     minCycleMinutes: `number.${zone}_min_cycle_minutes`,
     cancelOverride: `button.${zone}_cancel_override`,
     enabled: `switch.${zone}_enabled`,
+    learningEnabled: `switch.${zone}_learning_enabled`,
+    useApparentTemperature: `switch.${zone}_use_apparent_temperature`,
     deviceId: `dev-${zone}`,
     deviceName: zone,
   };
@@ -162,5 +165,94 @@ describe('comfort-band-now-tab', () => {
     expect(presets[0].classList.contains('active')).toBe(false);
     expect(presets[1].classList.contains('active')).toBe(true);
     expect(presets[2].classList.contains('active')).toBe(false);
+  });
+
+  // ----- "Feels like" line (v0.4 apparent-temperature) -----
+
+  it('hides "Feels like" when apparent equals room temp', async () => {
+    const el = await nowTab(
+      makeHass({
+        'sensor.gym_room_temperature': '21.0',
+        'sensor.gym_apparent_temperature': '21.0',
+      }),
+    );
+    expect(el.shadowRoot!.querySelector('.feels-like')).toBeNull();
+  });
+
+  it('shows "Feels like" when apparent differs by >= 0.1 °C', async () => {
+    const el = await nowTab(
+      makeHass({
+        'sensor.gym_room_temperature': '21.0',
+        'sensor.gym_apparent_temperature': '23.5',
+      }),
+    );
+    const line = el.shadowRoot!.querySelector('.feels-like');
+    expect(line).not.toBeNull();
+    expect(line!.textContent).toContain('Feels like 23.5°');
+  });
+
+  it('omits the "Driving decisions" badge when the toggle is off', async () => {
+    const el = await nowTab(
+      makeHass({
+        'sensor.gym_room_temperature': '21.0',
+        'sensor.gym_apparent_temperature': '23.5',
+        'switch.gym_use_apparent_temperature': 'off',
+      }),
+    );
+    expect(el.shadowRoot!.querySelector('.feels-like .driving')).toBeNull();
+  });
+
+  it('shows the "Driving decisions" badge when use_apparent_temperature is on', async () => {
+    const el = await nowTab(
+      makeHass({
+        'sensor.gym_room_temperature': '21.0',
+        'sensor.gym_apparent_temperature': '23.5',
+        'switch.gym_use_apparent_temperature': 'on',
+      }),
+    );
+    const badge = el.shadowRoot!.querySelector('.feels-like .driving');
+    expect(badge).not.toBeNull();
+    expect(badge!.textContent).toContain('Driving decisions');
+  });
+
+  it('keeps the badge visible when apparent rounds to the same value as room', async () => {
+    // Mid-humidity case: 1-decimal rounding collapses the delta below the
+    // 0.1 °C `showFeelsLike` threshold, but apparent mode is still in
+    // charge of decisions — the badge must stay so the user sees that.
+    const el = await nowTab(
+      makeHass({
+        'sensor.gym_room_temperature': '21.0',
+        'sensor.gym_apparent_temperature': '21.0',
+        'switch.gym_use_apparent_temperature': 'on',
+      }),
+    );
+    const row = el.shadowRoot!.querySelector('.feels-like');
+    expect(row).not.toBeNull();
+    const badge = row!.querySelector('.driving');
+    expect(badge).not.toBeNull();
+    expect(badge!.textContent).toContain('Driving decisions');
+    // No "Feels like X°" text — would just duplicate the room number.
+    // Scope to the row so we don't pick up "Feels like" inside CSS comments
+    // in the component's <style> block, which shadowRoot.textContent
+    // includes verbatim.
+    expect(row!.textContent).not.toContain('Feels like');
+  });
+
+  it('warns when apparent mode is on but no humidity reading is available', async () => {
+    // No `sensor.gym_apparent_temperature` state at all — happens when
+    // the humidity sensor is unconfigured or offline. The toggle is on
+    // but decisions silently fall back to raw room temp; we warn so the
+    // user can investigate.
+    const el = await nowTab(
+      makeHass({
+        'sensor.gym_room_temperature': '21.0',
+        'switch.gym_use_apparent_temperature': 'on',
+      }),
+    );
+    const warn = el.shadowRoot!.querySelector('.feels-like .muted-warn');
+    expect(warn).not.toBeNull();
+    expect(warn!.textContent).toContain('no humidity reading');
+    // Don't render a badge in this state — it'd contradict the warning.
+    expect(el.shadowRoot!.querySelector('.feels-like .driving')).toBeNull();
   });
 });
