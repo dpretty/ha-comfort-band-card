@@ -57,6 +57,25 @@ export class ComfortBandNowTab extends LitElement {
         font-variant-numeric: tabular-nums;
         line-height: 1;
       }
+      .feels-like {
+        margin-top: 4px;
+        margin-bottom: var(--cb-gap-sm);
+        font-size: 12px;
+        color: var(--cb-text-secondary);
+        display: flex;
+        align-items: center;
+        gap: var(--cb-gap-sm);
+      }
+      .feels-like .driving {
+        font-size: 10px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 1px 6px;
+        border-radius: var(--cb-radius-pill);
+        background: var(--cb-accent, var(--primary-color, #03a9f4));
+        color: #ffffff;
+      }
       .action-chip {
         font-size: 11px;
         font-weight: 500;
@@ -172,9 +191,16 @@ export class ComfortBandNowTab extends LitElement {
     const effLow = this._numericState(this.entities.effectiveLow);
     const effHigh = this._numericState(this.entities.effectiveHigh);
     const room = this._numericState(this.entities.roomTemperature);
+    const apparent = this._numericState(this.entities.apparentTemperature);
     const overrideHours = this._numericState(this.entities.overrideHours);
     const action = this._stateOf(this.entities.currentAction)?.state ?? 'unknown';
     const overrideActive = this._stateOf(this.entities.overrideActive)?.state === 'on';
+    const useApparentOn = this._stateOf(this.entities.useApparentTemperature)?.state === 'on';
+    // Only show "Feels like" when apparent is meaningfully different from
+    // the raw reading — otherwise it's noise. 0.1 °C tolerance because both
+    // sensors round to 1 decimal.
+    const showFeelsLike =
+      Number.isFinite(room) && Number.isFinite(apparent) && Math.abs(apparent - room) >= 0.1;
 
     const sliderLow = this._pendingLow ?? (Number.isFinite(lowState) ? lowState : 19);
     const sliderHigh = this._pendingHigh ?? (Number.isFinite(highState) ? highState : 22);
@@ -191,6 +217,12 @@ export class ComfortBandNowTab extends LitElement {
             >`
           : nothing}
       </div>
+      ${showFeelsLike
+        ? html`<div class="feels-like">
+            <span>Feels like ${apparent.toFixed(1)}°</span>
+            ${useApparentOn ? html`<span class="driving">Driving decisions</span>` : nothing}
+          </div>`
+        : nothing}
       <div class="gauge-row">
         <band-gauge .low=${effLow} .high=${effHigh} .room=${room} .action=${action}></band-gauge>
       </div>

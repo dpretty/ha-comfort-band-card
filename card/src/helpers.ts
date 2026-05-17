@@ -42,8 +42,12 @@ export interface ZoneEntities {
   minCycleMinutes: string | null;
   // Button
   cancelOverride: string | null;
-  // Switch
+  // Switches
   enabled: string | null;
+  learningEnabled: string | null;
+  useApparentTemperature: string | null;
+  // Additional sensor (v0.4+)
+  apparentTemperature: string | null;
   // Device meta (null if device not found)
   deviceId: string | null;
   deviceName: string | null;
@@ -55,6 +59,7 @@ const KEY_TO_FIELD: Record<string, keyof ZoneEntities> = {
   effective_low: 'effectiveLow',
   effective_high: 'effectiveHigh',
   room_temperature: 'roomTemperature',
+  apparent_temperature: 'apparentTemperature',
   override_ends: 'overrideEnds',
   current_action: 'currentAction',
   override_active: 'overrideActive',
@@ -66,6 +71,8 @@ const KEY_TO_FIELD: Record<string, keyof ZoneEntities> = {
   min_cycle_minutes: 'minCycleMinutes',
   cancel_override: 'cancelOverride',
   enabled: 'enabled',
+  learning_enabled: 'learningEnabled',
+  use_apparent_temperature: 'useApparentTemperature',
 };
 
 function emptyZoneEntities(): ZoneEntities {
@@ -73,6 +80,7 @@ function emptyZoneEntities(): ZoneEntities {
     effectiveLow: null,
     effectiveHigh: null,
     roomTemperature: null,
+    apparentTemperature: null,
     overrideEnds: null,
     currentAction: null,
     overrideActive: null,
@@ -84,6 +92,8 @@ function emptyZoneEntities(): ZoneEntities {
     minCycleMinutes: null,
     cancelOverride: null,
     enabled: null,
+    learningEnabled: null,
+    useApparentTemperature: null,
     deviceId: null,
     deviceName: null,
   };

@@ -12,6 +12,7 @@ function makeEntities(zone = 'gym'): ZoneEntities {
     effectiveLow: `sensor.${zone}_effective_low`,
     effectiveHigh: `sensor.${zone}_effective_high`,
     roomTemperature: `sensor.${zone}_room_temperature`,
+    apparentTemperature: `sensor.${zone}_apparent_temperature`,
     overrideEnds: `sensor.${zone}_override_ends`,
     currentAction: `sensor.${zone}_current_action`,
     overrideActive: `binary_sensor.${zone}_override_active`,
@@ -23,6 +24,8 @@ function makeEntities(zone = 'gym'): ZoneEntities {
     minCycleMinutes: `number.${zone}_min_cycle_minutes`,
     cancelOverride: `button.${zone}_cancel_override`,
     enabled: `switch.${zone}_enabled`,
+    learningEnabled: `switch.${zone}_learning_enabled`,
+    useApparentTemperature: `switch.${zone}_use_apparent_temperature`,
     deviceId: `dev-${zone}`,
     deviceName: zone,
   };
@@ -162,5 +165,53 @@ describe('comfort-band-now-tab', () => {
     expect(presets[0].classList.contains('active')).toBe(false);
     expect(presets[1].classList.contains('active')).toBe(true);
     expect(presets[2].classList.contains('active')).toBe(false);
+  });
+
+  // ----- "Feels like" line (v0.4 apparent-temperature) -----
+
+  it('hides "Feels like" when apparent equals room temp', async () => {
+    const el = await nowTab(
+      makeHass({
+        'sensor.gym_room_temperature': '21.0',
+        'sensor.gym_apparent_temperature': '21.0',
+      }),
+    );
+    expect(el.shadowRoot!.querySelector('.feels-like')).toBeNull();
+  });
+
+  it('shows "Feels like" when apparent differs by >= 0.1 °C', async () => {
+    const el = await nowTab(
+      makeHass({
+        'sensor.gym_room_temperature': '21.0',
+        'sensor.gym_apparent_temperature': '23.5',
+      }),
+    );
+    const line = el.shadowRoot!.querySelector('.feels-like');
+    expect(line).not.toBeNull();
+    expect(line!.textContent).toContain('Feels like 23.5°');
+  });
+
+  it('omits the "Driving decisions" badge when the toggle is off', async () => {
+    const el = await nowTab(
+      makeHass({
+        'sensor.gym_room_temperature': '21.0',
+        'sensor.gym_apparent_temperature': '23.5',
+        'switch.gym_use_apparent_temperature': 'off',
+      }),
+    );
+    expect(el.shadowRoot!.querySelector('.feels-like .driving')).toBeNull();
+  });
+
+  it('shows the "Driving decisions" badge when use_apparent_temperature is on', async () => {
+    const el = await nowTab(
+      makeHass({
+        'sensor.gym_room_temperature': '21.0',
+        'sensor.gym_apparent_temperature': '23.5',
+        'switch.gym_use_apparent_temperature': 'on',
+      }),
+    );
+    const badge = el.shadowRoot!.querySelector('.feels-like .driving');
+    expect(badge).not.toBeNull();
+    expect(badge!.textContent).toContain('Driving decisions');
   });
 });
