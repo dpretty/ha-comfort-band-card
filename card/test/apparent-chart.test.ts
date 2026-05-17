@@ -96,12 +96,18 @@ describe('comfort-band-apparent-chart', () => {
   });
 
   it('drops a stale in-flight response when entity props change mid-fetch', async () => {
-    // Two pending WS responses. Resolve the SECOND one (the one fired
-    // after the entity swap) first. Then resolve the first/stale one.
-    // The chart must only apply the second response; the stale one is
-    // dropped via the _fetchGen counter check. Without that guard the
-    // stale call's _renderPlot would overwrite the freshly-rendered
-    // chart with old data.
+    // Test design: make the stale (first) response carry NON-EMPTY room
+    // and apparent series; make the fresh (second) response carry empty
+    // arrays. Then resolve fresh first, stale last.
+    //   With the _fetchGen guard: stale's _renderPlot is skipped → final
+    //     state is "_empty = true" from the fresh response → status div
+    //     shows "No history available".
+    //   Without the guard: stale's _renderPlot runs with non-empty data,
+    //     hits `new uPlot()` (which throws in happy-dom — no canvas),
+    //     the catch block sets `_error`, and the status div shows the
+    //     canvas error message.
+    // Asserting the absence of `_error` is what proves the guard fires.
+    const now = Math.floor(Date.now() / 1000);
     const deferred: Array<{ resolve: (r: unknown) => void }> = [];
     const callWS = vi.fn().mockImplementation(
       () =>
@@ -112,14 +118,12 @@ describe('comfort-band-apparent-chart', () => {
     const el = await chart({ hass: makeHass(callWS), ...FULL_PROPS });
     await new Promise((r) => setTimeout(r, 0));
     expect(callWS).toHaveBeenCalledOnce();
-    // Swap the humidity entity before the first WS resolves.
     el.humidityEntity = 'sensor.gym_humidity_alt';
     await el.updateComplete;
     await new Promise((r) => setTimeout(r, 0));
     expect(callWS).toHaveBeenCalledTimes(2);
-    // Resolve the SECOND fetch first. setTimeout(0) flushes the promise
-    // continuation (the body after `await fetchHistory`); updateComplete
-    // alone waits for the Lit render cycle but not for microtasks.
+
+    // Resolve the fresh fetch first — empty for every series.
     deferred[1].resolve({
       'sensor.gym_room_temperature': [],
       'sensor.gym_apparent_temperature': [],
@@ -127,17 +131,32 @@ describe('comfort-band-apparent-chart', () => {
     });
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
-    // Now resolve the stale FIRST fetch. The chart must not regress
-    // its state — loading should stay false, and no error should appear.
+    expect(el.shadowRoot!.textContent).toContain('No history available');
+
+    // Resolve the stale fetch — has DATA for the still-current room and
+    // apparent entities. Without the guard, _renderPlot would run, try
+    // to construct uPlot, and the catch path would surface an error.
     deferred[0].resolve({
-      'sensor.gym_room_temperature': [],
-      'sensor.gym_apparent_temperature': [],
-      'sensor.gym_humidity': [],
+      'sensor.gym_room_temperature': [
+        { s: '21.0', lu: now - 3600 },
+        { s: '21.5', lu: now - 1800 },
+      ],
+      'sensor.gym_apparent_temperature': [
+        { s: '21.2', lu: now - 3600 },
+        { s: '22.0', lu: now - 1800 },
+      ],
+      'sensor.gym_humidity': [{ s: '60', lu: now - 1800 }],
     });
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
-    // Final state reflects the second fetch only.
-    expect(el.shadowRoot!.querySelector('.status')!.textContent).toContain('No history available');
+
+    // Final assertion: status text is still the fresh fetch's empty
+    // state, NOT an error message that the stale's render-attempt would
+    // produce. This is what proves the guard caught the stale response.
+    const statusText = el.shadowRoot!.querySelector('.status')!.textContent ?? '';
+    expect(statusText).toContain('No history available');
+    expect(statusText.toLowerCase()).not.toContain('error');
+    expect(statusText.toLowerCase()).not.toContain('canvas');
   });
 
   // The "all-unavailable humidity but valid room+apparent" path lives in

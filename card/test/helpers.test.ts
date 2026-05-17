@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findActiveProfileEntity, findZoneEntities } from '../src/helpers.js';
+import { findActiveProfileEntity, findZoneEntities, readHumiditySensor } from '../src/helpers.js';
 import type { DeviceRegistryEntry, EntityRegistryEntry, HomeAssistant } from '../src/types.js';
 import { stubConnection } from './_fixture.js';
 
@@ -191,5 +191,76 @@ describe('findActiveProfileEntity', () => {
 
   it('returns null when the profile-manager device is missing', () => {
     expect(findActiveProfileEntity(makeHass([], []))).toBe(null);
+  });
+});
+
+describe('readHumiditySensor', () => {
+  function makeHassWithState(
+    states: Record<string, { state: string; attributes: Record<string, unknown> }>,
+  ): HomeAssistant {
+    return {
+      states: Object.fromEntries(
+        Object.entries(states).map(([entityId, { state, attributes }]) => [
+          entityId,
+          {
+            entity_id: entityId,
+            state,
+            attributes,
+            last_changed: '',
+            last_updated: '',
+          },
+        ]),
+      ),
+      devices: {},
+      entities: {},
+      connection: stubConnection(),
+      callService: () => Promise.resolve(),
+      callWS: () => Promise.resolve() as Promise<never>,
+    };
+  }
+
+  it('returns null when hass is undefined', () => {
+    expect(readHumiditySensor(undefined, 'sensor.gym_room_temperature')).toBe(null);
+  });
+
+  it('returns null when the room entity id is null or undefined', () => {
+    const hass = makeHassWithState({});
+    expect(readHumiditySensor(hass, null)).toBe(null);
+    expect(readHumiditySensor(hass, undefined)).toBe(null);
+  });
+
+  it('returns null when the room entity has no state yet', () => {
+    // Empty states map — entity not registered or first state push hasn't
+    // landed. The function must tolerate this without throwing.
+    expect(readHumiditySensor(makeHassWithState({}), 'sensor.gym_room_temperature')).toBe(null);
+  });
+
+  it('returns null when the humidity_sensor attribute is explicitly null', () => {
+    // Backend sends `null` when no humidity sensor is configured —
+    // mirrors `RoomTemperatureSensor.extra_state_attributes` returning
+    // `{"humidity_sensor": None}`. Must collapse to null (not the
+    // string "null" or the JS null literal making `!humidity` false
+    // downstream).
+    const hass = makeHassWithState({
+      'sensor.gym_room_temperature': { state: '21.0', attributes: { humidity_sensor: null } },
+    });
+    expect(readHumiditySensor(hass, 'sensor.gym_room_temperature')).toBe(null);
+  });
+
+  it('returns null when the attribute is missing entirely', () => {
+    const hass = makeHassWithState({
+      'sensor.gym_room_temperature': { state: '21.0', attributes: {} },
+    });
+    expect(readHumiditySensor(hass, 'sensor.gym_room_temperature')).toBe(null);
+  });
+
+  it('returns the entity_id when humidity_sensor is set', () => {
+    const hass = makeHassWithState({
+      'sensor.gym_room_temperature': {
+        state: '21.0',
+        attributes: { humidity_sensor: 'sensor.gym_humidity' },
+      },
+    });
+    expect(readHumiditySensor(hass, 'sensor.gym_room_temperature')).toBe('sensor.gym_humidity');
   });
 });

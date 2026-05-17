@@ -16,9 +16,9 @@
  * existing component would just fork every helper.
  */
 
-import { LitElement, html, css, unsafeCSS, nothing } from 'lit';
+import { html, css, unsafeCSS, nothing } from 'lit';
 import type { PropertyValues } from 'lit';
-import { customElement, property, query, state } from 'lit/decorators.js';
+import { customElement, property } from 'lit/decorators.js';
 import uPlot from 'uplot';
 import type { Options as UPlotOptions } from 'uplot';
 import uplotCss from 'uplot/dist/uPlot.min.css?inline';
@@ -31,33 +31,23 @@ import {
   numericSeries,
   type HistoryResponse,
 } from './history-data.js';
+import { ComfortBandChartBase } from './chart-base.js';
 
-/** Pixel height of the chart canvas. Used by the CSS host rule, the
- *  initial uPlot options, and the ResizeObserver setSize call — kept
- *  here so all three stay in sync if the chart ever grows or shrinks. */
+/** Pixel height of the chart canvas. Single source of truth: read by
+ *  the uPlot options, the ResizeObserver setSize call, AND the CSS
+ *  `.chart-host` rule (interpolated via `unsafeCSS` below). */
 const CHART_HEIGHT = 220;
 
 @customElement('comfort-band-apparent-chart')
-export class ComfortBandApparentChart extends LitElement {
+export class ComfortBandApparentChart extends ComfortBandChartBase {
   @property({ attribute: false }) public hass?: HomeAssistant;
   @property({ type: String }) public roomEntity = '';
   @property({ type: String }) public apparentEntity = '';
   @property({ type: String }) public humidityEntity = '';
 
-  @state() private _loading = true;
-  @state() private _error: string | null = null;
-  @state() private _empty = false;
-
-  @query('.chart-host') private _host?: HTMLElement;
-
-  private _plot: uPlot | null = null;
-  private _resizeObserver: ResizeObserver | null = null;
-  private _hasFetched = false;
-  /** Monotonic counter — every `_fetch()` claims the next value, and
-   *  drops its response if a newer fetch has started in the meantime.
-   *  Prevents a stale response from overwriting a more-recent one when
-   *  entity props change mid-flight. */
-  private _fetchGen = 0;
+  protected override get chartHeight(): number {
+    return CHART_HEIGHT;
+  }
 
   public static override styles = [
     tokens,
@@ -72,10 +62,10 @@ export class ComfortBandApparentChart extends LitElement {
       }
       .chart-host {
         width: 100%;
-        height: 220px;
+        height: ${unsafeCSS(CHART_HEIGHT)}px;
       }
       /* Collapse the host while a status (loading/error/empty) is shown
-         so the user doesn't see a 220 px blank gap above the message. */
+         so the user doesn't see a blank gap above the message. */
       .chart-host.idle {
         height: 0;
       }
@@ -125,16 +115,6 @@ export class ComfortBandApparentChart extends LitElement {
       }
     `,
   ];
-
-  public override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this._destroyPlot();
-    // Reset the fetch latch so the chart refetches when re-attached
-    // (e.g. user switches away from Insights and back). Otherwise
-    // `updated()` skips the fetch since none of the entity props
-    // changed, leaving the host blank.
-    this._hasFetched = false;
-  }
 
   protected override updated(changed: PropertyValues<this>): void {
     if (!this._hasFetched) {
@@ -273,28 +253,6 @@ export class ComfortBandApparentChart extends LitElement {
     };
   }
 
-  private _observeResize(): void {
-    if (!this._host || this._resizeObserver) return;
-    this._resizeObserver = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0;
-      if (this._plot && width > 0) {
-        this._plot.setSize({ width, height: CHART_HEIGHT });
-      }
-    });
-    this._resizeObserver.observe(this._host);
-  }
-
-  private _destroyPlot(): void {
-    if (this._plot) {
-      this._plot.destroy();
-      this._plot = null;
-    }
-    if (this._resizeObserver) {
-      this._resizeObserver.disconnect();
-      this._resizeObserver = null;
-    }
-  }
-
   protected override render() {
     if (!this.hass || !this.roomEntity || !this.apparentEntity || !this.humidityEntity) {
       return html`<div class="status">Apparent-temperature comparison unavailable.</div>`;
@@ -312,17 +270,21 @@ export class ComfortBandApparentChart extends LitElement {
           </div>`
         : nothing}
       <div class="chart-host ${idle ? 'idle' : ''}"></div>
-      <div class="legend">
-        <span><span class="swatch" style="background:var(--primary-color)"></span>Room (°C)</span>
-        <span
-          ><span class="swatch dashed" style="color:var(--cb-action-heating)"></span>Apparent
-          (°C)</span
-        >
-        <span
-          ><span class="swatch" style="background:var(--secondary-text-color)"></span>Humidity (%,
-          right axis)</span
-        >
-      </div>
+      ${idle
+        ? nothing
+        : html`<div class="legend">
+            <span
+              ><span class="swatch" style="background:var(--primary-color)"></span>Room (°C)</span
+            >
+            <span
+              ><span class="swatch dashed" style="color:var(--cb-action-heating)"></span>Apparent
+              (°C)</span
+            >
+            <span
+              ><span class="swatch" style="background:var(--secondary-text-color)"></span>Humidity
+              (%, right axis)</span
+            >
+          </div>`}
     `;
   }
 }

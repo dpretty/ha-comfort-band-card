@@ -12,9 +12,9 @@
  * Fetched once on connect; `refresh()` is exposed for future auto-update.
  */
 
-import { LitElement, html, css, unsafeCSS, nothing } from 'lit';
+import { html, css, unsafeCSS, nothing } from 'lit';
 import type { PropertyValues } from 'lit';
-import { customElement, property, query, state } from 'lit/decorators.js';
+import { customElement, property } from 'lit/decorators.js';
 import uPlot from 'uplot';
 import type { Options as UPlotOptions } from 'uplot';
 import uplotCss from 'uplot/dist/uPlot.min.css?inline';
@@ -28,6 +28,7 @@ import {
   type HistoryPoint,
   type HistoryResponse,
 } from './history-data.js';
+import { ComfortBandChartBase } from './chart-base.js';
 
 interface ActionInterval {
   start: number; // unix seconds
@@ -35,28 +36,23 @@ interface ActionInterval {
   action: 'heating' | 'cooling';
 }
 
+/** Pixel height of the chart canvas. Single source of truth: read by
+ *  the uPlot options, the ResizeObserver setSize call, AND the CSS
+ *  `.chart-host` rule (interpolated via `unsafeCSS` below). */
+const CHART_HEIGHT = 260;
+
 @customElement('comfort-band-history-chart')
-export class ComfortBandHistoryChart extends LitElement {
+export class ComfortBandHistoryChart extends ComfortBandChartBase {
   @property({ attribute: false }) public hass?: HomeAssistant;
   @property({ type: String }) public roomEntity = '';
   @property({ type: String }) public lowEntity = '';
   @property({ type: String }) public highEntity = '';
   @property({ type: String }) public actionEntity = '';
 
-  @state() private _loading = true;
-  @state() private _error: string | null = null;
-  @state() private _empty = false;
+  protected override get chartHeight(): number {
+    return CHART_HEIGHT;
+  }
 
-  @query('.chart-host') private _host?: HTMLElement;
-
-  private _plot: uPlot | null = null;
-  private _resizeObserver: ResizeObserver | null = null;
-  private _hasFetched = false;
-  /** Monotonic counter — every `_fetch()` claims the next value, and
-   *  drops its response if a newer fetch has started in the meantime.
-   *  Prevents a stale response from overwriting a more-recent one when
-   *  entity props change mid-flight. */
-  private _fetchGen = 0;
   /** Latest action intervals (kept on the instance so the uPlot draw
    *  hook can read them every frame without rebinding). */
   private _intervals: ActionInterval[] = [];
@@ -72,7 +68,7 @@ export class ComfortBandHistoryChart extends LitElement {
       }
       .chart-host {
         width: 100%;
-        height: 260px;
+        height: ${unsafeCSS(CHART_HEIGHT)}px;
       }
       .status {
         text-align: center;
@@ -111,14 +107,6 @@ export class ComfortBandHistoryChart extends LitElement {
       }
     `,
   ];
-
-  public override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this._destroyPlot();
-    // Reset the fetch latch so the chart refetches when re-attached
-    // (e.g. user switches away from Insights and back).
-    this._hasFetched = false;
-  }
 
   protected override updated(changed: PropertyValues<this>): void {
     if (!this._hasFetched) {
@@ -217,7 +205,7 @@ export class ComfortBandHistoryChart extends LitElement {
 
     return {
       width,
-      height: 260,
+      height: CHART_HEIGHT,
       pxAlign: 1,
       cursor: { drag: { x: false, y: false }, points: { size: 6 } },
       legend: { show: false },
@@ -281,28 +269,6 @@ export class ComfortBandHistoryChart extends LitElement {
         ],
       },
     };
-  }
-
-  private _observeResize(): void {
-    if (!this._host || this._resizeObserver) return;
-    this._resizeObserver = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0;
-      if (this._plot && width > 0) {
-        this._plot.setSize({ width, height: 260 });
-      }
-    });
-    this._resizeObserver.observe(this._host);
-  }
-
-  private _destroyPlot(): void {
-    if (this._plot) {
-      this._plot.destroy();
-      this._plot = null;
-    }
-    if (this._resizeObserver) {
-      this._resizeObserver.disconnect();
-      this._resizeObserver = null;
-    }
   }
 
   protected override render() {
