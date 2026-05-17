@@ -156,3 +156,22 @@ export function findActiveProfileEntity(hass: HomeAssistant): string | null {
   }
   return null;
 }
+
+/**
+ * Read the configured humidity sensor entity_id for a zone, which the
+ * backend (`RoomTemperatureSensor.extra_state_attributes`) exposes as a
+ * `humidity_sensor` attribute on the room-temperature sensor's state.
+ * Returns `null` when the room entity is missing, the state hasn't been
+ * pushed yet, or no humidity sensor has been configured.
+ *
+ * Centralised so the cast and attribute key live in one place — both
+ * the Settings tab and the Insights tab need this lookup.
+ */
+export function readHumiditySensor(
+  hass: HomeAssistant | undefined,
+  roomEntityId: string | null | undefined,
+): string | null {
+  if (!hass || !roomEntityId) return null;
+  const attr = hass.states[roomEntityId]?.attributes.humidity_sensor as string | null | undefined;
+  return attr ?? null;
+}

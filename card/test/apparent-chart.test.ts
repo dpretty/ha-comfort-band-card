@@ -81,11 +81,63 @@ describe('comfort-band-apparent-chart', () => {
   });
 
   it('renders the empty state when none of the series have usable history', async () => {
-    const callWS = vi.fn().mockResolvedValue({});
+    // Explicit empty arrays per entity (vs a bare `{}`) so the test
+    // pins the intended "valid response but no datapoints" path rather
+    // than the "missing-key falls through to undefined" one.
+    const callWS = vi.fn().mockResolvedValue({
+      'sensor.gym_room_temperature': [],
+      'sensor.gym_apparent_temperature': [],
+      'sensor.gym_humidity': [],
+    });
     const el = await chart({ hass: makeHass(callWS), ...FULL_PROPS });
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain('No history available');
+  });
+
+  it('drops a stale in-flight response when entity props change mid-fetch', async () => {
+    // Two pending WS responses. Resolve the SECOND one (the one fired
+    // after the entity swap) first. Then resolve the first/stale one.
+    // The chart must only apply the second response; the stale one is
+    // dropped via the _fetchGen counter check. Without that guard the
+    // stale call's _renderPlot would overwrite the freshly-rendered
+    // chart with old data.
+    const deferred: Array<{ resolve: (r: unknown) => void }> = [];
+    const callWS = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          deferred.push({ resolve });
+        }),
+    );
+    const el = await chart({ hass: makeHass(callWS), ...FULL_PROPS });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(callWS).toHaveBeenCalledOnce();
+    // Swap the humidity entity before the first WS resolves.
+    el.humidityEntity = 'sensor.gym_humidity_alt';
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(callWS).toHaveBeenCalledTimes(2);
+    // Resolve the SECOND fetch first. setTimeout(0) flushes the promise
+    // continuation (the body after `await fetchHistory`); updateComplete
+    // alone waits for the Lit render cycle but not for microtasks.
+    deferred[1].resolve({
+      'sensor.gym_room_temperature': [],
+      'sensor.gym_apparent_temperature': [],
+      'sensor.gym_humidity_alt': [],
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+    // Now resolve the stale FIRST fetch. The chart must not regress
+    // its state — loading should stay false, and no error should appear.
+    deferred[0].resolve({
+      'sensor.gym_room_temperature': [],
+      'sensor.gym_apparent_temperature': [],
+      'sensor.gym_humidity': [],
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+    // Final state reflects the second fetch only.
+    expect(el.shadowRoot!.querySelector('.status')!.textContent).toContain('No history available');
   });
 
   // The "all-unavailable humidity but valid room+apparent" path lives in

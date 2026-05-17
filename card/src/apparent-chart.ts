@@ -32,6 +32,11 @@ import {
   type HistoryResponse,
 } from './history-data.js';
 
+/** Pixel height of the chart canvas. Used by the CSS host rule, the
+ *  initial uPlot options, and the ResizeObserver setSize call — kept
+ *  here so all three stay in sync if the chart ever grows or shrinks. */
+const CHART_HEIGHT = 220;
+
 @customElement('comfort-band-apparent-chart')
 export class ComfortBandApparentChart extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
@@ -48,6 +53,11 @@ export class ComfortBandApparentChart extends LitElement {
   private _plot: uPlot | null = null;
   private _resizeObserver: ResizeObserver | null = null;
   private _hasFetched = false;
+  /** Monotonic counter — every `_fetch()` claims the next value, and
+   *  drops its response if a newer fetch has started in the meantime.
+   *  Prevents a stale response from overwriting a more-recent one when
+   *  entity props change mid-flight. */
+  private _fetchGen = 0;
 
   public static override styles = [
     tokens,
@@ -63,6 +73,11 @@ export class ComfortBandApparentChart extends LitElement {
       .chart-host {
         width: 100%;
         height: 220px;
+      }
+      /* Collapse the host while a status (loading/error/empty) is shown
+         so the user doesn't see a 220 px blank gap above the message. */
+      .chart-host.idle {
+        height: 0;
       }
       .status {
         text-align: center;
@@ -114,6 +129,11 @@ export class ComfortBandApparentChart extends LitElement {
   public override disconnectedCallback(): void {
     super.disconnectedCallback();
     this._destroyPlot();
+    // Reset the fetch latch so the chart refetches when re-attached
+    // (e.g. user switches away from Insights and back). Otherwise
+    // `updated()` skips the fetch since none of the entity props
+    // changed, leaving the host blank.
+    this._hasFetched = false;
   }
 
   protected override updated(changed: PropertyValues<this>): void {
@@ -133,6 +153,7 @@ export class ComfortBandApparentChart extends LitElement {
 
   private async _fetch(): Promise<void> {
     if (!this.hass || !this.roomEntity || !this.apparentEntity || !this.humidityEntity) return;
+    const gen = ++this._fetchGen;
     this._loading = true;
     this._error = null;
     this._empty = false;
@@ -141,9 +162,11 @@ export class ComfortBandApparentChart extends LitElement {
 
     try {
       const response = await fetchHistory(this.hass, entityIds, HOURS_TO_SHOW);
+      if (gen !== this._fetchGen) return;
       this._renderPlot(response);
       this._loading = false;
     } catch (err) {
+      if (gen !== this._fetchGen) return;
       this._error = err instanceof Error ? err.message : 'Failed to load history.';
       this._loading = false;
       this._destroyPlot();
@@ -181,13 +204,13 @@ export class ComfortBandApparentChart extends LitElement {
 
   private _buildOpts(width: number): UPlotOptions {
     const styles = getComputedStyle(this);
-    const roomColor = styles.getPropertyValue('--cb-accent').trim() || '#03a9f4';
+    const roomColor = styles.getPropertyValue('--primary-color').trim() || '#03a9f4';
     const apparentColor = styles.getPropertyValue('--cb-action-heating').trim() || '#d9603f';
     const humidityColor = styles.getPropertyValue('--secondary-text-color').trim() || '#727272';
 
     return {
       width,
-      height: 220,
+      height: CHART_HEIGHT,
       pxAlign: 1,
       cursor: { drag: { x: false, y: false }, points: { size: 6 } },
       legend: { show: false },
@@ -255,7 +278,7 @@ export class ComfortBandApparentChart extends LitElement {
     this._resizeObserver = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width ?? 0;
       if (this._plot && width > 0) {
-        this._plot.setSize({ width, height: 220 });
+        this._plot.setSize({ width, height: CHART_HEIGHT });
       }
     });
     this._resizeObserver.observe(this._host);
@@ -276,6 +299,10 @@ export class ComfortBandApparentChart extends LitElement {
     if (!this.hass || !this.roomEntity || !this.apparentEntity || !this.humidityEntity) {
       return html`<div class="status">Apparent-temperature comparison unavailable.</div>`;
     }
+    // Collapse the canvas host while a status message is showing so
+    // the user sees the message at the top of the panel instead of a
+    // blank 220 px gap above it.
+    const idle = this._loading || this._error !== null || this._empty;
     return html`
       ${this._loading ? html`<div class="status">Loading 24 h history…</div>` : nothing}
       ${this._error ? html`<div class="status">${this._error}</div>` : nothing}
@@ -284,15 +311,16 @@ export class ComfortBandApparentChart extends LitElement {
             No history available yet — check back after the first hour of data.
           </div>`
         : nothing}
-      <div class="chart-host"></div>
+      <div class="chart-host ${idle ? 'idle' : ''}"></div>
       <div class="legend">
-        <span><span class="swatch" style="background:var(--cb-accent)"></span>Room</span>
+        <span><span class="swatch" style="background:var(--primary-color)"></span>Room (°C)</span>
         <span
-          ><span class="swatch dashed" style="color:var(--cb-action-heating)"></span>Apparent</span
+          ><span class="swatch dashed" style="color:var(--cb-action-heating)"></span>Apparent
+          (°C)</span
         >
         <span
-          ><span class="swatch" style="background:var(--secondary-text-color)"></span>Humidity
-          (%)</span
+          ><span class="swatch" style="background:var(--secondary-text-color)"></span>Humidity (%,
+          right axis)</span
         >
       </div>
     `;

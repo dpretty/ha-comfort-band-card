@@ -130,7 +130,7 @@ describe('comfort-band-insights-tab', () => {
     expect(el.shadowRoot!.querySelector('.hint')).toBeNull();
   });
 
-  it('renders the hint (not the apparent-chart) when no humidity sensor is configured', async () => {
+  it('renders the configure-humidity hint when apparent exists but no humidity sensor', async () => {
     const hass = makeHass({
       'sensor.gym_room_temperature': {
         state: '21.0',
@@ -145,18 +145,24 @@ describe('comfort-band-insights-tab', () => {
     const hint = el.shadowRoot!.querySelector('.hint');
     expect(hint).not.toBeNull();
     expect(hint!.textContent).toContain('Settings tab');
+    // Not the pre-v0.4 upgrade copy (which would say "Upgrade...integration").
+    expect(hint!.textContent).not.toContain('v0.4.0');
   });
 
-  it('renders the hint when the apparent entity is missing (pre-v0.4 backend)', async () => {
+  it('renders the upgrade hint (not Settings copy) when apparent entity is missing', async () => {
+    // Pre-v0.4 backend: pointing the user at Settings would just chain
+    // them to another upgrade message. Direct upgrade copy instead.
     const hass = makeHass({
       'sensor.gym_room_temperature': {
         state: '21.0',
         attributes: { humidity_sensor: 'sensor.gym_humidity' },
       },
     });
-    // apparentTemperature is null on the entities object.
     const el = await tab({ hass, entities: makeEntities() });
     expect(el.shadowRoot!.querySelector('comfort-band-apparent-chart')).toBeNull();
-    expect(el.shadowRoot!.querySelector('.hint')).not.toBeNull();
+    const hint = el.shadowRoot!.querySelector('.hint');
+    expect(hint).not.toBeNull();
+    expect(hint!.textContent).toContain('v0.4.0');
+    expect(hint!.textContent).not.toContain('Settings tab');
   });
 });

@@ -52,6 +52,11 @@ export class ComfortBandHistoryChart extends LitElement {
   private _plot: uPlot | null = null;
   private _resizeObserver: ResizeObserver | null = null;
   private _hasFetched = false;
+  /** Monotonic counter — every `_fetch()` claims the next value, and
+   *  drops its response if a newer fetch has started in the meantime.
+   *  Prevents a stale response from overwriting a more-recent one when
+   *  entity props change mid-flight. */
+  private _fetchGen = 0;
   /** Latest action intervals (kept on the instance so the uPlot draw
    *  hook can read them every frame without rebinding). */
   private _intervals: ActionInterval[] = [];
@@ -110,6 +115,9 @@ export class ComfortBandHistoryChart extends LitElement {
   public override disconnectedCallback(): void {
     super.disconnectedCallback();
     this._destroyPlot();
+    // Reset the fetch latch so the chart refetches when re-attached
+    // (e.g. user switches away from Insights and back).
+    this._hasFetched = false;
   }
 
   protected override updated(changed: PropertyValues<this>): void {
@@ -132,6 +140,7 @@ export class ComfortBandHistoryChart extends LitElement {
 
   private async _fetch(): Promise<void> {
     if (!this.hass || !this.roomEntity) return;
+    const gen = ++this._fetchGen;
     this._loading = true;
     this._error = null;
     this._empty = false;
@@ -142,9 +151,11 @@ export class ComfortBandHistoryChart extends LitElement {
 
     try {
       const response = await fetchHistory(this.hass, entityIds, HOURS_TO_SHOW);
+      if (gen !== this._fetchGen) return;
       this._renderPlot(response);
       this._loading = false;
     } catch (err) {
+      if (gen !== this._fetchGen) return;
       this._error = err instanceof Error ? err.message : 'Failed to load history.';
       this._loading = false;
       this._destroyPlot();

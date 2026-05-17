@@ -16,11 +16,11 @@
  * Settings tab uses.
  */
 
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import '../history-chart.js';
 import '../apparent-chart.js';
-import type { ZoneEntities } from '../helpers.js';
+import { readHumiditySensor, type ZoneEntities } from '../helpers.js';
 import type { HomeAssistant } from '../types.js';
 import { tokens } from '../styles.js';
 
@@ -50,6 +50,10 @@ export class ComfortBandInsightsTab extends LitElement {
         text-align: center;
         border-top: 1px solid var(--divider-color, #e0e0e0);
       }
+      .hint code {
+        font-family: ui-monospace, SFMono-Regular, monospace;
+        font-size: 11px;
+      }
     `,
   ];
 
@@ -60,9 +64,7 @@ export class ComfortBandInsightsTab extends LitElement {
     }
 
     const apparent = this.entities?.apparentTemperature;
-    const humidity =
-      (this.hass?.states[room]?.attributes.humidity_sensor as string | null | undefined) ?? null;
-    const showApparentChart = Boolean(apparent && humidity);
+    const humidity = readHumiditySensor(this.hass, room);
 
     return html`
       <comfort-band-history-chart
@@ -72,19 +74,39 @@ export class ComfortBandInsightsTab extends LitElement {
         .highEntity=${this.entities?.effectiveHigh ?? ''}
         .actionEntity=${this.entities?.currentAction ?? ''}
       ></comfort-band-history-chart>
-      ${showApparentChart
-        ? html`<comfort-band-apparent-chart
-            .hass=${this.hass}
-            .roomEntity=${room}
-            .apparentEntity=${apparent ?? ''}
-            .humidityEntity=${humidity ?? ''}
-          ></comfort-band-apparent-chart>`
-        : html`<div class="hint">
-            Configure a humidity sensor in the Settings tab to see how apparent temperature diverges
-            from the raw reading.
-          </div>`}
-      ${nothing}
+      ${this._renderApparentSection(room, apparent, humidity)}
     `;
+  }
+
+  /** Three states, in priority order:
+   *  1. apparent entity missing — pre-v0.4 backend, can't render the chart at all
+   *     and pointing at Settings would just chain to another upgrade hint
+   *  2. humidity sensor unconfigured — the integration supports it, user just
+   *     needs to attach one via the OptionsFlow surfaced in the Settings tab
+   *  3. both present — render the chart */
+  private _renderApparentSection(
+    room: string,
+    apparent: string | null | undefined,
+    humidity: string | null,
+  ) {
+    if (!apparent) {
+      return html`<div class="hint">
+        Upgrade the <code>comfort_band</code> integration to v0.4.0 or later to see how apparent
+        temperature diverges from the raw reading.
+      </div>`;
+    }
+    if (!humidity) {
+      return html`<div class="hint">
+        Configure a humidity sensor in the Settings tab to see how apparent temperature diverges
+        from the raw reading.
+      </div>`;
+    }
+    return html`<comfort-band-apparent-chart
+      .hass=${this.hass}
+      .roomEntity=${room}
+      .apparentEntity=${apparent}
+      .humidityEntity=${humidity}
+    ></comfort-band-apparent-chart>`;
   }
 }
 
