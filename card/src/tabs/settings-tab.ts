@@ -172,10 +172,14 @@ export class ComfortBandSettingsTab extends LitElement {
 
     const useApparent = this.entities.useApparentTemperature;
     const learning = this.entities.learningEnabled;
-    // Feature gate: if EITHER switch is missing the integration is
-    // either pre-v0.4 or partially set up. Render the upgrade hint
-    // rather than half a tab — defensive against a future split where
-    // only one of the two entities exists.
+    // All-or-nothing gate: if ANY of the v0.4 switch entities is missing,
+    // hide the whole tab and show the upgrade hint. We deliberately
+    // don't fall through and render the surviving toggle alone —
+    // a half-rendered tab gives a misleading impression that the
+    // integration is fully upgraded. The Now-tab "Driving decisions"
+    // badge takes the opposite approach (silent degradation when its
+    // entities are missing) because there a missing badge doesn't
+    // mislead — it just hides a passive indicator.
     if (useApparent === null || learning === null) {
       return html`<div class="upgrade-hint">
         Settings require the <code>comfort_band</code> integration v0.4.0 or later.

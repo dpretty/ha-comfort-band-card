@@ -226,11 +226,16 @@ describe('comfort-band-now-tab', () => {
         'switch.gym_use_apparent_temperature': 'on',
       }),
     );
-    const badge = el.shadowRoot!.querySelector('.feels-like .driving');
+    const row = el.shadowRoot!.querySelector('.feels-like');
+    expect(row).not.toBeNull();
+    const badge = row!.querySelector('.driving');
     expect(badge).not.toBeNull();
     expect(badge!.textContent).toContain('Driving decisions');
     // No "Feels like X°" text — would just duplicate the room number.
-    expect(el.shadowRoot!.textContent).not.toContain('Feels like');
+    // Scope to the row so we don't pick up "Feels like" inside CSS comments
+    // in the component's <style> block, which shadowRoot.textContent
+    // includes verbatim.
+    expect(row!.textContent).not.toContain('Feels like');
   });
 
   it('warns when apparent mode is on but no humidity reading is available', async () => {

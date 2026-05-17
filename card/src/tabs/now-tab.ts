@@ -65,6 +65,10 @@ export class ComfortBandNowTab extends LitElement {
         display: flex;
         align-items: center;
         gap: var(--cb-gap-sm);
+        /* Narrow Lovelace tiles (~180 px in a 2-column grid) overflow
+           when "Feels like 23.5°" sits next to the "DRIVING DECISIONS"
+           pill; wrap so the badge drops to its own line cleanly. */
+        flex-wrap: wrap;
       }
       .feels-like .driving {
         font-size: 10px;

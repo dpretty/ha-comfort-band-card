@@ -201,6 +201,27 @@ describe('comfort-band-settings-tab', () => {
     resolveCall();
   });
 
+  it('clears aria-disabled after a successful service call so the toggle accepts subsequent clicks', async () => {
+    // Happy-path counterpart to the in-flight test: confirms the `finally`
+    // block in `_onToggle` actually clears `_pendingByEntity` (so a stuck
+    // pending entry can't lock the toggle out forever after a successful
+    // turn-on).
+    const hass = makeHass();
+    const el = await settingsTab(hass);
+    const toggle = el.shadowRoot!.querySelector<HTMLButtonElement>('button[role="switch"]')!;
+    toggle.click();
+    // Two updateComplete ticks: one for the optimistic flip, one for the
+    // `finally` that fires after the service-call promise resolves.
+    await el.updateComplete;
+    await el.updateComplete;
+    const after = el.shadowRoot!.querySelector<HTMLButtonElement>('button[role="switch"]')!;
+    expect(after.getAttribute('aria-disabled')).toBe('false');
+    // A subsequent click must dispatch a second service call.
+    after.click();
+    await el.updateComplete;
+    expect(hass.callService).toHaveBeenCalledTimes(2);
+  });
+
   it('falls back to an upgrade hint on pre-v0.4 integrations (no new switches)', async () => {
     const entities = makeEntities('gym', {
       learningEnabled: null,
