@@ -9,7 +9,8 @@
  * colours to enum sensors and doesn't expose state-level overrides.
  *
  * Data comes from HA's `history/history_during_period` websocket command.
- * Fetched once on connect; `refresh()` is exposed for future auto-update.
+ * Fetched once on connect; the base class's `_hasFetched` reset on
+ * `disconnectedCallback` causes a refetch on tab re-entry.
  */
 
 import { html, css, unsafeCSS, nothing } from 'lit';
