@@ -15,11 +15,78 @@
  * fields" than to a polymorphic base class.
  */
 
-import { LitElement } from 'lit';
+import { LitElement, css, unsafeCSS } from 'lit';
 import { query, state } from 'lit/decorators.js';
 import type uPlot from 'uplot';
+import uplotCss from 'uplot/dist/uPlot.min.css?inline';
+import { tokens } from './styles.js';
+
+/**
+ * Shared styles for both Insights-tab charts. Lit's `static styles` is
+ * inheritable: declaring this on the base class makes it available to
+ * every subclass without each one having to re-import uPlot's CSS,
+ * re-declare the `.status` / `.legend` / `.chart-host` rules, or repeat
+ * the uPlot theme overrides. Subclasses add their own chart-specific
+ * rules (e.g. the dashed legend swatch, the `.chart-host` height) on
+ * top via `[...ComfortBandChartBase.styles, css\`...\`]`.
+ */
+const sharedChartStyles = [
+  tokens,
+  unsafeCSS(uplotCss),
+  css`
+    :host {
+      display: block;
+      width: 100%;
+      color-scheme: light dark;
+    }
+    .chart-host {
+      width: 100%;
+    }
+    /* Collapse the host while a status (loading/error/empty) is shown
+       so the user doesn't see a blank gap above the message. */
+    .chart-host.idle {
+      height: 0;
+    }
+    .status {
+      text-align: center;
+      padding: var(--cb-gap-lg);
+      color: var(--cb-text-secondary);
+      font-size: 13px;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--cb-gap-md);
+      justify-content: center;
+      font-size: 12px;
+      color: var(--cb-text-secondary);
+      padding-top: var(--cb-gap-sm);
+    }
+    .legend .swatch {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+    /* Theme uPlot grid + axes via its own CSS variables so they pick
+       up HA's dark/light tokens automatically. */
+    .u-wrap {
+      --u-fg: var(--primary-text-color, #212121);
+    }
+    .u-axis,
+    .u-legend {
+      color: var(--secondary-text-color, #727272);
+    }
+    .u-grid line {
+      stroke: var(--divider-color, #e0e0e0);
+    }
+  `,
+];
 
 export abstract class ComfortBandChartBase extends LitElement {
+  public static override styles = sharedChartStyles;
   @state() protected _loading = true;
   @state() protected _error: string | null = null;
   @state() protected _empty = false;
@@ -54,6 +121,14 @@ export abstract class ComfortBandChartBase extends LitElement {
     // subsequent reconnects (per Lit's lifecycle docs). Request one
     // explicitly so `updated()` runs and the cleared `_hasFetched`
     // flag triggers a refetch.
+    //
+    // Note: this produces two render passes on reconnect — one from
+    // this requestUpdate, then a second after `_fetch()` flips
+    // `_loading = true`. Both are synchronous and pre-frame, so
+    // there's no visible flicker; we accept the cost to keep the
+    // base class lifecycle-only (calling `_fetch()` directly here
+    // would require lifting `_fetch` onto the base, which would
+    // re-couple subclass config back into the abstraction).
     if (this.hasUpdated) {
       this.requestUpdate();
     }

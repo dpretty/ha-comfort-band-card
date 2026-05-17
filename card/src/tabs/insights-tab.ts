@@ -42,6 +42,13 @@ export class ComfortBandInsightsTab extends LitElement {
         font-size: 13px;
         text-align: center;
       }
+      /* Deliberately .hint (not .upgrade-hint like settings-tab /
+         profiles-tab use): this banner covers two semantically distinct
+         cases — "upgrade integration" AND "configure humidity sensor".
+         The latter is a configuration nudge, not an upgrade gate, so
+         the more general name is the right call. Also visually
+         different: the Insights tab uses a top border to separate the
+         hint from the band chart sitting above it. */
       .hint {
         margin-top: var(--cb-gap-lg);
         padding: var(--cb-gap-md);

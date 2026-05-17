@@ -21,8 +21,6 @@ import type { PropertyValues } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import uPlot from 'uplot';
 import type { Options as UPlotOptions } from 'uplot';
-import uplotCss from 'uplot/dist/uPlot.min.css?inline';
-import { tokens } from './styles.js';
 import type { HomeAssistant } from './types.js';
 import {
   HOURS_TO_SHOW,
@@ -49,48 +47,17 @@ export class ComfortBandApparentChart extends ComfortBandChartBase {
     return CHART_HEIGHT;
   }
 
+  // Chart-specific rules only. Shared rules (status / legend / chart-host
+  // base / uPlot theme overrides) come from `ComfortBandChartBase.styles`.
   public static override styles = [
-    tokens,
-    unsafeCSS(uplotCss),
+    ...ComfortBandChartBase.styles,
     css`
       :host {
-        display: block;
-        width: 100%;
-        color-scheme: light dark;
         /* Sit beneath the band chart with a visible gap. */
         margin-top: var(--cb-gap-lg);
       }
       .chart-host {
-        width: 100%;
         height: ${unsafeCSS(CHART_HEIGHT)}px;
-      }
-      /* Collapse the host while a status (loading/error/empty) is shown
-         so the user doesn't see a blank gap above the message. */
-      .chart-host.idle {
-        height: 0;
-      }
-      .status {
-        text-align: center;
-        padding: var(--cb-gap-lg);
-        color: var(--cb-text-secondary);
-        font-size: 13px;
-      }
-      .legend {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--cb-gap-md);
-        justify-content: center;
-        font-size: 12px;
-        color: var(--cb-text-secondary);
-        padding-top: var(--cb-gap-sm);
-      }
-      .legend .swatch {
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        border-radius: 2px;
-        vertical-align: middle;
-        margin-right: 4px;
       }
       /* "Dashed" swatch to mirror the dashed apparent stroke in the chart. */
       .legend .swatch.dashed {
@@ -102,16 +69,6 @@ export class ComfortBandApparentChart extends ComfortBandChartBase {
           transparent 7px
         );
         background-color: transparent;
-      }
-      .u-wrap {
-        --u-fg: var(--primary-text-color, #212121);
-      }
-      .u-axis,
-      .u-legend {
-        color: var(--secondary-text-color, #727272);
-      }
-      .u-grid line {
-        stroke: var(--divider-color, #e0e0e0);
       }
     `,
   ];
@@ -132,6 +89,11 @@ export class ComfortBandApparentChart extends ComfortBandChartBase {
   }
 
   private async _fetch(): Promise<void> {
+    // Strict guard: all three entities are required for the comparison
+    // chart to make sense. Insights tab gates rendering on the same
+    // condition (see `_renderApparentSection`), so an empty value here
+    // means the parent disagreed with itself — fail closed rather than
+    // issuing a partial WS query with empty strings.
     if (!this.hass || !this.roomEntity || !this.apparentEntity || !this.humidityEntity) return;
     const gen = ++this._fetchGen;
     this._loading = true;
@@ -269,7 +231,11 @@ export class ComfortBandApparentChart extends ComfortBandChartBase {
             No history available yet — check back after the first hour of data.
           </div>`
         : nothing}
-      <div class="chart-host ${idle ? 'idle' : ''}"></div>
+      <div
+        class="chart-host ${idle ? 'idle' : ''}"
+        role="img"
+        aria-label="Room vs apparent temperature with humidity overlay — last 24 hours"
+      ></div>
       ${idle
         ? nothing
         : html`<div class="legend">

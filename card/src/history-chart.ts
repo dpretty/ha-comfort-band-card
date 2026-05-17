@@ -17,8 +17,6 @@ import type { PropertyValues } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import uPlot from 'uplot';
 import type { Options as UPlotOptions } from 'uplot';
-import uplotCss from 'uplot/dist/uPlot.min.css?inline';
-import { tokens } from './styles.js';
 import type { HomeAssistant } from './types.js';
 import {
   HOURS_TO_SHOW,
@@ -57,59 +55,13 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
    *  hook can read them every frame without rebinding). */
   private _intervals: ActionInterval[] = [];
 
+  // Chart-specific rules only. Shared rules (status / legend / chart-host
+  // base / uPlot theme overrides) come from `ComfortBandChartBase.styles`.
   public static override styles = [
-    tokens,
-    unsafeCSS(uplotCss),
+    ...ComfortBandChartBase.styles,
     css`
-      :host {
-        display: block;
-        width: 100%;
-        color-scheme: light dark;
-      }
       .chart-host {
-        width: 100%;
         height: ${unsafeCSS(CHART_HEIGHT)}px;
-      }
-      /* Collapse the host while a status (loading/error/empty) is shown
-         so the user doesn't see a blank gap above the message. Mirrors
-         the same pattern in apparent-chart.ts. */
-      .chart-host.idle {
-        height: 0;
-      }
-      .status {
-        text-align: center;
-        padding: var(--cb-gap-lg);
-        color: var(--cb-text-secondary);
-        font-size: 13px;
-      }
-      .legend {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--cb-gap-md);
-        justify-content: center;
-        font-size: 12px;
-        color: var(--cb-text-secondary);
-        padding-top: var(--cb-gap-sm);
-      }
-      .legend .swatch {
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        border-radius: 2px;
-        vertical-align: middle;
-        margin-right: 4px;
-      }
-      /* Theme uPlot grid + axes via its own CSS variables so they pick
-         up HA's dark/light tokens automatically. */
-      .u-wrap {
-        --u-fg: var(--primary-text-color, #212121);
-      }
-      .u-axis,
-      .u-legend {
-        color: var(--secondary-text-color, #727272);
-      }
-      .u-grid line {
-        stroke: var(--divider-color, #e0e0e0);
       }
     `,
   ];
@@ -293,24 +245,32 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
             No history available yet — check back after the first hour of data.
           </div>`
         : nothing}
-      <div class="chart-host ${idle ? 'idle' : ''}"></div>
-      <div class="legend">
-        <span><span class="swatch" style="background:var(--primary-color)"></span>Room</span>
-        <span
-          ><span class="swatch" style="background:var(--cb-action-heating)"></span>Low band</span
-        >
-        <span
-          ><span class="swatch" style="background:var(--cb-action-cooling)"></span>High band</span
-        >
-        <span
-          ><span class="swatch" style="background:var(--cb-action-heating);opacity:0.18"></span>
-          Heating</span
-        >
-        <span
-          ><span class="swatch" style="background:var(--cb-action-cooling);opacity:0.18"></span>
-          Cooling</span
-        >
-      </div>
+      <div
+        class="chart-host ${idle ? 'idle' : ''}"
+        role="img"
+        aria-label="Room temperature with effective band edges and heating/cooling shading — last 24 hours"
+      ></div>
+      ${idle
+        ? nothing
+        : html`<div class="legend">
+            <span><span class="swatch" style="background:var(--primary-color)"></span>Room</span>
+            <span
+              ><span class="swatch" style="background:var(--cb-action-heating)"></span>Low
+              band</span
+            >
+            <span
+              ><span class="swatch" style="background:var(--cb-action-cooling)"></span>High
+              band</span
+            >
+            <span
+              ><span class="swatch" style="background:var(--cb-action-heating);opacity:0.18"></span>
+              Heating</span
+            >
+            <span
+              ><span class="swatch" style="background:var(--cb-action-cooling);opacity:0.18"></span>
+              Cooling</span
+            >
+          </div>`}
     `;
   }
 }
