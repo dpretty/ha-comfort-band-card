@@ -157,6 +157,50 @@ export class ComfortBandModal extends LitElement {
     this._activeTab = tab;
   };
 
+  /**
+   * WAI-ARIA tab pattern keyboard handling (APG §3.26).
+   *
+   * - ArrowLeft / ArrowRight cycle through tabs with wrap.
+   * - Home / End jump to first / last.
+   * - Selection and focus move together (the "automatic activation"
+   *   variant), which is the right call for this modal: panels are cheap
+   *   to swap and there's no risk of expensive async work being triggered
+   *   on every arrow press.
+   */
+  private _onTablistKeydown = (e: KeyboardEvent): void => {
+    const idx = TABS.findIndex((t) => t.id === this._activeTab);
+    if (idx < 0) return;
+    let nextIdx: number;
+    switch (e.key) {
+      case 'ArrowLeft':
+        nextIdx = (idx - 1 + TABS.length) % TABS.length;
+        break;
+      case 'ArrowRight':
+        nextIdx = (idx + 1) % TABS.length;
+        break;
+      case 'Home':
+        nextIdx = 0;
+        break;
+      case 'End':
+        nextIdx = TABS.length - 1;
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+    const nextTab = TABS[nextIdx].id;
+    this._activeTab = nextTab;
+    // Roving-tabindex focus management: after Lit re-renders with the
+    // new active tab (which flips tabindex on the buttons), grab the
+    // newly-selected button and focus it so keyboard users stay in the
+    // tablist instead of being kicked out by the previous tab going
+    // tabindex=-1.
+    void this.updateComplete.then(() => {
+      const btn = this.renderRoot.querySelector<HTMLButtonElement>(`#cb-tab-${nextTab}`);
+      btn?.focus();
+    });
+  };
+
   protected override render() {
     if (!this._isOpen) return nothing;
     const title = this.zoneName || this.zone || 'Comfort Band';
@@ -167,12 +211,15 @@ export class ComfortBandModal extends LitElement {
             <h2>${title}</h2>
             <button class="close" @click=${this.close} aria-label="Close">×</button>
           </header>
-          <nav role="tablist">
+          <nav role="tablist" @keydown=${this._onTablistKeydown}>
             ${TABS.map(
               (t) => html`
                 <button
+                  id="cb-tab-${t.id}"
                   role="tab"
                   aria-selected=${this._activeTab === t.id}
+                  aria-controls="cb-panel"
+                  tabindex=${this._activeTab === t.id ? 0 : -1}
                   @click=${() => this._onSelectTab(t.id)}
                 >
                   ${t.label}
@@ -180,7 +227,14 @@ export class ComfortBandModal extends LitElement {
               `,
             )}
           </nav>
-          <div class="panel" role="tabpanel">${this._renderTab()}</div>
+          <div
+            id="cb-panel"
+            class="panel"
+            role="tabpanel"
+            aria-labelledby="cb-tab-${this._activeTab}"
+          >
+            ${this._renderTab()}
+          </div>
         </div>
       </dialog>
     `;
