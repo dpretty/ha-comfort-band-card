@@ -18,7 +18,7 @@
 
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { ZoneEntities } from '../helpers.js';
+import { readHumiditySensor, type ZoneEntities } from '../helpers.js';
 import type { HomeAssistant } from '../types.js';
 import { tokens } from '../styles.js';
 
@@ -188,10 +188,7 @@ export class ComfortBandSettingsTab extends LitElement {
 
     // The Room Temperature sensor's `humidity_sensor` attribute carries
     // the currently-configured sensor entity_id. None if not configured.
-    const roomTempState = this.entities.roomTemperature
-      ? this.hass.states[this.entities.roomTemperature]
-      : undefined;
-    const humiditySensor = roomTempState?.attributes.humidity_sensor as string | null | undefined;
+    const humiditySensor = readHumiditySensor(this.hass, this.entities.roomTemperature);
 
     // `useApparent` and `learning` are narrowed to `string` by the early
     // return above — render both toggles unconditionally.

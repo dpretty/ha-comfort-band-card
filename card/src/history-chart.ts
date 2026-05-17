@@ -9,28 +9,25 @@
  * colours to enum sensors and doesn't expose state-level overrides.
  *
  * Data comes from HA's `history/history_during_period` websocket command.
- * Fetched once on connect; `refresh()` is exposed for future auto-update.
+ * Fetched once on connect; the base class's `_hasFetched` reset on
+ * `disconnectedCallback` causes a refetch on tab re-entry.
  */
 
-import { LitElement, html, css, unsafeCSS, nothing } from 'lit';
+import { html, css, unsafeCSS, nothing } from 'lit';
 import type { PropertyValues } from 'lit';
-import { customElement, property, query, state } from 'lit/decorators.js';
+import { customElement, property } from 'lit/decorators.js';
 import uPlot from 'uplot';
-import type { Options as UPlotOptions, AlignedData } from 'uplot';
-import uplotCss from 'uplot/dist/uPlot.min.css?inline';
-import { tokens } from './styles.js';
+import type { Options as UPlotOptions } from 'uplot';
 import type { HomeAssistant } from './types.js';
-
-const HOURS_TO_SHOW = 24;
-
-interface HistoryPoint {
-  /** state */
-  s: string;
-  /** last_updated as unix seconds */
-  lu: number;
-}
-
-type HistoryResponse = Record<string, HistoryPoint[]>;
+import {
+  HOURS_TO_SHOW,
+  alignSeries,
+  fetchHistory,
+  numericSeries,
+  type HistoryPoint,
+  type HistoryResponse,
+} from './history-data.js';
+import { ComfortBandChartBase } from './chart-base.js';
 
 interface ActionInterval {
   start: number; // unix seconds
@@ -38,82 +35,37 @@ interface ActionInterval {
   action: 'heating' | 'cooling';
 }
 
+/** Pixel height of the chart canvas. Single source of truth: read by
+ *  the uPlot options, the ResizeObserver setSize call, AND the CSS
+ *  `.chart-host` rule (interpolated via `unsafeCSS` below). */
+const CHART_HEIGHT = 260;
+
 @customElement('comfort-band-history-chart')
-export class ComfortBandHistoryChart extends LitElement {
+export class ComfortBandHistoryChart extends ComfortBandChartBase {
   @property({ attribute: false }) public hass?: HomeAssistant;
   @property({ type: String }) public roomEntity = '';
   @property({ type: String }) public lowEntity = '';
   @property({ type: String }) public highEntity = '';
   @property({ type: String }) public actionEntity = '';
 
-  @state() private _loading = true;
-  @state() private _error: string | null = null;
-  @state() private _empty = false;
+  protected override get chartHeight(): number {
+    return CHART_HEIGHT;
+  }
 
-  @query('.chart-host') private _host?: HTMLElement;
-
-  private _plot: uPlot | null = null;
-  private _resizeObserver: ResizeObserver | null = null;
-  private _hasFetched = false;
   /** Latest action intervals (kept on the instance so the uPlot draw
    *  hook can read them every frame without rebinding). */
   private _intervals: ActionInterval[] = [];
 
+  // Chart-specific rules only. Shared rules (status / legend / chart-host
+  // base / uPlot theme overrides) come from `ComfortBandChartBase.styles`.
   public static override styles = [
-    tokens,
-    unsafeCSS(uplotCss),
+    ...ComfortBandChartBase.styles,
     css`
-      :host {
-        display: block;
-        width: 100%;
-        color-scheme: light dark;
-      }
       .chart-host {
-        width: 100%;
-        height: 260px;
-      }
-      .status {
-        text-align: center;
-        padding: var(--cb-gap-lg);
-        color: var(--cb-text-secondary);
-        font-size: 13px;
-      }
-      .legend {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--cb-gap-md);
-        justify-content: center;
-        font-size: 12px;
-        color: var(--cb-text-secondary);
-        padding-top: var(--cb-gap-sm);
-      }
-      .legend .swatch {
-        display: inline-block;
-        width: 12px;
-        height: 12px;
-        border-radius: 2px;
-        vertical-align: middle;
-        margin-right: 4px;
-      }
-      /* Theme uPlot grid + axes via its own CSS variables so they pick
-         up HA's dark/light tokens automatically. */
-      .u-wrap {
-        --u-fg: var(--primary-text-color, #212121);
-      }
-      .u-axis,
-      .u-legend {
-        color: var(--secondary-text-color, #727272);
-      }
-      .u-grid line {
-        stroke: var(--divider-color, #e0e0e0);
+        height: ${unsafeCSS(CHART_HEIGHT)}px;
       }
     `,
   ];
-
-  public override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this._destroyPlot();
-  }
 
   protected override updated(changed: PropertyValues<this>): void {
     if (!this._hasFetched) {
@@ -135,68 +87,26 @@ export class ComfortBandHistoryChart extends LitElement {
 
   private async _fetch(): Promise<void> {
     if (!this.hass || !this.roomEntity) return;
+    const gen = ++this._fetchGen;
     this._loading = true;
     this._error = null;
     this._empty = false;
 
-    const end = new Date();
-    const start = new Date(end.getTime() - HOURS_TO_SHOW * 60 * 60 * 1000);
     const entityIds = [this.roomEntity, this.lowEntity, this.highEntity, this.actionEntity].filter(
       (e): e is string => Boolean(e),
     );
 
     try {
-      const response = await this.hass.callWS<HistoryResponse>({
-        type: 'history/history_during_period',
-        start_time: start.toISOString(),
-        end_time: end.toISOString(),
-        entity_ids: entityIds,
-        minimal_response: false,
-        no_attributes: true,
-      });
+      const response = await fetchHistory(this.hass, entityIds, HOURS_TO_SHOW);
+      if (gen !== this._fetchGen) return;
       this._renderPlot(response);
       this._loading = false;
     } catch (err) {
+      if (gen !== this._fetchGen) return;
       this._error = err instanceof Error ? err.message : 'Failed to load history.';
       this._loading = false;
       this._destroyPlot();
     }
-  }
-
-  /** Convert HA's `[{s, lu}, ...]` to a (sorted by time) numeric series.
-   *  Skips entries whose state isn't a finite number. */
-  private _numericSeries(points: HistoryPoint[] | undefined): Array<[number, number]> {
-    if (!points) return [];
-    const out: Array<[number, number]> = [];
-    for (const p of points) {
-      const n = parseFloat(p.s);
-      if (Number.isFinite(n)) out.push([p.lu, n]);
-    }
-    out.sort((a, b) => a[0] - b[0]);
-    return out;
-  }
-
-  /** Build aligned uPlot data: a single sorted x axis and forward-filled
-   *  values for each numeric series. */
-  private _alignSeries(series: Array<Array<[number, number]>>, nowSec: number): AlignedData {
-    const xs = new Set<number>();
-    for (const s of series) for (const [t] of s) xs.add(t);
-    if (xs.size === 0) return [[nowSec], ...series.map(() => [null])] as unknown as AlignedData;
-    const sortedX = [...xs].sort((a, b) => a - b);
-
-    const values: Array<Array<number | null>> = series.map((s) => {
-      let i = -1;
-      let last: number | null = null;
-      return sortedX.map((t) => {
-        while (i + 1 < s.length && s[i + 1][0] <= t) {
-          i++;
-          last = s[i][1];
-        }
-        return last;
-      });
-    });
-
-    return [sortedX, ...values] as AlignedData;
   }
 
   /** Convert the action history into [{start, end, action}] intervals,
@@ -220,9 +130,9 @@ export class ComfortBandHistoryChart extends LitElement {
     if (!this._host) return;
 
     const nowSec = Math.floor(Date.now() / 1000);
-    const room = this._numericSeries(response[this.roomEntity]);
-    const low = this._numericSeries(response[this.lowEntity]);
-    const high = this._numericSeries(response[this.highEntity]);
+    const room = numericSeries(response[this.roomEntity]);
+    const low = numericSeries(response[this.lowEntity]);
+    const high = numericSeries(response[this.highEntity]);
     this._intervals = this._actionIntervals(response[this.actionEntity], nowSec);
 
     if (room.length === 0 && low.length === 0 && high.length === 0) {
@@ -232,7 +142,7 @@ export class ComfortBandHistoryChart extends LitElement {
     }
     this._empty = false;
 
-    const data = this._alignSeries([room, low, high], nowSec);
+    const data = alignSeries([room, low, high], nowSec);
     const opts: UPlotOptions = this._buildOpts(this._host.clientWidth || 400);
 
     if (this._plot) {
@@ -254,7 +164,7 @@ export class ComfortBandHistoryChart extends LitElement {
 
     return {
       width,
-      height: 260,
+      height: CHART_HEIGHT,
       pxAlign: 1,
       cursor: { drag: { x: false, y: false }, points: { size: 6 } },
       legend: { show: false },
@@ -320,32 +230,14 @@ export class ComfortBandHistoryChart extends LitElement {
     };
   }
 
-  private _observeResize(): void {
-    if (!this._host || this._resizeObserver) return;
-    this._resizeObserver = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0;
-      if (this._plot && width > 0) {
-        this._plot.setSize({ width, height: 260 });
-      }
-    });
-    this._resizeObserver.observe(this._host);
-  }
-
-  private _destroyPlot(): void {
-    if (this._plot) {
-      this._plot.destroy();
-      this._plot = null;
-    }
-    if (this._resizeObserver) {
-      this._resizeObserver.disconnect();
-      this._resizeObserver = null;
-    }
-  }
-
   protected override render() {
     if (!this.hass || !this.roomEntity) {
       return html`<div class="status">No room temperature sensor for this zone.</div>`;
     }
+    // Collapse the canvas host while a status message is showing so the
+    // user sees the message at the top of the panel instead of a blank
+    // 260 px gap above it.
+    const idle = this._loading || this._error !== null || this._empty;
     return html`
       ${this._loading ? html`<div class="status">Loading 24 h history…</div>` : nothing}
       ${this._error ? html`<div class="status">${this._error}</div>` : nothing}
@@ -354,24 +246,32 @@ export class ComfortBandHistoryChart extends LitElement {
             No history available yet — check back after the first hour of data.
           </div>`
         : nothing}
-      <div class="chart-host"></div>
-      <div class="legend">
-        <span><span class="swatch" style="background:var(--primary-color)"></span>Room</span>
-        <span
-          ><span class="swatch" style="background:var(--cb-action-heating)"></span>Low band</span
-        >
-        <span
-          ><span class="swatch" style="background:var(--cb-action-cooling)"></span>High band</span
-        >
-        <span
-          ><span class="swatch" style="background:var(--cb-action-heating);opacity:0.18"></span>
-          Heating</span
-        >
-        <span
-          ><span class="swatch" style="background:var(--cb-action-cooling);opacity:0.18"></span>
-          Cooling</span
-        >
-      </div>
+      <div
+        class="chart-host ${idle ? 'idle' : ''}"
+        role="img"
+        aria-label="Room temperature with effective band edges and heating/cooling shading — last 24 hours"
+      ></div>
+      ${idle
+        ? nothing
+        : html`<div class="legend">
+            <span><span class="swatch" style="background:var(--primary-color)"></span>Room</span>
+            <span
+              ><span class="swatch" style="background:var(--cb-action-heating)"></span>Low
+              band</span
+            >
+            <span
+              ><span class="swatch" style="background:var(--cb-action-cooling)"></span>High
+              band</span
+            >
+            <span
+              ><span class="swatch" style="background:var(--cb-action-heating);opacity:0.18"></span>
+              Heating</span
+            >
+            <span
+              ><span class="swatch" style="background:var(--cb-action-cooling);opacity:0.18"></span>
+              Cooling</span
+            >
+          </div>`}
     `;
   }
 }
