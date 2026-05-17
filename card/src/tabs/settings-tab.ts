@@ -76,6 +76,9 @@ export class ComfortBandSettingsTab extends LitElement {
         background: var(--cb-track-bg);
         cursor: pointer;
       }
+      .toggle:hover:not([aria-disabled='true']) {
+        filter: brightness(0.92);
+      }
       .toggle:focus-visible {
         outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
         outline-offset: 2px;
@@ -219,6 +222,13 @@ export class ComfortBandSettingsTab extends LitElement {
 
   private _renderToggle(opts: { entityId: string; title: string; desc: unknown }) {
     const on = this._isOn(opts.entityId);
+    // Disabled while a service call is in flight to prevent a double-tap
+    // from dispatching two concurrent turn_on/turn_off pairs.
+    const pending = this._pendingByEntity[opts.entityId] !== undefined;
+    // Bespoke <button role="switch"> rather than <ha-switch> / <mwc-switch>:
+    // those are private HA internal elements with no stable API for custom
+    // cards. The hand-rolled control is WCAG-correct (44px target,
+    // aria-checked, focus-visible) at the cost of ~50 lines of CSS.
     return html`
       <div class="row">
         <div class="row-label">
@@ -229,8 +239,9 @@ export class ComfortBandSettingsTab extends LitElement {
           class="toggle"
           role="switch"
           aria-checked=${on ? 'true' : 'false'}
+          aria-disabled=${pending ? 'true' : 'false'}
           aria-label=${opts.title}
-          @click=${() => this._onToggle(opts.entityId)}
+          @click=${pending ? null : () => this._onToggle(opts.entityId)}
         >
           <span class="knob"></span>
         </button>

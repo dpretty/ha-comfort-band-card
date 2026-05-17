@@ -158,6 +158,49 @@ describe('comfort-band-settings-tab', () => {
     expect(info!.classList.contains('unconfigured')).toBe(true);
   });
 
+  it('reflects updated entity state when hass property is reassigned', async () => {
+    // Simulates a state push from HA: the parent re-assigns `hass` with
+    // an updated entity state. Without Lit's `@property` reactivity
+    // working, the toggle would render the stale value.
+    const hass1 = makeHass({
+      states: { 'switch.gym_use_apparent_temperature': { state: 'off' } },
+    });
+    const el = await settingsTab(hass1);
+    let toggle = el.shadowRoot!.querySelector<HTMLButtonElement>('button[role="switch"]')!;
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+
+    const hass2 = makeHass({
+      states: { 'switch.gym_use_apparent_temperature': { state: 'on' } },
+    });
+    el.hass = hass2;
+    await el.updateComplete;
+    toggle = el.shadowRoot!.querySelector<HTMLButtonElement>('button[role="switch"]')!;
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('toggle button is aria-disabled and ignores clicks while a call is in flight', async () => {
+    // Use a callService that never resolves so the optimistic-flip state
+    // sticks. We can't synchronously inspect the post-click attribute
+    // because Lit hasn't re-rendered yet — await one tick.
+    let resolveCall: () => void = () => {};
+    const slowCall = vi
+      .fn()
+      .mockImplementation(() => new Promise<void>((resolve) => (resolveCall = resolve)));
+    const hass = makeHass({ callServiceImpl: slowCall });
+    const el = await settingsTab(hass);
+    const toggle = el.shadowRoot!.querySelector<HTMLButtonElement>('button[role="switch"]')!;
+    toggle.click();
+    await el.updateComplete;
+    const after = el.shadowRoot!.querySelector<HTMLButtonElement>('button[role="switch"]')!;
+    expect(after.getAttribute('aria-disabled')).toBe('true');
+    // A second click while disabled must not dispatch another service call.
+    after.click();
+    await el.updateComplete;
+    expect(hass.callService).toHaveBeenCalledTimes(1);
+    // Resolve the pending call so the test cleans up without dangling.
+    resolveCall();
+  });
+
   it('falls back to an upgrade hint on pre-v0.4 integrations (no new switches)', async () => {
     const entities = makeEntities('gym', {
       learningEnabled: null,

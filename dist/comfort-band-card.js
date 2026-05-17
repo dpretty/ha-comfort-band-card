@@ -5805,7 +5805,7 @@ let bi = class extends ze {
     `;
   }
   _renderToggle(e) {
-    const t = this._isOn(e.entityId);
+    const t = this._isOn(e.entityId), i = this._pendingByEntity[e.entityId] !== void 0;
     return A`
       <div class="row">
         <div class="row-label">
@@ -5816,8 +5816,9 @@ let bi = class extends ze {
           class="toggle"
           role="switch"
           aria-checked=${t ? "true" : "false"}
+          aria-disabled=${i ? "true" : "false"}
           aria-label=${e.title}
-          @click=${() => this._onToggle(e.entityId)}
+          @click=${i ? null : () => this._onToggle(e.entityId)}
         >
           <span class="knob"></span>
         </button>
@@ -5867,6 +5868,9 @@ bi.styles = [
         border-radius: var(--cb-radius-pill);
         background: var(--cb-track-bg);
         cursor: pointer;
+      }
+      .toggle:hover:not([aria-disabled='true']) {
+        filter: brightness(0.92);
       }
       .toggle:focus-visible {
         outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
