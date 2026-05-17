@@ -16,7 +16,7 @@
  * Profiles-tab `crudAvailable` gate.
  */
 
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { ZoneEntities } from '../helpers.js';
 import type { HomeAssistant } from '../types.js';
@@ -172,9 +172,11 @@ export class ComfortBandSettingsTab extends LitElement {
 
     const useApparent = this.entities.useApparentTemperature;
     const learning = this.entities.learningEnabled;
-    // CRUD-style feature gate: if the integration is older than v0.4 the
-    // switches don't exist, so we can't render the toggles at all.
-    if (useApparent === null && learning === null) {
+    // Feature gate: if EITHER switch is missing the integration is
+    // either pre-v0.4 or partially set up. Render the upgrade hint
+    // rather than half a tab — defensive against a future split where
+    // only one of the two entities exists.
+    if (useApparent === null || learning === null) {
       return html`<div class="upgrade-hint">
         Settings require the <code>comfort_band</code> integration v0.4.0 or later.
       </div>`;
@@ -220,7 +222,7 @@ export class ComfortBandSettingsTab extends LitElement {
     `;
   }
 
-  private _renderToggle(opts: { entityId: string; title: string; desc: unknown }) {
+  private _renderToggle(opts: { entityId: string; title: string; desc: TemplateResult }) {
     const on = this._isOn(opts.entityId);
     // Disabled while a service call is in flight to prevent a double-tap
     // from dispatching two concurrent turn_on/turn_off pairs.

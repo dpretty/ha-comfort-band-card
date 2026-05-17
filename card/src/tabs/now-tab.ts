@@ -76,6 +76,9 @@ export class ComfortBandNowTab extends LitElement {
         background: var(--cb-accent, var(--primary-color, #03a9f4));
         color: #ffffff;
       }
+      .feels-like .muted-warn {
+        font-style: italic;
+      }
       .action-chip {
         font-size: 11px;
         font-weight: 500;
@@ -222,7 +225,14 @@ export class ComfortBandNowTab extends LitElement {
             <span>Feels like ${apparent.toFixed(1)}°</span>
             ${useApparentOn ? html`<span class="driving">Driving decisions</span>` : nothing}
           </div>`
-        : nothing}
+        : useApparentOn
+          ? html`<div class="feels-like">
+              <span class="muted-warn">
+                Apparent temperature mode is on but no humidity reading is available — decisions are
+                using the raw room temperature.
+              </span>
+            </div>`
+          : nothing}
       <div class="gauge-row">
         <band-gauge .low=${effLow} .high=${effHigh} .room=${room} .action=${action}></band-gauge>
       </div>

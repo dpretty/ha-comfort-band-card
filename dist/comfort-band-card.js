@@ -1172,7 +1172,12 @@ let pi = class extends ze {
       ${b ? A`<div class="feels-like">
             <span>Feels like ${s.toFixed(1)}°</span>
             ${p ? A`<span class="driving">Driving decisions</span>` : G}
-          </div>` : G}
+          </div>` : p ? A`<div class="feels-like">
+              <span class="muted-warn">
+                Apparent temperature mode is on but no humidity reading is available — decisions are
+                using the raw room temperature.
+              </span>
+            </div>` : G}
       <div class="gauge-row">
         <band-gauge .low=${i} .high=${n} .room=${r} .action=${h}></band-gauge>
       </div>
@@ -1267,6 +1272,9 @@ pi.styles = [
         border-radius: var(--cb-radius-pill);
         background: var(--cb-accent, var(--primary-color, #03a9f4));
         color: #ffffff;
+      }
+      .feels-like .muted-warn {
+        font-style: italic;
       }
       .action-chip {
         font-size: 11px;
@@ -5771,7 +5779,7 @@ let bi = class extends ze {
   render() {
     if (!this.hass || !this.entities) return G;
     const e = this.entities.useApparentTemperature, t = this.entities.learningEnabled;
-    if (e === null && t === null)
+    if (e === null || t === null)
       return A`<div class="upgrade-hint">
         Settings require the <code>comfort_band</code> integration v0.4.0 or later.
       </div>`;
