@@ -16,21 +16,18 @@ import { LitElement, html, css, unsafeCSS, nothing } from 'lit';
 import type { PropertyValues } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';
 import uPlot from 'uplot';
-import type { Options as UPlotOptions, AlignedData } from 'uplot';
+import type { Options as UPlotOptions } from 'uplot';
 import uplotCss from 'uplot/dist/uPlot.min.css?inline';
 import { tokens } from './styles.js';
 import type { HomeAssistant } from './types.js';
-
-const HOURS_TO_SHOW = 24;
-
-interface HistoryPoint {
-  /** state */
-  s: string;
-  /** last_updated as unix seconds */
-  lu: number;
-}
-
-type HistoryResponse = Record<string, HistoryPoint[]>;
+import {
+  HOURS_TO_SHOW,
+  alignSeries,
+  fetchHistory,
+  numericSeries,
+  type HistoryPoint,
+  type HistoryResponse,
+} from './history-data.js';
 
 interface ActionInterval {
   start: number; // unix seconds
@@ -139,21 +136,12 @@ export class ComfortBandHistoryChart extends LitElement {
     this._error = null;
     this._empty = false;
 
-    const end = new Date();
-    const start = new Date(end.getTime() - HOURS_TO_SHOW * 60 * 60 * 1000);
     const entityIds = [this.roomEntity, this.lowEntity, this.highEntity, this.actionEntity].filter(
       (e): e is string => Boolean(e),
     );
 
     try {
-      const response = await this.hass.callWS<HistoryResponse>({
-        type: 'history/history_during_period',
-        start_time: start.toISOString(),
-        end_time: end.toISOString(),
-        entity_ids: entityIds,
-        minimal_response: false,
-        no_attributes: true,
-      });
+      const response = await fetchHistory(this.hass, entityIds, HOURS_TO_SHOW);
       this._renderPlot(response);
       this._loading = false;
     } catch (err) {
@@ -161,42 +149,6 @@ export class ComfortBandHistoryChart extends LitElement {
       this._loading = false;
       this._destroyPlot();
     }
-  }
-
-  /** Convert HA's `[{s, lu}, ...]` to a (sorted by time) numeric series.
-   *  Skips entries whose state isn't a finite number. */
-  private _numericSeries(points: HistoryPoint[] | undefined): Array<[number, number]> {
-    if (!points) return [];
-    const out: Array<[number, number]> = [];
-    for (const p of points) {
-      const n = parseFloat(p.s);
-      if (Number.isFinite(n)) out.push([p.lu, n]);
-    }
-    out.sort((a, b) => a[0] - b[0]);
-    return out;
-  }
-
-  /** Build aligned uPlot data: a single sorted x axis and forward-filled
-   *  values for each numeric series. */
-  private _alignSeries(series: Array<Array<[number, number]>>, nowSec: number): AlignedData {
-    const xs = new Set<number>();
-    for (const s of series) for (const [t] of s) xs.add(t);
-    if (xs.size === 0) return [[nowSec], ...series.map(() => [null])] as unknown as AlignedData;
-    const sortedX = [...xs].sort((a, b) => a - b);
-
-    const values: Array<Array<number | null>> = series.map((s) => {
-      let i = -1;
-      let last: number | null = null;
-      return sortedX.map((t) => {
-        while (i + 1 < s.length && s[i + 1][0] <= t) {
-          i++;
-          last = s[i][1];
-        }
-        return last;
-      });
-    });
-
-    return [sortedX, ...values] as AlignedData;
   }
 
   /** Convert the action history into [{start, end, action}] intervals,
@@ -220,9 +172,9 @@ export class ComfortBandHistoryChart extends LitElement {
     if (!this._host) return;
 
     const nowSec = Math.floor(Date.now() / 1000);
-    const room = this._numericSeries(response[this.roomEntity]);
-    const low = this._numericSeries(response[this.lowEntity]);
-    const high = this._numericSeries(response[this.highEntity]);
+    const room = numericSeries(response[this.roomEntity]);
+    const low = numericSeries(response[this.lowEntity]);
+    const high = numericSeries(response[this.highEntity]);
     this._intervals = this._actionIntervals(response[this.actionEntity], nowSec);
 
     if (room.length === 0 && low.length === 0 && high.length === 0) {
@@ -232,7 +184,7 @@ export class ComfortBandHistoryChart extends LitElement {
     }
     this._empty = false;
 
-    const data = this._alignSeries([room, low, high], nowSec);
+    const data = alignSeries([room, low, high], nowSec);
     const opts: UPlotOptions = this._buildOpts(this._host.clientWidth || 400);
 
     if (this._plot) {
