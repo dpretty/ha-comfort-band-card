@@ -1212,8 +1212,8 @@ let pi = class extends ze {
         <span class="driving">Driving decisions</span>
       </div>` : n ? A`<div class="feels-like">
         <span class="muted-warn">
-          Apparent temperature mode is on but no humidity reading is available — decisions are
-          using the raw room temperature.
+          Apparent temperature mode is on but no humidity reading is available — decisions are using
+          the raw room temperature.
         </span>
       </div>` : K;
   }
