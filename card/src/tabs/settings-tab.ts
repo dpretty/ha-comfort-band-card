@@ -22,12 +22,6 @@ import type { ZoneEntities } from '../helpers.js';
 import type { HomeAssistant } from '../types.js';
 import { tokens } from '../styles.js';
 
-interface ToggleRow {
-  entityId: string;
-  /** Optimistic flip target — `null` means "no flip in flight; use entity state". */
-  optimistic: boolean | null;
-}
-
 @customElement('comfort-band-settings-tab')
 export class ComfortBandSettingsTab extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
@@ -140,37 +134,33 @@ export class ComfortBandSettingsTab extends LitElement {
     `,
   ];
 
-  private _isOn(row: ToggleRow): boolean {
-    if (row.optimistic !== null) return row.optimistic;
-    const state = this.hass?.states[row.entityId]?.state;
-    return state === 'on';
+  /** Resolve the displayed state: optimistic flip wins if one is in flight,
+   *  otherwise read the entity. */
+  private _isOn(entityId: string): boolean {
+    const pending = this._pendingByEntity[entityId];
+    if (pending !== undefined && pending !== null) return pending;
+    return this.hass?.states[entityId]?.state === 'on';
   }
 
   private _onToggle = async (entityId: string): Promise<void> => {
     if (!this.hass) return;
-    const currentlyOn =
-      (this._pendingByEntity[entityId] ?? null) === null
-        ? this.hass.states[entityId]?.state === 'on'
-        : this._pendingByEntity[entityId] === true;
-    const target = !currentlyOn;
-    // Optimistic flip.
+    const target = !this._isOn(entityId);
+    // Optimistic flip. The HA state push that follows a successful
+    // callService arrives via the entity-state subscription, so we drop
+    // the pending value in `finally` — on success the next render reads
+    // the real value, on failure we already rolled back.
     this._pendingByEntity = { ...this._pendingByEntity, [entityId]: target };
     this._error = null;
     try {
       await this.hass.callService('switch', target ? 'turn_on' : 'turn_off', {
         entity_id: entityId,
       });
-      // The state push from HA will arrive on the next render; drop the
-      // optimistic value so we don't double-render the same state.
-      const next = { ...this._pendingByEntity };
-      delete next[entityId];
-      this._pendingByEntity = next;
     } catch (err) {
-      // Rollback.
+      this._error = err instanceof Error ? err.message : 'Failed to toggle switch.';
+    } finally {
       const next = { ...this._pendingByEntity };
       delete next[entityId];
       this._pendingByEntity = next;
-      this._error = err instanceof Error ? err.message : 'Failed to toggle switch.';
     }
   };
 
@@ -199,7 +189,6 @@ export class ComfortBandSettingsTab extends LitElement {
       ${useApparent !== null
         ? this._renderToggle({
             entityId: useApparent,
-            optimistic: this._pendingByEntity[useApparent] ?? null,
             title: 'Use apparent temperature',
             desc: html`When on, heating and cooling decisions use the humidity-adjusted "feels like"
             value instead of the raw sensor. Falls back to the raw value automatically if the
@@ -209,7 +198,6 @@ export class ComfortBandSettingsTab extends LitElement {
       ${learning !== null
         ? this._renderToggle({
             entityId: learning,
-            optimistic: this._pendingByEntity[learning] ?? null,
             title: 'Learning enabled',
             desc: html`Reserved for upcoming features (suggested-schedule nudges, predictive
             control). Has no effect today.`,
@@ -229,13 +217,8 @@ export class ComfortBandSettingsTab extends LitElement {
     `;
   }
 
-  private _renderToggle(opts: {
-    entityId: string;
-    optimistic: boolean | null;
-    title: string;
-    desc: unknown;
-  }) {
-    const on = this._isOn({ entityId: opts.entityId, optimistic: opts.optimistic });
+  private _renderToggle(opts: { entityId: string; title: string; desc: unknown }) {
+    const on = this._isOn(opts.entityId);
     return html`
       <div class="row">
         <div class="row-label">

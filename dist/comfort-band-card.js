@@ -5748,22 +5748,25 @@ let bi = class extends ze {
   constructor() {
     super(...arguments), this.zone = "", this._pendingByEntity = {}, this._error = null, this._onToggle = async (e) => {
       if (!this.hass) return;
-      const i = !((this._pendingByEntity[e] ?? null) === null ? this.hass.states[e]?.state === "on" : this._pendingByEntity[e] === !0);
-      this._pendingByEntity = { ...this._pendingByEntity, [e]: i }, this._error = null;
+      const t = !this._isOn(e);
+      this._pendingByEntity = { ...this._pendingByEntity, [e]: t }, this._error = null;
       try {
-        await this.hass.callService("switch", i ? "turn_on" : "turn_off", {
+        await this.hass.callService("switch", t ? "turn_on" : "turn_off", {
           entity_id: e
         });
-        const n = { ...this._pendingByEntity };
-        delete n[e], this._pendingByEntity = n;
-      } catch (n) {
-        const r = { ...this._pendingByEntity };
-        delete r[e], this._pendingByEntity = r, this._error = n instanceof Error ? n.message : "Failed to toggle switch.";
+      } catch (i) {
+        this._error = i instanceof Error ? i.message : "Failed to toggle switch.";
+      } finally {
+        const i = { ...this._pendingByEntity };
+        delete i[e], this._pendingByEntity = i;
       }
     };
   }
+  /** Resolve the displayed state: optimistic flip wins if one is in flight,
+   *  otherwise read the entity. */
   _isOn(e) {
-    return e.optimistic !== null ? e.optimistic : this.hass?.states[e.entityId]?.state === "on";
+    const t = this._pendingByEntity[e];
+    return t ?? this.hass?.states[e]?.state === "on";
   }
   render() {
     if (!this.hass || !this.entities) return G;
@@ -5777,7 +5780,6 @@ let bi = class extends ze {
       ${this._error ? A`<div class="error" role="alert">${this._error}</div>` : G}
       ${e !== null ? this._renderToggle({
       entityId: e,
-      optimistic: this._pendingByEntity[e] ?? null,
       title: "Use apparent temperature",
       desc: A`When on, heating and cooling decisions use the humidity-adjusted "feels like"
             value instead of the raw sensor. Falls back to the raw value automatically if the
@@ -5785,7 +5787,6 @@ let bi = class extends ze {
     }) : G}
       ${t !== null ? this._renderToggle({
       entityId: t,
-      optimistic: this._pendingByEntity[t] ?? null,
       title: "Learning enabled",
       desc: A`Reserved for upcoming features (suggested-schedule nudges, predictive
             control). Has no effect today.`
@@ -5804,7 +5805,7 @@ let bi = class extends ze {
     `;
   }
   _renderToggle(e) {
-    const t = this._isOn({ entityId: e.entityId, optimistic: e.optimistic });
+    const t = this._isOn(e.entityId);
     return A`
       <div class="row">
         <div class="row-label">
