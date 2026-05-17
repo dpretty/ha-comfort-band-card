@@ -72,6 +72,22 @@ describe('comfort-band-apparent-chart', () => {
     expect(second.entity_ids).toContain('sensor.gym_humidity_alt');
   });
 
+  it('refetches when re-attached to the DOM after a disconnect', async () => {
+    // Pins the base-class disconnectedCallback behaviour: detaching
+    // resets `_hasFetched` so `updated()` triggers a new fetch on
+    // reattach. Without this, switching away from the Insights tab and
+    // back would leave the chart blank.
+    const callWS = vi.fn().mockResolvedValue({});
+    const el = await chart({ hass: makeHass(callWS), ...FULL_PROPS });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(callWS).toHaveBeenCalledOnce();
+    el.remove();
+    document.body.appendChild(el);
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(callWS).toHaveBeenCalledTimes(2);
+  });
+
   it('shows an error status when the websocket call rejects', async () => {
     const callWS = vi.fn().mockRejectedValue(new Error('history-disabled'));
     const el = await chart({ hass: makeHass(callWS), ...FULL_PROPS });

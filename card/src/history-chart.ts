@@ -70,6 +70,12 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
         width: 100%;
         height: ${unsafeCSS(CHART_HEIGHT)}px;
       }
+      /* Collapse the host while a status (loading/error/empty) is shown
+         so the user doesn't see a blank gap above the message. Mirrors
+         the same pattern in apparent-chart.ts. */
+      .chart-host.idle {
+        height: 0;
+      }
       .status {
         text-align: center;
         padding: var(--cb-gap-lg);
@@ -275,6 +281,10 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     if (!this.hass || !this.roomEntity) {
       return html`<div class="status">No room temperature sensor for this zone.</div>`;
     }
+    // Collapse the canvas host while a status message is showing so the
+    // user sees the message at the top of the panel instead of a blank
+    // 260 px gap above it.
+    const idle = this._loading || this._error !== null || this._empty;
     return html`
       ${this._loading ? html`<div class="status">Loading 24 h history…</div>` : nothing}
       ${this._error ? html`<div class="status">${this._error}</div>` : nothing}
@@ -283,7 +293,7 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
             No history available yet — check back after the first hour of data.
           </div>`
         : nothing}
-      <div class="chart-host"></div>
+      <div class="chart-host ${idle ? 'idle' : ''}"></div>
       <div class="legend">
         <span><span class="swatch" style="background:var(--primary-color)"></span>Room</span>
         <span

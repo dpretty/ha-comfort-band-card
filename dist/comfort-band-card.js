@@ -4587,6 +4587,9 @@ class En extends zt {
   disconnectedCallback() {
     super.disconnectedCallback(), this._destroyPlot(), this._hasFetched = !1;
   }
+  connectedCallback() {
+    super.connectedCallback(), this.hasUpdated && this.requestUpdate();
+  }
   _observeResize() {
     if (!this._host || this._resizeObserver) return;
     const e = this.chartHeight;
@@ -4732,13 +4735,16 @@ let pi = class extends En {
     };
   }
   render() {
-    return !this.hass || !this.roomEntity ? $`<div class="status">No room temperature sensor for this zone.</div>` : $`
+    if (!this.hass || !this.roomEntity)
+      return $`<div class="status">No room temperature sensor for this zone.</div>`;
+    const t = this._loading || this._error !== null || this._empty;
+    return $`
       ${this._loading ? $`<div class="status">Loading 24 h history…</div>` : G}
       ${this._error ? $`<div class="status">${this._error}</div>` : G}
       ${this._empty ? $`<div class="status">
             No history available yet — check back after the first hour of data.
           </div>` : G}
-      <div class="chart-host"></div>
+      <div class="chart-host ${t ? "idle" : ""}"></div>
       <div class="legend">
         <span><span class="swatch" style="background:var(--primary-color)"></span>Room</span>
         <span
@@ -4771,6 +4777,12 @@ pi.styles = [
       .chart-host {
         width: 100%;
         height: ${Kn(Oo)}px;
+      }
+      /* Collapse the host while a status (loading/error/empty) is shown
+         so the user doesn't see a blank gap above the message. Mirrors
+         the same pattern in apparent-chart.ts. */
+      .chart-host.idle {
+        height: 0;
       }
       .status {
         text-align: center;

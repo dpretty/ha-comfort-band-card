@@ -42,10 +42,21 @@ export abstract class ComfortBandChartBase extends LitElement {
     super.disconnectedCallback();
     this._destroyPlot();
     // Reset the fetch latch so the chart refetches when re-attached
-    // (e.g. user switches away from Insights and back). Otherwise
-    // `updated()` skips the fetch since none of the entity props
-    // changed, leaving the host blank.
+    // (e.g. user switches away from Insights and back). Without this,
+    // `updated()` skips the fetch on reconnect since none of the
+    // entity props changed, and the host stays blank.
     this._hasFetched = false;
+  }
+
+  public override connectedCallback(): void {
+    super.connectedCallback();
+    // Lit auto-schedules an update on the FIRST connect, but not on
+    // subsequent reconnects (per Lit's lifecycle docs). Request one
+    // explicitly so `updated()` runs and the cleared `_hasFetched`
+    // flag triggers a refetch.
+    if (this.hasUpdated) {
+      this.requestUpdate();
+    }
   }
 
   protected _observeResize(): void {
