@@ -249,7 +249,7 @@ let un = class extends HTMLElement {
 un.elementStyles = [], un.shadowRootOptions = { mode: "open" }, un[Un("elementProperties")] = /* @__PURE__ */ new Map(), un[Un("finalized")] = /* @__PURE__ */ new Map(), uc?.({ ReactiveElement: un }), (wr.reactiveElementVersions ??= []).push("2.1.2");
 const Mo = globalThis, Ms = (e) => e, gr = Mo.trustedTypes, Ds = gr ? gr.createPolicy("lit-html", { createHTML: (e) => e }) : void 0, Ml = "$lit$", di = `lit$${Math.random().toFixed(9).slice(2)}$`, Dl = "?" + di, hc = `<${Dl}>`, Li = document, Vn = () => Li.createComment(""), Wn = (e) => e === null || typeof e != "object" && typeof e != "function", Do = Array.isArray, dc = (e) => Do(e) || typeof e?.[Symbol.iterator] == "function", to = `[ 	
 \f\r]`, Nn = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, zs = /-->/g, Os = />/g, Mi = RegExp(`>|${to}(?:([^\\s"'>=/]+)(${to}*=${to}*(?:[^ 	
-\f\r"'\`<>=]|("|')|))|$)`, "g"), Ns = /'/g, Hs = /"/g, zl = /^(?:script|style|textarea|title)$/i, Ol = (e) => (t, ...i) => ({ _$litType$: e, strings: t, values: i }), A = Ol(1), fi = Ol(2), fn = Symbol.for("lit-noChange"), G = Symbol.for("lit-nothing"), Ls = /* @__PURE__ */ new WeakMap(), Ni = Li.createTreeWalker(Li, 129);
+\f\r"'\`<>=]|("|')|))|$)`, "g"), Ns = /'/g, Hs = /"/g, zl = /^(?:script|style|textarea|title)$/i, Ol = (e) => (t, ...i) => ({ _$litType$: e, strings: t, values: i }), A = Ol(1), fi = Ol(2), fn = Symbol.for("lit-noChange"), K = Symbol.for("lit-nothing"), Ls = /* @__PURE__ */ new WeakMap(), Ni = Li.createTreeWalker(Li, 129);
 function Nl(e, t) {
   if (!Do(e) || !e.hasOwnProperty("raw")) throw Error("invalid template strings array");
   return Ds !== void 0 ? Ds.createHTML(t) : t;
@@ -342,7 +342,7 @@ class Zn {
     return this._$AM?._$AU ?? this._$Cv;
   }
   constructor(t, i, n, r) {
-    this.type = 2, this._$AH = G, this._$AN = void 0, this._$AA = t, this._$AB = i, this._$AM = n, this.options = r, this._$Cv = r?.isConnected ?? !0;
+    this.type = 2, this._$AH = K, this._$AN = void 0, this._$AA = t, this._$AB = i, this._$AM = n, this.options = r, this._$Cv = r?.isConnected ?? !0;
   }
   get parentNode() {
     let t = this._$AA.parentNode;
@@ -356,7 +356,7 @@ class Zn {
     return this._$AB;
   }
   _$AI(t, i = this) {
-    t = pn(this, t, i), Wn(t) ? t === G || t == null || t === "" ? (this._$AH !== G && this._$AR(), this._$AH = G) : t !== this._$AH && t !== fn && this._(t) : t._$litType$ !== void 0 ? this.$(t) : t.nodeType !== void 0 ? this.T(t) : dc(t) ? this.k(t) : this._(t);
+    t = pn(this, t, i), Wn(t) ? t === K || t == null || t === "" ? (this._$AH !== K && this._$AR(), this._$AH = K) : t !== this._$AH && t !== fn && this._(t) : t._$litType$ !== void 0 ? this.$(t) : t.nodeType !== void 0 ? this.T(t) : dc(t) ? this.k(t) : this._(t);
   }
   O(t) {
     return this._$AA.parentNode.insertBefore(t, this._$AB);
@@ -365,7 +365,7 @@ class Zn {
     this._$AH !== t && (this._$AR(), this._$AH = this.O(t));
   }
   _(t) {
-    this._$AH !== G && Wn(this._$AH) ? this._$AA.nextSibling.data = t : this.T(Li.createTextNode(t)), this._$AH = t;
+    this._$AH !== K && Wn(this._$AH) ? this._$AA.nextSibling.data = t : this.T(Li.createTextNode(t)), this._$AH = t;
   }
   $(t) {
     const { values: i, _$litType$: n } = t, r = typeof n == "number" ? this._$AC(t) : (n.el === void 0 && (n.el = Gn.createElement(Nl(n.h, n.h[0]), this.options)), n);
@@ -404,7 +404,7 @@ class xr {
     return this._$AM._$AU;
   }
   constructor(t, i, n, r, s) {
-    this.type = 1, this._$AH = G, this._$AN = void 0, this.element = t, this.name = i, this._$AM = r, this.options = s, n.length > 2 || n[0] !== "" || n[1] !== "" ? (this._$AH = Array(n.length - 1).fill(new String()), this.strings = n) : this._$AH = G;
+    this.type = 1, this._$AH = K, this._$AN = void 0, this.element = t, this.name = i, this._$AM = r, this.options = s, n.length > 2 || n[0] !== "" || n[1] !== "" ? (this._$AH = Array(n.length - 1).fill(new String()), this.strings = n) : this._$AH = K;
   }
   _$AI(t, i = this, n, r) {
     const s = this.strings;
@@ -413,12 +413,12 @@ class xr {
     else {
       const h = t;
       let d, p;
-      for (t = s[0], d = 0; d < s.length - 1; d++) p = pn(this, h[n + d], i, d), p === fn && (p = this._$AH[d]), l ||= !Wn(p) || p !== this._$AH[d], p === G ? t = G : t !== G && (t += (p ?? "") + s[d + 1]), this._$AH[d] = p;
+      for (t = s[0], d = 0; d < s.length - 1; d++) p = pn(this, h[n + d], i, d), p === fn && (p = this._$AH[d]), l ||= !Wn(p) || p !== this._$AH[d], p === K ? t = K : t !== K && (t += (p ?? "") + s[d + 1]), this._$AH[d] = p;
     }
     l && !r && this.j(t);
   }
   j(t) {
-    t === G ? this.element.removeAttribute(this.name) : this.element.setAttribute(this.name, t ?? "");
+    t === K ? this.element.removeAttribute(this.name) : this.element.setAttribute(this.name, t ?? "");
   }
 }
 class gc extends xr {
@@ -426,7 +426,7 @@ class gc extends xr {
     super(...arguments), this.type = 3;
   }
   j(t) {
-    this.element[this.name] = t === G ? void 0 : t;
+    this.element[this.name] = t === K ? void 0 : t;
   }
 }
 class mc extends xr {
@@ -434,7 +434,7 @@ class mc extends xr {
     super(...arguments), this.type = 4;
   }
   j(t) {
-    this.element.toggleAttribute(this.name, !!t && t !== G);
+    this.element.toggleAttribute(this.name, !!t && t !== K);
   }
 }
 class bc extends xr {
@@ -442,8 +442,8 @@ class bc extends xr {
     super(t, i, n, r, s), this.type = 5;
   }
   _$AI(t, i = this) {
-    if ((t = pn(this, t, i, 0) ?? G) === fn) return;
-    const n = this._$AH, r = t === G && n !== G || t.capture !== n.capture || t.once !== n.once || t.passive !== n.passive, s = t !== G && (n === G || r);
+    if ((t = pn(this, t, i, 0) ?? K) === fn) return;
+    const n = this._$AH, r = t === K && n !== K || t.capture !== n.capture || t.once !== n.once || t.passive !== n.passive, s = t !== K && (n === K || r);
     r && this.element.removeEventListener(this.name, this, n), s && this.element.addEventListener(this.name, this, t), this._$AH = t;
   }
   handleEvent(t) {
@@ -1160,24 +1160,16 @@ let pi = class extends ze {
     return Number.isFinite(i) ? i : NaN;
   }
   render() {
-    if (!this.hass || !this.entities) return G;
+    if (!this.hass || !this.entities) return K;
     const e = this._numericState(this.entities.manualLow), t = this._numericState(this.entities.manualHigh), i = this._numericState(this.entities.effectiveLow), n = this._numericState(this.entities.effectiveHigh), r = this._numericState(this.entities.roomTemperature), s = this._numericState(this.entities.apparentTemperature), l = this._numericState(this.entities.overrideHours), h = this._stateOf(this.entities.currentAction)?.state ?? "unknown", d = this._stateOf(this.entities.overrideActive)?.state === "on", p = this._stateOf(this.entities.useApparentTemperature)?.state === "on", b = Number.isFinite(r) && Number.isFinite(s) && Math.abs(s - r) >= 0.1, g = this._pendingLow ?? (Number.isFinite(e) ? e : 19), _ = this._pendingHigh ?? (Number.isFinite(t) ? t : 22), $ = br(h), E = $ !== "idle" && $ !== "unknown";
     return A`
       <div class="header-row">
         <div class="room-temp">${Number.isFinite(r) ? `${r.toFixed(1)}°` : "—"}</div>
         ${E ? A`<span class="action-chip" style="background:${mr($)}"
               >${go($)}</span
-            >` : G}
+            >` : K}
       </div>
-      ${b ? A`<div class="feels-like">
-            <span>Feels like ${s.toFixed(1)}°</span>
-            ${p ? A`<span class="driving">Driving decisions</span>` : G}
-          </div>` : p ? A`<div class="feels-like">
-              <span class="muted-warn">
-                Apparent temperature mode is on but no humidity reading is available — decisions are
-                using the raw room temperature.
-              </span>
-            </div>` : G}
+      ${this._renderFeelsLikeRow({ apparent: s, showFeelsLike: b, useApparentOn: p })}
       <div class="gauge-row">
         <band-gauge .low=${i} .high=${n} .room=${r} .action=${h}></band-gauge>
       </div>
@@ -1199,7 +1191,7 @@ let pi = class extends ze {
     `;
   }
   _renderOverrideSection(e) {
-    if (!e) return G;
+    if (!e) return K;
     const t = this._stateOf(this.entities.overrideEnds)?.state, i = Wc(t ?? null);
     return A`
       <section>
@@ -1210,6 +1202,20 @@ let pi = class extends ze {
         </div>
       </section>
     `;
+  }
+  _renderFeelsLikeRow(e) {
+    const { apparent: t, showFeelsLike: i, useApparentOn: n } = e, r = n && Number.isFinite(t);
+    return i ? A`<div class="feels-like">
+        <span>Feels like ${t.toFixed(1)}°</span>
+        ${r ? A`<span class="driving">Driving decisions</span>` : K}
+      </div>` : r ? A`<div class="feels-like">
+        <span class="driving">Driving decisions</span>
+      </div>` : n ? A`<div class="feels-like">
+        <span class="muted-warn">
+          Apparent temperature mode is on but no humidity reading is available — decisions are
+          using the raw room temperature.
+        </span>
+      </div>` : K;
   }
   _renderHoursSection(e) {
     return this.entities?.overrideHours ? A`
@@ -1228,7 +1234,7 @@ let pi = class extends ze {
     )}
         </div>
       </section>
-    ` : G;
+    ` : K;
   }
 };
 pi.styles = [
@@ -1764,7 +1770,7 @@ let ii = class extends ze {
     });
   }
   render() {
-    if (!this.hass) return G;
+    if (!this.hass) return K;
     const e = this._readState();
     if (e === null)
       return A`<div class="empty">Profile manager not registered yet.</div>`;
@@ -1813,13 +1819,13 @@ let ii = class extends ze {
       ${this._error ? A`<div class="error" role="alert">${this._error}</div>` : null}
       ${s ? A`<button class="new-profile" type="button" @click=${this._onNew}>
             + New profile
-          </button>` : G}
+          </button>` : K}
       <ul aria-label="Profiles">
         ${t.map(
       (l, h) => this._renderRow(l, h, i, n, r, s)
     )}
       </ul>
-      ${s ? G : A`<p class="upgrade-hint">
+      ${s ? K : A`<p class="upgrade-hint">
             Profile management (create, clone, rename, delete) requires the
             <code>comfort_band</code> integration v0.3.0 or later.
           </p>`}
@@ -1832,7 +1838,7 @@ let ii = class extends ze {
         data-profile=${e}
         tabindex="0"
         class=${l ? "active" : ""}
-        aria-current=${l ? "true" : G}
+        aria-current=${l ? "true" : K}
         @click=${() => this._onSelect(e)}
         @keydown=${(b) => {
       (b.key === "Enter" || b.key === " ") && (b.preventDefault(), this._onSelect(e));
@@ -1840,20 +1846,20 @@ let ii = class extends ze {
       >
         <span class="label">
           <span class="name">${e}</span>
-          ${d ? A`<span class="description">${d}</span>` : G}
+          ${d ? A`<span class="description">${d}</span>` : K}
         </span>
-        ${l ? A`<span class="badge">Active</span>` : G}
+        ${l ? A`<span class="badge">Active</span>` : K}
         ${s ? A`<button
               class="overflow"
               type="button"
               aria-label="More actions for ${e}"
               aria-haspopup="menu"
-              aria-controls=${this._openMenu === e ? p : G}
+              aria-controls=${this._openMenu === e ? p : K}
               aria-expanded=${this._openMenu === e ? "true" : "false"}
               @click=${(b) => this._toggleMenu(e, b)}
             >
               ⋮
-            </button>` : G}
+            </button>` : K}
         ${this._openMenu === e ? A`
               <div
                 id=${p}
@@ -1891,7 +1897,7 @@ let ii = class extends ze {
                   Delete
                 </button>
               </div>
-            ` : G}
+            ` : K}
       </li>
     `;
   }
@@ -2260,8 +2266,8 @@ function ku(e, t, i) {
 function Qs(e, t, i) {
   let n = i.min, r = i.max, s = le(n.pad, 0), l = le(r.pad, 0), h = le(n.hard, -pe), d = le(r.hard, pe), p = le(n.soft, pe), b = le(r.soft, -pe), g = le(n.mode, 0), _ = le(r.mode, 0), $ = t - e, E = ei($), H = Je(De(e), De(t)), B = ei(H), j = De(B - E);
   ($ < 1e-24 || j > 10) && ($ = 0, (e == 0 || t == 0) && ($ = 1e-24, g == 2 && p != pe && (s = 0), _ == 2 && b != -pe && (l = 0)));
-  let w = $ || H || 1e3, F = ei(w), S = gn(10, ct(F)), J = w * ($ == 0 ? e == 0 ? 0.1 : 1 : s), D = ge(Yl(e - J, S / 10), 24), Q = e >= p && (g == 1 || g == 3 && D <= p || g == 2 && D >= p) ? p : pe, K = Je(h, D < Q && e >= Q ? Q : Mt(Q, D)), te = w * ($ == 0 ? t == 0 ? 0.1 : 1 : l), Y = ge(kr(t + te, S / 10), 24), k = t <= b && (_ == 1 || _ == 3 && Y >= b || _ == 2 && Y <= b) ? b : -pe, Z = Mt(d, Y > k && t <= k ? k : Je(k, Y));
-  return K == Z && K == 0 && (Z = 100), [K, Z];
+  let w = $ || H || 1e3, F = ei(w), S = gn(10, ct(F)), J = w * ($ == 0 ? e == 0 ? 0.1 : 1 : s), D = ge(Yl(e - J, S / 10), 24), Q = e >= p && (g == 1 || g == 3 && D <= p || g == 2 && D >= p) ? p : pe, Y = Je(h, D < Q && e >= Q ? Q : Mt(Q, D)), te = w * ($ == 0 ? t == 0 ? 0.1 : 1 : l), G = ge(kr(t + te, S / 10), 24), k = t <= b && (_ == 1 || _ == 3 && G >= b || _ == 2 && G <= b) ? b : -pe, Z = Mt(d, G > k && t <= k ? k : Je(k, G));
+  return Y == Z && Y == 0 && (Z = 100), [Y, Z];
 }
 const Au = new Intl.NumberFormat(xn ? yu.language : "en-US"), Bo = (e) => Au.format(e), ut = Math, fr = ut.PI, De = ut.abs, ct = ut.floor, Me = ut.round, vt = ut.ceil, Mt = ut.min, Je = ut.max, gn = ut.pow, Xs = ut.sign, ei = ut.log10, jl = ut.log2, Eu = (e, t = 1) => ut.sinh(e) * t, so = (e, t = 1) => ut.asinh(e / t), pe = 1 / 0;
 function el(e) {
@@ -2621,15 +2627,15 @@ function oa(e) {
   ];
   function b(g) {
     return (_, $, E, H, B, j) => {
-      let w = [], F = B >= l, S = B >= s && B < l, J = g(E), D = ge(J * e, 3), Q = lo(J.getFullYear(), F ? 0 : J.getMonth(), S || F ? 1 : J.getDate()), K = ge(Q * e, 3);
+      let w = [], F = B >= l, S = B >= s && B < l, J = g(E), D = ge(J * e, 3), Q = lo(J.getFullYear(), F ? 0 : J.getMonth(), S || F ? 1 : J.getDate()), Y = ge(Q * e, 3);
       if (S || F) {
-        let te = S ? B / s : 0, Y = F ? B / l : 0, k = D == K ? D : ge(lo(Q.getFullYear() + Y, Q.getMonth() + te, 1) * e, 3), Z = new Date(Me(k / e)), z = Z.getFullYear(), V = Z.getMonth();
+        let te = S ? B / s : 0, G = F ? B / l : 0, k = D == Y ? D : ge(lo(Q.getFullYear() + G, Q.getMonth() + te, 1) * e, 3), Z = new Date(Me(k / e)), z = Z.getFullYear(), V = Z.getMonth();
         for (let R = 0; k <= H; R++) {
-          let ne = lo(z + Y * R, V + te * R, 1), L = ne - g(ge(ne * e, 3));
+          let ne = lo(z + G * R, V + te * R, 1), L = ne - g(ge(ne * e, 3));
           k = ge((+ne + L) * e, 3), k <= H && w.push(k);
         }
       } else {
-        let te = B >= r ? r : B, Y = ct(E) - ct(D), k = K + Y + kr(D - K, te);
+        let te = B >= r ? r : B, G = ct(E) - ct(D), k = Y + G + kr(D - Y, te);
         w.push(k);
         let Z = g(k), z = Z.getHours() + Z.getMinutes() / i + Z.getSeconds() / n, V = B / n, R = _.axes[$]._space, ne = j / R;
         for (; k = ge(k + B, e == 1 ? 0 : 3), !(k > H); )
@@ -3053,8 +3059,8 @@ function ti(e, t, i, n, r, s) {
     const w = p.dir * (p.ori == 0 ? 1 : -1), F = p.ori == 0 ? $n : Sn;
     let S, J;
     w == 1 ? (S = i, J = n) : (S = n, J = i);
-    let D = j(g(h[S], p, H, $)), Q = j(_(d[S], b, B, E)), K = j(g(h[J], p, H, $)), te = j(_(s == 1 ? b.max : b.min, b, B, E)), Y = new Path2D(r);
-    return F(Y, K, te), F(Y, D, te), F(Y, D, Q), Y;
+    let D = j(g(h[S], p, H, $)), Q = j(_(d[S], b, B, E)), Y = j(g(h[J], p, H, $)), te = j(_(s == 1 ? b.max : b.min, b, B, E)), G = new Path2D(r);
+    return F(G, Y, te), F(G, D, te), F(G, D, Q), G;
   });
 }
 function Er(e, t, i, n, r, s) {
@@ -3136,10 +3142,10 @@ function ya(e) {
     let { pxRound: j, points: w } = l, F, S;
     p.ori == 0 ? (F = Pr, S = ma) : (F = Tr, S = ba);
     const J = ge(w.width * ce, 3);
-    let D = (w.size - w.width) / 2 * ce, Q = ge(D * 2, 3), K = new Path2D(), te = new Path2D(), { left: Y, top: k, width: Z, height: z } = t.bbox;
+    let D = (w.size - w.width) / 2 * ce, Q = ge(D * 2, 3), Y = new Path2D(), te = new Path2D(), { left: G, top: k, width: Z, height: z } = t.bbox;
     Cr(
       te,
-      Y - Q,
+      G - Q,
       k - Q,
       Z + Q * 2,
       z + Q * 2
@@ -3147,7 +3153,7 @@ function ya(e) {
     const V = (R) => {
       if (d[R] != null) {
         let ne = j(g(h[R], p, H, $)), L = j(_(d[R], b, B, E));
-        F(K, ne + D, L), S(K, ne, L, D, 0, fr * 2);
+        F(Y, ne + D, L), S(Y, ne, L, D, 0, fr * 2);
       }
     };
     if (s)
@@ -3156,8 +3162,8 @@ function ya(e) {
       for (let R = n; R <= r; R++)
         V(R);
     return {
-      stroke: J > 0 ? K : null,
-      fill: K,
+      stroke: J > 0 ? Y : null,
+      fill: Y,
       clip: te,
       flags: _n | So
     };
@@ -3175,23 +3181,23 @@ function xa(e) {
     [r, s] = $r(d, r, s);
     let j = l.pxRound, w = (z) => j(g(z, p, H, $)), F = (z) => j(_(z, b, B, E)), S, J;
     p.ori == 0 ? (S = $n, J = Dh) : (S = Sn, J = zh);
-    const D = p.dir * (p.ori == 0 ? 1 : -1), Q = { stroke: new Path2D(), fill: null, clip: null, band: null, gaps: null, flags: _n }, K = Q.stroke;
+    const D = p.dir * (p.ori == 0 ? 1 : -1), Q = { stroke: new Path2D(), fill: null, clip: null, band: null, gaps: null, flags: _n }, Y = Q.stroke;
     let te = !1;
     if (s - r >= H * 4) {
       let z = (O) => i.posToVal(O, p.key, !0), V = null, R = null, ne, L, et, we = w(h[D == 1 ? r : s]), oe = w(h[r]), de = w(h[s]), X = z(D == 1 ? oe + 1 : de - 1);
       for (let O = D == 1 ? r : s; O >= r && O <= s; O += D) {
         let Te = h[O], xe = (D == 1 ? Te < X : Te > X) ? we : w(Te), ue = d[O];
-        xe == we ? ue != null ? (L = ue, V == null ? (S(K, xe, F(L)), ne = V = R = L) : L < V ? V = L : L > R && (R = L)) : ue === null && (te = !0) : (V != null && J(K, we, F(V), F(R), F(ne), F(L)), ue != null ? (L = ue, S(K, xe, F(L)), V = R = ne = L) : (V = R = null, ue === null && (te = !0)), we = xe, X = z(we + D));
+        xe == we ? ue != null ? (L = ue, V == null ? (S(Y, xe, F(L)), ne = V = R = L) : L < V ? V = L : L > R && (R = L)) : ue === null && (te = !0) : (V != null && J(Y, we, F(V), F(R), F(ne), F(L)), ue != null ? (L = ue, S(Y, xe, F(L)), V = R = ne = L) : (V = R = null, ue === null && (te = !0)), we = xe, X = z(we + D));
       }
-      V != null && V != R && et != we && J(K, we, F(V), F(R), F(ne), F(L));
+      V != null && V != R && et != we && J(Y, we, F(V), F(R), F(ne), F(L));
     } else
       for (let z = D == 1 ? r : s; z >= r && z <= s; z += D) {
         let V = d[z];
-        V === null ? te = !0 : V != null && S(K, w(h[z]), F(V));
+        V === null ? te = !0 : V != null && S(Y, w(h[z]), F(V));
       }
     let [k, Z] = Go(i, n);
     if (l.fill != null || k != 0) {
-      let z = Q.fill = new Path2D(K), V = l.fillTo(i, n, l.min, l.max, k), R = F(V), ne = w(h[r]), L = w(h[s]);
+      let z = Q.fill = new Path2D(Y), V = l.fillTo(i, n, l.min, l.max, k), R = F(V), ne = w(h[r]), L = w(h[s]);
       D == -1 && ([L, ne] = [ne, L]), S(z, L, R), S(z, ne, R);
     }
     if (!l.spanGaps) {
@@ -3199,31 +3205,31 @@ function xa(e) {
       te && z.push(...Yo(h, d, r, s, D, w, t)), Q.gaps = z = l.gaps(i, n, r, s, z), Q.clip = Er(z, p.ori, $, E, H, B);
     }
     return Z != 0 && (Q.band = Z == 2 ? [
-      ti(i, n, r, s, K, -1),
-      ti(i, n, r, s, K, 1)
-    ] : ti(i, n, r, s, K, Z)), Q;
+      ti(i, n, r, s, Y, -1),
+      ti(i, n, r, s, Y, 1)
+    ] : ti(i, n, r, s, Y, Z)), Q;
   });
 }
 function Oh(e) {
   const t = le(e.align, 1), i = le(e.ascDesc, !1), n = le(e.alignGaps, 0), r = le(e.extend, !1);
   return (s, l, h, d) => Ui(s, l, (p, b, g, _, $, E, H, B, j, w, F) => {
     [h, d] = $r(g, h, d);
-    let S = p.pxRound, { left: J, width: D } = s.bbox, Q = (oe) => S(E(oe, _, w, B)), K = (oe) => S(H(oe, $, F, j)), te = _.ori == 0 ? $n : Sn;
-    const Y = { stroke: new Path2D(), fill: null, clip: null, band: null, gaps: null, flags: _n }, k = Y.stroke, Z = _.dir * (_.ori == 0 ? 1 : -1);
-    let z = K(g[Z == 1 ? h : d]), V = Q(b[Z == 1 ? h : d]), R = V, ne = V;
+    let S = p.pxRound, { left: J, width: D } = s.bbox, Q = (oe) => S(E(oe, _, w, B)), Y = (oe) => S(H(oe, $, F, j)), te = _.ori == 0 ? $n : Sn;
+    const G = { stroke: new Path2D(), fill: null, clip: null, band: null, gaps: null, flags: _n }, k = G.stroke, Z = _.dir * (_.ori == 0 ? 1 : -1);
+    let z = Y(g[Z == 1 ? h : d]), V = Q(b[Z == 1 ? h : d]), R = V, ne = V;
     r && t == -1 && (ne = J, te(k, ne, z)), te(k, V, z);
     for (let oe = Z == 1 ? h : d; oe >= h && oe <= d; oe += Z) {
       let de = g[oe];
       if (de == null)
         continue;
-      let X = Q(b[oe]), O = K(de);
+      let X = Q(b[oe]), O = Y(de);
       t == 1 ? te(k, X, z) : te(k, R, O), te(k, X, O), z = O, R = X;
     }
     let L = R;
     r && t == 1 && (L = J + D, te(k, L, z));
     let [et, we] = Go(s, l);
     if (p.fill != null || et != 0) {
-      let oe = Y.fill = new Path2D(k), de = p.fillTo(s, l, p.min, p.max, et), X = K(de);
+      let oe = G.fill = new Path2D(k), de = p.fillTo(s, l, p.min, p.max, et), X = Y(de);
       te(oe, L, X), te(oe, ne, X);
     }
     if (!p.spanGaps) {
@@ -3232,12 +3238,12 @@ function Oh(e) {
       let de = p.width * ce / 2, X = i || t == 1 ? de : -de, O = i || t == -1 ? -de : de;
       oe.forEach((Te) => {
         Te[0] += X, Te[1] += O;
-      }), Y.gaps = oe = p.gaps(s, l, h, d, oe), Y.clip = Er(oe, _.ori, B, j, w, F);
+      }), G.gaps = oe = p.gaps(s, l, h, d, oe), G.clip = Er(oe, _.ori, B, j, w, F);
     }
-    return we != 0 && (Y.band = we == 2 ? [
+    return we != 0 && (G.band = we == 2 ? [
       ti(s, l, h, d, k, -1),
       ti(s, l, h, d, k, 1)
-    ] : ti(s, l, h, d, k, we)), Y;
+    ] : ti(s, l, h, d, k, we)), G;
   });
 }
 function yl(e, t, i, n, r, s, l = pe) {
@@ -3262,13 +3268,13 @@ function Nh(e) {
   r == null ? [0, 0] : typeof r == "number" ? [r, 0] : r;
   const s = ie(r), l = 1 - t[0], h = le(t[1], pe), d = le(t[2], 1), p = le(e.disp, jn), b = le(e.each, ($) => {
   }), { fill: g, stroke: _ } = p;
-  return ($, E, H, B) => Ui($, E, (j, w, F, S, J, D, Q, K, te, Y, k) => {
+  return ($, E, H, B) => Ui($, E, (j, w, F, S, J, D, Q, Y, te, G, k) => {
     let Z = j.pxRound, z = i, V = n * ce, R = h * ce, ne = d * ce, L, et;
     S.ori == 0 ? [L, et] = s($, E) : [et, L] = s($, E);
     const we = S.dir * (S.ori == 0 ? 1 : -1);
     let oe = S.ori == 0 ? Cr : Ko, de = S.ori == 0 ? b : (C, me, Ce, Wi, $i, Nt, Si) => {
       b(C, me, Ce, $i, Wi, Si, Nt);
-    }, X = le($.bands, Uo).find((C) => C.series[0] == E), O = X != null ? X.dir : 0, Te = j.fillTo($, E, j.min, j.max, O), Ge = Z(Q(Te, J, k, te)), xe, ue, $t, nt = Y, Se = Z(j.width * ce), Ot = !1, qt = null, ht = null, oi = null, Ii = null;
+    }, X = le($.bands, Uo).find((C) => C.series[0] == E), O = X != null ? X.dir : 0, Te = j.fillTo($, E, j.min, j.max, O), Ge = Z(Q(Te, J, k, te)), xe, ue, $t, nt = G, Se = Z(j.width * ce), Ot = !1, qt = null, ht = null, oi = null, Ii = null;
     g != null && (Se == 0 || _ != null) && (Ot = !0, qt = g.values($, E, H, B), ht = /* @__PURE__ */ new Map(), new Set(qt).forEach((C) => {
       C != null && ht.set(C, new Path2D());
     }), Se > 0 && (oi = _.values($, E, H, B), Ii = /* @__PURE__ */ new Map(), new Set(oi).forEach((C) => {
@@ -3276,11 +3282,11 @@ function Nh(e) {
     })));
     let { x0: ji, size: En } = p;
     if (ji != null && En != null) {
-      z = 1, w = ji.values($, E, H, B), ji.unit == 2 && (w = w.map((Ce) => $.posToVal(K + Ce * Y, S.key, !0)));
+      z = 1, w = ji.values($, E, H, B), ji.unit == 2 && (w = w.map((Ce) => $.posToVal(Y + Ce * G, S.key, !0)));
       let C = En.values($, E, H, B);
-      En.unit == 2 ? ue = C[0] * Y : ue = D(C[0], S, Y, K) - D(0, S, Y, K), nt = yl(w, F, D, S, Y, K, nt), $t = nt - ue + V;
+      En.unit == 2 ? ue = C[0] * G : ue = D(C[0], S, G, Y) - D(0, S, G, Y), nt = yl(w, F, D, S, G, Y, nt), $t = nt - ue + V;
     } else
-      nt = yl(w, F, D, S, Y, K, nt), $t = nt * l + V, ue = nt - $t;
+      nt = yl(w, F, D, S, G, Y, nt), $t = nt * l + V, ue = nt - $t;
     $t < 1 && ($t = 0), Se >= ue / 2 && (Se = 0), $t < 5 && (Z = Wl);
     let Qn = $t > 0, wi = nt - $t - (Qn ? Se : 0);
     ue = Z(wo(wi, ne, R)), xe = (z == 0 ? ue / 2 : z == we ? 0 : ue) - z * we * ((z == 0 ? V / 2 : 0) + (Qn ? Se / 2 : 0));
@@ -3303,7 +3309,7 @@ function Nh(e) {
           continue;
         Ge = Q(tt, J, k, te);
       }
-      let Ce = S.distr != 2 || p != null ? w[C] : C, Wi = D(Ce, S, Y, K), $i = Q(le(me, Te), J, k, te), Nt = Z(Wi - xe), Si = Z(Je($i, Ge)), rt = Z(Mt($i, Ge)), dt = Si - rt;
+      let Ce = S.distr != 2 || p != null ? w[C] : C, Wi = D(Ce, S, G, Y), $i = Q(le(me, Te), J, k, te), Nt = Z(Wi - xe), Si = Z(Je($i, Ge)), rt = Z(Mt($i, Ge)), dt = Si - rt;
       if (me != null) {
         let tt = me < 0 ? q : xi, St = me < 0 ? xi : q;
         Ot ? (Se > 0 && oi[C] != null && oe(Ii.get(oi[C]), Nt, rt + ct(Se / 2), ue, Je(0, dt - Se), tt, St), qt[C] != null && oe(ht.get(qt[C]), Nt, rt + ct(Se / 2), ue, Je(0, dt - Se), tt, St)) : oe(Vi, Nt, rt + ct(Se / 2), ue, Je(0, dt - Se), tt, St), de(
@@ -3326,22 +3332,22 @@ function Hh(e, t) {
     [s, l] = $r(p, s, l);
     let w = h.pxRound, F = (L) => w(_(L, b, B, E)), S = (L) => w($(L, g, j, H)), J, D, Q;
     b.ori == 0 ? (J = Pr, Q = $n, D = _a) : (J = Tr, Q = Sn, D = va);
-    const K = b.dir * (b.ori == 0 ? 1 : -1);
-    let te = F(d[K == 1 ? s : l]), Y = te, k = [], Z = [];
-    for (let L = K == 1 ? s : l; L >= s && L <= l; L += K)
+    const Y = b.dir * (b.ori == 0 ? 1 : -1);
+    let te = F(d[Y == 1 ? s : l]), G = te, k = [], Z = [];
+    for (let L = Y == 1 ? s : l; L >= s && L <= l; L += Y)
       if (p[L] != null) {
         let we = d[L], oe = F(we);
-        k.push(Y = oe), Z.push(S(p[L]));
+        k.push(G = oe), Z.push(S(p[L]));
       }
     const z = { stroke: e(k, Z, J, Q, D, w), fill: null, clip: null, band: null, gaps: null, flags: _n }, V = z.stroke;
     let [R, ne] = Go(n, r);
     if (h.fill != null || R != 0) {
       let L = z.fill = new Path2D(V), et = h.fillTo(n, r, h.min, h.max, R), we = S(et);
-      Q(L, Y, we), Q(L, te, we);
+      Q(L, G, we), Q(L, te, we);
     }
     if (!h.spanGaps) {
       let L = [];
-      L.push(...Yo(d, p, s, l, K, F, i)), z.gaps = L = h.gaps(n, r, s, l, L), z.clip = Er(L, b.ori, E, H, B, j);
+      L.push(...Yo(d, p, s, l, Y, F, i)), z.gaps = L = h.gaps(n, r, s, l, L), z.clip = Er(L, b.ori, E, H, B, j);
     }
     return ne != 0 && (z.band = ne == 2 ? [
       ti(n, r, s, l, V, -1),
@@ -3474,7 +3480,7 @@ function Ve(e, t, i) {
   const D = r == 2 ? w[1].facets[0].scale : w[0].scale, Q = {
     axes: Ua,
     series: Ha
-  }, K = (e.drawOrder || ["axes", "series"]).map((o) => Q[o]);
+  }, Y = (e.drawOrder || ["axes", "series"]).map((o) => Q[o]);
   function te(o) {
     const a = o.distr == 3 ? (c) => ei(c > 0 ? c : o.clamp(n, c, o.min, o.max, o.key)) : o.distr == 4 ? (c) => so(c, o.asinh) : o.distr == 100 ? (c) => o.fwd(c) : (c) => c;
     return (c) => {
@@ -3482,12 +3488,12 @@ function Ve(e, t, i) {
       return (u - f) / v;
     };
   }
-  function Y(o) {
+  function G(o) {
     let a = S[o];
     if (a == null) {
       let c = (e.scales || jn)[o] || jn;
       if (c.from != null) {
-        Y(c.from);
+        G(c.from);
         let u = Pe({}, S[c.from], c, { key: o });
         u.valToPct = te(u), S[o] = u;
       } else {
@@ -3512,13 +3518,13 @@ function Ve(e, t, i) {
       }
     }
   }
-  Y("x"), Y("y"), r == 1 && w.forEach((o) => {
-    Y(o.scale);
+  G("x"), G("y"), r == 1 && w.forEach((o) => {
+    G(o.scale);
   }), F.forEach((o) => {
-    Y(o.scale);
+    G(o.scale);
   });
   for (let o in e.scales)
-    Y(o);
+    G(o);
   const k = S[D], Z = k.distr;
   let z, V;
   k.ori == 0 ? (at(p, tu), z = s, V = l) : (at(p, iu), z = l, V = s);
@@ -4138,7 +4144,7 @@ function Ve(e, t, i) {
       }
       Fe("setSize"), Xn = !1;
     }
-    Zt > 0 && xi > 0 && (g.clearRect(0, 0, b.width, b.height), Fe("drawClear"), K.forEach((o) => o()), Fe("draw")), _e.show && er && (sr(_e), er = !1), Ge && ki && (Ti(null, !0, !1), ki = !1), X.show && X.live && ft && (qr(), ft = !1), d || (d = !0, n.status = 1, Fe("ready")), Tn = !1, or = !1;
+    Zt > 0 && xi > 0 && (g.clearRect(0, 0, b.width, b.height), Fe("drawClear"), Y.forEach((o) => o()), Fe("draw")), _e.show && er && (sr(_e), er = !1), Ge && ki && (Ti(null, !0, !1), ki = !1), X.show && X.live && ft && (qr(), ft = !1), d || (d = !0, n.status = 1, Fe("ready")), Tn = !1, or = !1;
   }
   n.redraw = (o, a) => {
     Gi = a || !1, o !== !1 ? ai(D, k.min, k.max) : Xi();
@@ -4689,11 +4695,11 @@ let wt = class extends ze {
   }
   render() {
     return !this.hass || !this.roomEntity ? A`<div class="status">No room temperature sensor for this zone.</div>` : A`
-      ${this._loading ? A`<div class="status">Loading 24 h history…</div>` : G}
-      ${this._error ? A`<div class="status">${this._error}</div>` : G}
+      ${this._loading ? A`<div class="status">Loading 24 h history…</div>` : K}
+      ${this._error ? A`<div class="status">${this._error}</div>` : K}
       ${this._empty ? A`<div class="status">
             No history available yet — check back after the first hour of data.
-          </div>` : G}
+          </div>` : K}
       <div class="chart-host"></div>
       <div class="legend">
         <span><span class="swatch" style="background:var(--primary-color)"></span>Room</span>
@@ -4822,7 +4828,7 @@ let Kn = class extends ze {
         .highEntity=${this.entities?.effectiveHigh ?? ""}
         .actionEntity=${this.entities?.currentAction ?? ""}
       ></comfort-band-history-chart>
-      ${G}
+      ${K}
     ` : A`<div class="empty">No room temperature sensor for this zone.</div>`;
   }
 };
@@ -5587,7 +5593,7 @@ let xt = class extends ze {
     }
   }
   render() {
-    if (!this.hass) return G;
+    if (!this.hass) return K;
     if (this._mode === "add" || this._mode === "edit") {
       const e = this._mode === "edit" ? this._editing : {
         at: this._newAt,
@@ -5622,7 +5628,7 @@ let xt = class extends ze {
     `;
   }
   _renderList() {
-    return this._transitions.length === 0 ? G : A`
+    return this._transitions.length === 0 ? K : A`
       <ul class="list">
         ${this._transitions.map((e) => {
       const t = () => this._onEdit(new CustomEvent("transition-edit", { detail: { transition: e } }));
@@ -5777,7 +5783,7 @@ let bi = class extends ze {
     return t ?? this.hass?.states[e]?.state === "on";
   }
   render() {
-    if (!this.hass || !this.entities) return G;
+    if (!this.hass || !this.entities) return K;
     const e = this.entities.useApparentTemperature, t = this.entities.learningEnabled;
     if (e === null || t === null)
       return A`<div class="upgrade-hint">
@@ -5785,20 +5791,20 @@ let bi = class extends ze {
       </div>`;
     const n = (this.entities.roomTemperature ? this.hass.states[this.entities.roomTemperature] : void 0)?.attributes.humidity_sensor;
     return A`
-      ${this._error ? A`<div class="error" role="alert">${this._error}</div>` : G}
-      ${e !== null ? this._renderToggle({
+      ${this._error ? A`<div class="error" role="alert">${this._error}</div>` : K}
+      ${this._renderToggle({
       entityId: e,
       title: "Use apparent temperature",
       desc: A`When on, heating and cooling decisions use the humidity-adjusted "feels like"
-            value instead of the raw sensor. Falls back to the raw value automatically if the
-            humidity sensor is unavailable.`
-    }) : G}
-      ${t !== null ? this._renderToggle({
+        value instead of the raw sensor. Falls back to the raw value automatically if the humidity
+        sensor is unavailable.`
+    })}
+      ${this._renderToggle({
       entityId: t,
       title: "Learning enabled",
-      desc: A`Reserved for upcoming features (suggested-schedule nudges, predictive
-            control). Has no effect today.`
-    }) : G}
+      desc: A`Reserved for upcoming features (suggested-schedule nudges, predictive control).
+        Has no effect today.`
+    })}
       <div class="row">
         <div class="row-label">
           <div class="title">Humidity sensor</div>
@@ -5987,7 +5993,7 @@ let Wt = class extends ze {
     this._activeTab = e;
   }
   render() {
-    if (!this._isOpen) return G;
+    if (!this._isOpen) return K;
     const e = this.zoneName || this.zone || "Comfort Band";
     return A`
       <dialog @close=${this._onClose}>

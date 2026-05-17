@@ -214,4 +214,40 @@ describe('comfort-band-now-tab', () => {
     expect(badge).not.toBeNull();
     expect(badge!.textContent).toContain('Driving decisions');
   });
+
+  it('keeps the badge visible when apparent rounds to the same value as room', async () => {
+    // Mid-humidity case: 1-decimal rounding collapses the delta below the
+    // 0.1 °C `showFeelsLike` threshold, but apparent mode is still in
+    // charge of decisions — the badge must stay so the user sees that.
+    const el = await nowTab(
+      makeHass({
+        'sensor.gym_room_temperature': '21.0',
+        'sensor.gym_apparent_temperature': '21.0',
+        'switch.gym_use_apparent_temperature': 'on',
+      }),
+    );
+    const badge = el.shadowRoot!.querySelector('.feels-like .driving');
+    expect(badge).not.toBeNull();
+    expect(badge!.textContent).toContain('Driving decisions');
+    // No "Feels like X°" text — would just duplicate the room number.
+    expect(el.shadowRoot!.textContent).not.toContain('Feels like');
+  });
+
+  it('warns when apparent mode is on but no humidity reading is available', async () => {
+    // No `sensor.gym_apparent_temperature` state at all — happens when
+    // the humidity sensor is unconfigured or offline. The toggle is on
+    // but decisions silently fall back to raw room temp; we warn so the
+    // user can investigate.
+    const el = await nowTab(
+      makeHass({
+        'sensor.gym_room_temperature': '21.0',
+        'switch.gym_use_apparent_temperature': 'on',
+      }),
+    );
+    const warn = el.shadowRoot!.querySelector('.feels-like .muted-warn');
+    expect(warn).not.toBeNull();
+    expect(warn!.textContent).toContain('no humidity reading');
+    // Don't render a badge in this state — it'd contradict the warning.
+    expect(el.shadowRoot!.querySelector('.feels-like .driving')).toBeNull();
+  });
 });

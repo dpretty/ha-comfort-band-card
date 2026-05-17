@@ -220,19 +220,7 @@ export class ComfortBandNowTab extends LitElement {
             >`
           : nothing}
       </div>
-      ${showFeelsLike
-        ? html`<div class="feels-like">
-            <span>Feels like ${apparent.toFixed(1)}°</span>
-            ${useApparentOn ? html`<span class="driving">Driving decisions</span>` : nothing}
-          </div>`
-        : useApparentOn
-          ? html`<div class="feels-like">
-              <span class="muted-warn">
-                Apparent temperature mode is on but no humidity reading is available — decisions are
-                using the raw room temperature.
-              </span>
-            </div>`
-          : nothing}
+      ${this._renderFeelsLikeRow({ apparent, showFeelsLike, useApparentOn })}
       <div class="gauge-row">
         <band-gauge .low=${effLow} .high=${effHigh} .room=${room} .action=${action}></band-gauge>
       </div>
@@ -267,6 +255,43 @@ export class ComfortBandNowTab extends LitElement {
         </div>
       </section>
     `;
+  }
+
+  private _renderFeelsLikeRow(opts: {
+    apparent: number;
+    showFeelsLike: boolean;
+    useApparentOn: boolean;
+  }) {
+    const { apparent, showFeelsLike, useApparentOn } = opts;
+    // The "Driving decisions" badge is decoupled from `showFeelsLike` so
+    // it stays visible at mid-humidity bands where the 1-decimal rounding
+    // on both sensors collapses the apparent/room delta below the 0.1 °C
+    // threshold. Without this, the user would lose all card-side
+    // feedback that apparent mode is the active decision input.
+    const showBadge = useApparentOn && Number.isFinite(apparent);
+    if (showFeelsLike) {
+      return html`<div class="feels-like">
+        <span>Feels like ${apparent.toFixed(1)}°</span>
+        ${showBadge ? html`<span class="driving">Driving decisions</span>` : nothing}
+      </div>`;
+    }
+    if (showBadge) {
+      // Apparent mode is on but the value matches the room temp this
+      // tick (within rounding). Suppress the redundant "Feels like X°"
+      // text; the badge alone tells the user apparent is still in charge.
+      return html`<div class="feels-like">
+        <span class="driving">Driving decisions</span>
+      </div>`;
+    }
+    if (useApparentOn) {
+      return html`<div class="feels-like">
+        <span class="muted-warn">
+          Apparent temperature mode is on but no humidity reading is available — decisions are
+          using the raw room temperature.
+        </span>
+      </div>`;
+    }
+    return nothing;
   }
 
   private _renderHoursSection(overrideHours: number) {

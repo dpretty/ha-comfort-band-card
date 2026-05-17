@@ -189,25 +189,23 @@ export class ComfortBandSettingsTab extends LitElement {
       : undefined;
     const humiditySensor = roomTempState?.attributes.humidity_sensor as string | null | undefined;
 
+    // `useApparent` and `learning` are narrowed to `string` by the early
+    // return above — render both toggles unconditionally.
     return html`
       ${this._error ? html`<div class="error" role="alert">${this._error}</div>` : nothing}
-      ${useApparent !== null
-        ? this._renderToggle({
-            entityId: useApparent,
-            title: 'Use apparent temperature',
-            desc: html`When on, heating and cooling decisions use the humidity-adjusted "feels like"
-            value instead of the raw sensor. Falls back to the raw value automatically if the
-            humidity sensor is unavailable.`,
-          })
-        : nothing}
-      ${learning !== null
-        ? this._renderToggle({
-            entityId: learning,
-            title: 'Learning enabled',
-            desc: html`Reserved for upcoming features (suggested-schedule nudges, predictive
-            control). Has no effect today.`,
-          })
-        : nothing}
+      ${this._renderToggle({
+        entityId: useApparent,
+        title: 'Use apparent temperature',
+        desc: html`When on, heating and cooling decisions use the humidity-adjusted "feels like"
+        value instead of the raw sensor. Falls back to the raw value automatically if the humidity
+        sensor is unavailable.`,
+      })}
+      ${this._renderToggle({
+        entityId: learning,
+        title: 'Learning enabled',
+        desc: html`Reserved for upcoming features (suggested-schedule nudges, predictive control).
+        Has no effect today.`,
+      })}
       <div class="row">
         <div class="row-label">
           <div class="title">Humidity sensor</div>
