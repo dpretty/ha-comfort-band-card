@@ -8,9 +8,12 @@
  * couldn't deliver because HA's built-in history-graph auto-assigns
  * colours to enum sensors and doesn't expose state-level overrides.
  *
- * Data comes from HA's `history/history_during_period` websocket command.
- * Fetched once on connect; the base class's `_hasFetched` reset on
- * `disconnectedCallback` causes a refetch on tab re-entry.
+ * Data comes from HA's `history/stream` websocket subscription (v0.8.1).
+ * The initial event carries the 24h window; subsequent events stream
+ * incremental state changes as they arrive. `subscribeHistory` merges
+ * deltas into a running snapshot and feeds the same shape `_renderPlot`
+ * already accepted as a one-shot response — so the rendering path is
+ * unchanged, only the data source differs.
  */
 
 import { html, css, unsafeCSS, nothing } from 'lit';
@@ -22,12 +25,12 @@ import type { HomeAssistant } from './types.js';
 import {
   HOURS_TO_SHOW,
   alignSeries,
-  fetchHistory,
   numericSeries,
+  subscribeHistory,
   type HistoryPoint,
   type HistoryResponse,
 } from './history-data.js';
-import { ComfortBandChartBase } from './chart-base.js';
+import { ComfortBandChartBase, SUBSCRIBE_PENDING } from './chart-base.js';
 
 interface ActionInterval {
   start: number; // unix seconds
@@ -68,25 +71,39 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
   ];
 
   protected override updated(changed: PropertyValues<this>): void {
-    if (!this._hasFetched) {
-      this._hasFetched = true;
-      void this._fetch();
+    if (!this._unsubscribe) {
+      void this._subscribe();
       return;
     }
-    // After the initial fetch, refetch only when the entity wiring
-    // actually changes (avoids hammering the API on every `hass` tick).
+    // After the initial subscribe, resubscribe only when the entity
+    // wiring actually changes — every `hass` tick fires `updated()` but
+    // the open subscription already streams live data, so re-subscribing
+    // would just churn the stream.
     if (
       changed.has('roomEntity') ||
       changed.has('lowEntity') ||
       changed.has('highEntity') ||
       changed.has('actionEntity')
     ) {
-      void this._fetch();
+      void this._subscribe();
     }
   }
 
-  private async _fetch(): Promise<void> {
+  private async _subscribe(): Promise<void> {
     if (!this.hass || !this.roomEntity) return;
+
+    // Tear down any existing subscription before opening a new one
+    // (entity-wiring-change path). The base class handles teardown on
+    // disconnect; this covers the resubscribe case.
+    if (this._unsubscribe && this._unsubscribe !== SUBSCRIBE_PENDING) {
+      this._unsubscribe();
+    }
+    // Claim the slot synchronously so a re-entrant `updated()` triggered
+    // by the `_loading = true` state flip below doesn't see `null` and
+    // fire another `_subscribe()` in parallel. Replaced with the real
+    // unsub once the WS subscribe resolves.
+    this._unsubscribe = SUBSCRIBE_PENDING;
+
     const gen = ++this._fetchGen;
     this._loading = true;
     this._error = null;
@@ -97,12 +114,30 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     );
 
     try {
-      const response = await fetchHistory(this.hass, entityIds, HOURS_TO_SHOW);
-      if (gen !== this._fetchGen) return;
-      this._renderPlot(response);
-      this._loading = false;
+      const unsub = await subscribeHistory(this.hass, entityIds, HOURS_TO_SHOW, (response) => {
+        // Stale-generation guard: a later `_subscribe()` may have
+        // started while events from this one are still arriving.
+        if (gen !== this._fetchGen) return;
+        this._renderPlot(response);
+        this._loading = false;
+      });
+      // A newer subscribe may have started while this one was awaiting
+      // the WS round-trip — drop this one's handle in favour of the
+      // already-stored newer one.
+      if (gen !== this._fetchGen) {
+        unsub();
+        return;
+      }
+      this._unsubscribe = unsub;
     } catch (err) {
       if (gen !== this._fetchGen) return;
+      // Subscribe failed. KEEP `_unsubscribe = SUBSCRIBE_PENDING` so
+      // `updated()`'s `!this._unsubscribe` early return doesn't re-fire
+      // `_subscribe()` immediately on the next state-change tick (the
+      // `_error = ...` flip below triggers exactly that). The user has
+      // to change an entity prop (or reconnect the element) to trigger
+      // a retry — both paths in `updated()` handle that without
+      // depending on `_unsubscribe` being null.
       this._error = err instanceof Error ? err.message : 'Failed to load history.';
       this._loading = false;
       this._destroyPlot();

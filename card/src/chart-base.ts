@@ -20,6 +20,7 @@ import { query, state } from 'lit/decorators.js';
 import type uPlot from 'uplot';
 import uplotCss from 'uplot/dist/uPlot.min.css?inline';
 import { tokens } from './styles.js';
+import type { UnsubscribeFunc } from './types.js';
 
 /**
  * Shared styles for both Insights-tab charts. Lit's `static styles` is
@@ -85,6 +86,22 @@ const sharedChartStyles = [
   `,
 ];
 
+/**
+ * Sentinel `_unsubscribe` value claimed synchronously by `_subscribe()`
+ * before its first `await`. A re-entrant `updated()` triggered while
+ * `_subscribe()` is awaiting (typically from the `_loading = true`
+ * `@state` flip the subclass does before the await) sees the slot is
+ * claimed and skips the re-entrant subscribe — preventing parallel
+ * subscriptions and a Lit reactivity loop.
+ *
+ * Called as a no-op `unsubscribe` if disconnect happens during the await:
+ * it satisfies the `UnsubscribeFunc` contract, the in-flight subscribe's
+ * `_fetchGen` stale-guard drops its eventual resolution, and the real
+ * unsub (created by HA) is held by the local `unsub` variable in
+ * `_subscribe()` and called there if needed.
+ */
+export const SUBSCRIBE_PENDING: UnsubscribeFunc = () => {};
+
 export abstract class ComfortBandChartBase extends LitElement {
   public static override styles = sharedChartStyles;
   @state() protected _loading = true;
@@ -95,11 +112,23 @@ export abstract class ComfortBandChartBase extends LitElement {
 
   protected _plot: uPlot | null = null;
   protected _resizeObserver: ResizeObserver | null = null;
-  protected _hasFetched = false;
-  /** Monotonic counter — every `_fetch()` claims the next value, and
-   *  drops its response if a newer fetch has started in the meantime.
-   *  Prevents a stale response from overwriting a more-recent one when
-   *  entity props change mid-flight. */
+  /** Active subscription handle from `subscribeHistory`. `null` when no
+   *  subscription is open (initial state and after disconnect). Subclasses
+   *  open the subscription in their `updated()` and store the handle here;
+   *  the base class tears it down in `disconnectedCallback`. Replaces the
+   *  v0.8.0 `_hasFetched` flag — "are we subscribed?" subsumes "have we
+   *  fetched?" and removes one piece of state.
+   *
+   *  Set synchronously to `SUBSCRIBE_PENDING` before the `await` that
+   *  opens the real subscription, so a re-entrant `updated()` (triggered
+   *  by `_loading = true` flipping inside `_subscribe()`) sees the slot
+   *  is claimed and doesn't fire another `_subscribe()` in parallel.
+   *  Replaced with the real handle once the await resolves. */
+  protected _unsubscribe: UnsubscribeFunc | null = null;
+  /** Monotonic counter — every `_subscribe()` claims the next value, and
+   *  drops events (initial + deltas) tagged with an older generation.
+   *  Prevents a stale event from a torn-down subscription from overwriting
+   *  fresh data from a newer one when entity props change mid-flight. */
   protected _fetchGen = 0;
 
   /** Pixel height of the chart canvas. Subclasses override. */
@@ -108,27 +137,41 @@ export abstract class ComfortBandChartBase extends LitElement {
   public override disconnectedCallback(): void {
     super.disconnectedCallback();
     this._destroyPlot();
-    // Reset the fetch latch so the chart refetches when re-attached
-    // (e.g. user switches away from Insights and back). Without this,
-    // `updated()` skips the fetch on reconnect since none of the
-    // entity props changed, and the host stays blank.
-    this._hasFetched = false;
+    // Close the live history subscription so HA stops streaming events
+    // to a detached element (memory leak + wasted bandwidth). The next
+    // reconnect opens a fresh subscription via `connectedCallback` →
+    // `updated()` → subclass `_subscribe()`.
+    //
+    // SUBSCRIBE_PENDING (sentinel) is a no-op when called; matching its
+    // semantics — it claimed the slot but hasn't completed the WS round-
+    // trip yet. Resetting to null lets the reconnect path fire a fresh
+    // _subscribe(). Bumping `_fetchGen` here is what tears down the
+    // leaked-otherwise in-flight subscribe: when it eventually resolves
+    // with a real `unsub`, its closure-captured `gen` no longer matches
+    // `_fetchGen`, so it hits the gen-mismatch branch and calls `unsub()`
+    // itself. Without the bump, the resolution path stores `unsub` on
+    // a dead element and HA keeps streaming forever.
+    if (this._unsubscribe) {
+      this._unsubscribe();
+      this._unsubscribe = null;
+    }
+    this._fetchGen++;
   }
 
   public override connectedCallback(): void {
     super.connectedCallback();
     // Lit auto-schedules an update on the FIRST connect, but not on
     // subsequent reconnects (per Lit's lifecycle docs). Request one
-    // explicitly so `updated()` runs and the cleared `_hasFetched`
-    // flag triggers a refetch.
+    // explicitly so `updated()` runs — the cleared `_unsubscribe` field
+    // triggers a fresh subscribe.
     //
-    // Note: this produces two render passes on reconnect — one from
-    // this requestUpdate, then a second after `_fetch()` flips
-    // `_loading = true`. Both are synchronous and pre-frame, so
-    // there's no visible flicker; we accept the cost to keep the
-    // base class lifecycle-only (calling `_fetch()` directly here
-    // would require lifting `_fetch` onto the base, which would
-    // re-couple subclass config back into the abstraction).
+    // Two render passes on reconnect — one from this requestUpdate,
+    // one after `_subscribe()` flips `_loading = true`. Both are
+    // synchronous and pre-frame, so there's no visible flicker. We
+    // accept the cost to keep the base class lifecycle-only (calling
+    // `_subscribe()` directly here would require lifting it onto the
+    // base, which would re-couple subclass config back into the
+    // abstraction).
     if (this.hasUpdated) {
       this.requestUpdate();
     }

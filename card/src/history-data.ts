@@ -7,7 +7,7 @@
  */
 
 import type { AlignedData } from 'uplot';
-import type { HomeAssistant } from './types.js';
+import type { HomeAssistant, UnsubscribeFunc } from './types.js';
 
 /** Default window for both charts. Lives here so the two stay in sync. */
 export const HOURS_TO_SHOW = 24;
@@ -25,6 +25,10 @@ export type HistoryResponse = Record<string, HistoryPoint[]>;
  * Fetch HA's `history/history_during_period` for the given entities over
  * the last `hours` window. Caller is responsible for filtering empty
  * entity IDs out of the list before calling.
+ *
+ * Kept around as the deterministic one-shot variant for tests and any
+ * future callsite that genuinely wants a snapshot rather than a live
+ * stream. Chart code uses `subscribeHistory` instead (see below).
  */
 export async function fetchHistory(
   hass: HomeAssistant,
@@ -41,6 +45,89 @@ export async function fetchHistory(
     minimal_response: false,
     no_attributes: true,
   });
+}
+
+/**
+ * Live equivalent of `fetchHistory`. Subscribes to HA's `history/stream`
+ * WS command and invokes `callback` with the *merged* response on every
+ * incremental update — the initial event ships the full `hours` window,
+ * subsequent events ship only the state changes since the last event
+ * (per HA Core's `homeassistant/components/history/websocket_api.py`).
+ *
+ * We merge deltas into a running snapshot per entity and pass that to
+ * the callback, so the chart's render code doesn't need to know about
+ * the stream protocol. HA's cursor guarantees zero overlap between the
+ * historical dump and the live tail (no de-dup needed); we just append.
+ * Old points are evicted on each merge so the window stays bounded.
+ *
+ * Returns the unsubscribe function the caller stores for teardown.
+ */
+export async function subscribeHistory(
+  hass: HomeAssistant,
+  entityIds: string[],
+  hours: number,
+  callback: (response: HistoryResponse) => void,
+): Promise<UnsubscribeFunc> {
+  // `start` is the fixed lower bound HA uses to construct the initial
+  // historical dump — set once at subscription time, not refreshed as the
+  // subscription runs. The eviction `cutoff` below is recomputed on every
+  // event so the merged snapshot tracks a rolling window. HA won't
+  // backfill events older than `start` even if `cutoff` moves; the
+  // initial dump covers it and deltas extend the right edge.
+  const start = new Date(Date.now() - hours * 60 * 60 * 1000);
+  const merged: HistoryResponse = {};
+
+  return hass.connection.subscribeMessage<HistoryStreamEvent>(
+    (event) => {
+      const states = event.states ?? {};
+      if (Object.keys(states).length === 0) {
+        // Empty batch — HA sends one when no tracked entity changed in
+        // the coalescing window. Nothing to merge. We invoke the
+        // callback only if we already have *some* accumulated data;
+        // notifying with a still-empty `merged` (which only happens if
+        // a coalescing heartbeat slips in before the initial historical
+        // dump — protocol-unlikely but not impossible) would drive the
+        // chart into its "No history available" empty state before the
+        // real data arrives. Skipping the callback here leaves the
+        // chart in its loading state until the first non-empty event.
+        if (Object.keys(merged).length > 0) {
+          callback(merged);
+        }
+        return;
+      }
+      const cutoff = (Date.now() - hours * 60 * 60 * 1000) / 1000;
+      for (const [entityId, points] of Object.entries(states)) {
+        const existing = merged[entityId] ?? [];
+        // Append the delta. Filter by cutoff so the dataset stays
+        // bounded as the subscription runs for hours.
+        merged[entityId] = [...existing, ...points].filter((p) => p.lu >= cutoff);
+      }
+      callback(merged);
+    },
+    {
+      type: 'history/stream',
+      start_time: start.toISOString(),
+      entity_ids: entityIds,
+      minimal_response: false,
+      no_attributes: true,
+      // Default is `true`. We want every state change (action transitions,
+      // each effective_low recalc) — the chart's whole purpose is showing
+      // those events. The volume is manageable: a typical zone fires a
+      // few state changes per minute.
+      significant_changes_only: false,
+    },
+  );
+}
+
+/**
+ * On-the-wire shape of a `history/stream` event. The initial event
+ * additionally carries `start_time` / `end_time` (Unix epoch floats)
+ * but the chart code only reads `states`, so they're optional here.
+ */
+interface HistoryStreamEvent {
+  states?: HistoryResponse;
+  start_time?: number;
+  end_time?: number;
 }
 
 /**

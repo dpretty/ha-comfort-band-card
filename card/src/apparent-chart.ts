@@ -25,11 +25,11 @@ import type { HomeAssistant } from './types.js';
 import {
   HOURS_TO_SHOW,
   alignSeries,
-  fetchHistory,
   numericSeries,
+  subscribeHistory,
   type HistoryResponse,
 } from './history-data.js';
-import { ComfortBandChartBase } from './chart-base.js';
+import { ComfortBandChartBase, SUBSCRIBE_PENDING } from './chart-base.js';
 
 /** Pixel height of the chart canvas. Single source of truth: read by
  *  the uPlot options, the ResizeObserver setSize call, AND the CSS
@@ -74,9 +74,8 @@ export class ComfortBandApparentChart extends ComfortBandChartBase {
   ];
 
   protected override updated(changed: PropertyValues<this>): void {
-    if (!this._hasFetched) {
-      this._hasFetched = true;
-      void this._fetch();
+    if (!this._unsubscribe) {
+      void this._subscribe();
       return;
     }
     if (
@@ -84,31 +83,54 @@ export class ComfortBandApparentChart extends ComfortBandChartBase {
       changed.has('apparentEntity') ||
       changed.has('humidityEntity')
     ) {
-      void this._fetch();
+      void this._subscribe();
     }
   }
 
-  private async _fetch(): Promise<void> {
+  private async _subscribe(): Promise<void> {
     // Strict guard: all three entities are required for the comparison
     // chart to make sense. Insights tab gates rendering on the same
     // condition (see `_renderApparentSection`), so an empty value here
     // means the parent disagreed with itself — fail closed rather than
-    // issuing a partial WS query with empty strings.
+    // opening a subscription with empty entity IDs.
     if (!this.hass || !this.roomEntity || !this.apparentEntity || !this.humidityEntity) return;
+
+    if (this._unsubscribe && this._unsubscribe !== SUBSCRIBE_PENDING) {
+      this._unsubscribe();
+    }
+    // Claim the slot synchronously so a re-entrant `updated()` triggered
+    // by `_loading = true` below doesn't see `null` and fire another
+    // `_subscribe()` in parallel. See chart-base.ts SUBSCRIBE_PENDING.
+    this._unsubscribe = SUBSCRIBE_PENDING;
+
     const gen = ++this._fetchGen;
     this._loading = true;
     this._error = null;
     this._empty = false;
 
+    // All three entities are required; the guard above ensures none is
+    // empty, so no `.filter(Boolean)` (unlike `history-chart.ts` where
+    // `lowEntity` / `highEntity` / `actionEntity` are optional).
     const entityIds = [this.roomEntity, this.apparentEntity, this.humidityEntity];
 
     try {
-      const response = await fetchHistory(this.hass, entityIds, HOURS_TO_SHOW);
-      if (gen !== this._fetchGen) return;
-      this._renderPlot(response);
-      this._loading = false;
+      const unsub = await subscribeHistory(this.hass, entityIds, HOURS_TO_SHOW, (response) => {
+        if (gen !== this._fetchGen) return;
+        this._renderPlot(response);
+        this._loading = false;
+      });
+      if (gen !== this._fetchGen) {
+        unsub();
+        return;
+      }
+      this._unsubscribe = unsub;
     } catch (err) {
       if (gen !== this._fetchGen) return;
+      // Keep `_unsubscribe = SUBSCRIBE_PENDING` so the `_error = ...`
+      // state flip below doesn't trigger an infinite retry via
+      // `updated()`'s `!this._unsubscribe` early return. Retry is
+      // user-initiated (entity prop change or reconnect). See
+      // history-chart.ts for the symmetric fix.
       this._error = err instanceof Error ? err.message : 'Failed to load history.';
       this._loading = false;
       this._destroyPlot();

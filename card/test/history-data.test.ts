@@ -1,7 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
-import { HOURS_TO_SHOW, alignSeries, fetchHistory, numericSeries } from '../src/history-data.js';
-import type { HomeAssistant } from '../src/types.js';
-import { stubConnection } from './_fixture.js';
+import {
+  HOURS_TO_SHOW,
+  alignSeries,
+  fetchHistory,
+  numericSeries,
+  subscribeHistory,
+} from '../src/history-data.js';
+import type { HomeAssistant, HassConnection } from '../src/types.js';
+import { captureSubscription, stubConnection } from './_fixture.js';
 
 describe('history-data: numericSeries', () => {
   it('returns an empty array for undefined input', () => {
@@ -131,5 +137,151 @@ describe('history-data: fetchHistory', () => {
 
   it('exports a sensible HOURS_TO_SHOW default', () => {
     expect(HOURS_TO_SHOW).toBe(24);
+  });
+});
+
+describe('history-data: subscribeHistory', () => {
+  function makeHass(connection: HassConnection): HomeAssistant {
+    return {
+      states: {},
+      devices: {},
+      entities: {},
+      connection,
+      callService: vi.fn(),
+      callWS: vi.fn(),
+    };
+  }
+
+  it('issues a history/stream subscription with the requested entities + window', async () => {
+    const sub = captureSubscription();
+    await subscribeHistory(makeHass(sub.connection), ['sensor.a', 'sensor.b'], 12, () => {});
+    expect(sub.callCount).toBe(1);
+    const msg = sub.subscriptions[0].message;
+    expect(msg.type).toBe('history/stream');
+    expect(msg.entity_ids).toEqual(['sensor.a', 'sensor.b']);
+    expect(msg.no_attributes).toBe(true);
+    expect(msg.minimal_response).toBe(false);
+    expect(msg.significant_changes_only).toBe(false);
+    // start_time is an ISO string of (now - hours).
+    const start = Date.parse(msg.start_time as string);
+    expect(Date.now() - start).toBeGreaterThanOrEqual(12 * 60 * 60 * 1000 - 1000);
+    expect(Date.now() - start).toBeLessThanOrEqual(12 * 60 * 60 * 1000 + 1000);
+  });
+
+  it('passes through the initial event to the callback as the merged snapshot', async () => {
+    const sub = captureSubscription();
+    const seen: Array<Record<string, Array<{ s: string; lu: number }>>> = [];
+    await subscribeHistory(makeHass(sub.connection), ['sensor.a'], 24, (resp) => {
+      seen.push(structuredClone(resp));
+    });
+    const now = Math.floor(Date.now() / 1000);
+    sub.emit({
+      states: {
+        'sensor.a': [
+          { s: '21.0', lu: now - 7200 },
+          { s: '21.5', lu: now - 3600 },
+        ],
+      },
+    });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]['sensor.a']).toEqual([
+      { s: '21.0', lu: now - 7200 },
+      { s: '21.5', lu: now - 3600 },
+    ]);
+  });
+
+  it('appends incremental deltas to the running snapshot', async () => {
+    // HA's stream protocol: the first event ships the historical
+    // window, subsequent events ship only the new state changes.
+    // subscribeHistory merges deltas into a running response so the
+    // callback sees a full snapshot every time.
+    const sub = captureSubscription();
+    const seen: Array<Record<string, Array<{ s: string; lu: number }>>> = [];
+    await subscribeHistory(makeHass(sub.connection), ['sensor.a'], 24, (resp) => {
+      seen.push(structuredClone(resp));
+    });
+    const now = Math.floor(Date.now() / 1000);
+    sub.emit({ states: { 'sensor.a': [{ s: '21.0', lu: now - 3600 }] } });
+    sub.emit({ states: { 'sensor.a': [{ s: '21.5', lu: now - 60 }] } });
+    expect(seen).toHaveLength(2);
+    expect(seen[1]['sensor.a']).toEqual([
+      { s: '21.0', lu: now - 3600 },
+      { s: '21.5', lu: now - 60 },
+    ]);
+  });
+
+  it('evicts points older than the window cutoff on merge', async () => {
+    // As the subscription runs for hours, points that fall out of the
+    // configured window must be dropped — otherwise the merged
+    // snapshot grows unboundedly. Setting hours=1, then injecting
+    // points from 2h ago, asserts the cutoff fires.
+    const sub = captureSubscription();
+    const seen: Array<Record<string, Array<{ s: string; lu: number }>>> = [];
+    await subscribeHistory(makeHass(sub.connection), ['sensor.a'], 1, (resp) => {
+      seen.push(structuredClone(resp));
+    });
+    const now = Math.floor(Date.now() / 1000);
+    sub.emit({
+      states: {
+        'sensor.a': [
+          { s: '20.0', lu: now - 7200 }, // 2h ago — older than 1h cutoff
+          { s: '21.0', lu: now - 1800 }, // 30min ago — kept
+        ],
+      },
+    });
+    expect(seen[0]['sensor.a']).toEqual([{ s: '21.0', lu: now - 1800 }]);
+  });
+
+  it('notifies the callback on an empty batch after data has accumulated', async () => {
+    // HA sometimes emits an empty `states: {}` batch when the
+    // coalescing window produced no significant changes. Once the
+    // running snapshot has some data, an empty batch still fires the
+    // callback (with the snapshot unchanged) so consumers don't go
+    // stale waiting for a delta — `merged` is still the latest truth.
+    const sub = captureSubscription();
+    let calls = 0;
+    await subscribeHistory(makeHass(sub.connection), ['sensor.a'], 24, () => {
+      calls++;
+    });
+    const now = Math.floor(Date.now() / 1000);
+    sub.emit({ states: { 'sensor.a': [{ s: '21.0', lu: now - 60 }] } });
+    expect(calls).toBe(1);
+    sub.emit({ states: {} });
+    expect(calls).toBe(2);
+  });
+
+  it('does NOT notify the callback on an empty batch before any data', async () => {
+    // Defends against the (protocol-unlikely but possible) case where
+    // a coalescing heartbeat lands before the initial historical dump.
+    // Firing the callback with an empty `merged` would drive consumer
+    // charts into their "No history available" empty state before the
+    // real data arrives. Skipping the callback keeps the chart in its
+    // loading state until something useful shows up.
+    const sub = captureSubscription();
+    let calls = 0;
+    await subscribeHistory(makeHass(sub.connection), ['sensor.a'], 24, () => {
+      calls++;
+    });
+    sub.emit({ states: {} });
+    expect(calls).toBe(0);
+    // Real data event next: callback now fires.
+    const now = Math.floor(Date.now() / 1000);
+    sub.emit({ states: { 'sensor.a': [{ s: '21.0', lu: now - 60 }] } });
+    expect(calls).toBe(1);
+  });
+
+  it('returns the unsubscribe handle that closes the subscription', async () => {
+    const sub = captureSubscription();
+    const unsub = await subscribeHistory(makeHass(sub.connection), ['sensor.a'], 24, () => {});
+    expect(sub.subscriptions[0].unsubscribe).not.toHaveBeenCalled();
+    unsub();
+    expect(sub.subscriptions[0].unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it('compiles against the stubConnection no-op helper', async () => {
+    // Sanity check: existing tests that use stubConnection() can still
+    // call subscribeHistory without setup-time errors.
+    const unsub = await subscribeHistory(makeHass(stubConnection()), ['sensor.a'], 24, () => {});
+    expect(typeof unsub).toBe('function');
   });
 });
