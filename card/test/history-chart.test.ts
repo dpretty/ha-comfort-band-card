@@ -118,9 +118,12 @@ describe('comfort-band-history-chart', () => {
     // The fix bumps `_fetchGen` on disconnect; when the pending
     // subscribe resolves, its gen check fails and it tears itself down
     // via the stale-gen branch (`unsub()` called).
-    const sub = captureSubscription();
-    // Defer the subscribeMessage resolution so the disconnect happens
-    // BEFORE the WS round-trip completes.
+    //
+    // We can't use `captureSubscription()` here because it resolves
+    // synchronously — we need to control when the subscribe promise
+    // resolves so we can interleave a disconnect between subscribe-start
+    // and subscribe-resolve. Hand-rolled mock with an externally
+    // resolvable `subscribePromise` does the job.
     let resolveSub: (unsub: () => void) => void = () => {};
     const subscribePromise = new Promise<() => void>((resolve) => {
       resolveSub = resolve;
