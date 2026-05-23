@@ -232,11 +232,12 @@ describe('history-data: subscribeHistory', () => {
     expect(seen[0]['sensor.a']).toEqual([{ s: '21.0', lu: now - 1800 }]);
   });
 
-  it('notifies the callback even when a delta carries no state changes', async () => {
+  it('notifies the callback on an empty batch after data has accumulated', async () => {
     // HA sometimes emits an empty `states: {}` batch when the
-    // coalescing window produced no significant changes. The callback
-    // should still be invoked (with the running snapshot unchanged) so
-    // it can clear a loading state if desired.
+    // coalescing window produced no significant changes. Once the
+    // running snapshot has some data, an empty batch still fires the
+    // callback (with the snapshot unchanged) so consumers don't go
+    // stale waiting for a delta — `merged` is still the latest truth.
     const sub = captureSubscription();
     let calls = 0;
     await subscribeHistory(makeHass(sub.connection), ['sensor.a'], 24, () => {
@@ -247,6 +248,26 @@ describe('history-data: subscribeHistory', () => {
     expect(calls).toBe(1);
     sub.emit({ states: {} });
     expect(calls).toBe(2);
+  });
+
+  it('does NOT notify the callback on an empty batch before any data', async () => {
+    // Defends against the (protocol-unlikely but possible) case where
+    // a coalescing heartbeat lands before the initial historical dump.
+    // Firing the callback with an empty `merged` would drive consumer
+    // charts into their "No history available" empty state before the
+    // real data arrives. Skipping the callback keeps the chart in its
+    // loading state until something useful shows up.
+    const sub = captureSubscription();
+    let calls = 0;
+    await subscribeHistory(makeHass(sub.connection), ['sensor.a'], 24, () => {
+      calls++;
+    });
+    sub.emit({ states: {} });
+    expect(calls).toBe(0);
+    // Real data event next: callback now fires.
+    const now = Math.floor(Date.now() / 1000);
+    sub.emit({ states: { 'sensor.a': [{ s: '21.0', lu: now - 60 }] } });
+    expect(calls).toBe(1);
   });
 
   it('returns the unsubscribe handle that closes the subscription', async () => {

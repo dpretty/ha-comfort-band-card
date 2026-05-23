@@ -145,12 +145,17 @@ export abstract class ComfortBandChartBase extends LitElement {
     // SUBSCRIBE_PENDING (sentinel) is a no-op when called; matching its
     // semantics — it claimed the slot but hasn't completed the WS round-
     // trip yet. Resetting to null lets the reconnect path fire a fresh
-    // _subscribe(). The in-flight subscribe still has its stale-gen
-    // guard via `_fetchGen`, so its resolution is dropped.
+    // _subscribe(). Bumping `_fetchGen` here is what tears down the
+    // leaked-otherwise in-flight subscribe: when it eventually resolves
+    // with a real `unsub`, its closure-captured `gen` no longer matches
+    // `_fetchGen`, so it hits the gen-mismatch branch and calls `unsub()`
+    // itself. Without the bump, the resolution path stores `unsub` on
+    // a dead element and HA keeps streaming forever.
     if (this._unsubscribe) {
       this._unsubscribe();
       this._unsubscribe = null;
     }
+    this._fetchGen++;
   }
 
   public override connectedCallback(): void {

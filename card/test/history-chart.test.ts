@@ -106,6 +106,45 @@ describe('comfort-band-history-chart', () => {
     expect(sub.subscriptions[0].unsubscribe).toHaveBeenCalledOnce();
   });
 
+  it('tears down a subscription that resolves after the element is disconnected', async () => {
+    // Disconnect-during-pending-subscribe: the WS round-trip is still in
+    // flight when the element is removed from the DOM. Without the
+    // `_fetchGen` bump in `disconnectedCallback`, the eventual
+    // `subscribeMessage` resolution would see `gen === _fetchGen`,
+    // store the real `unsub` on a dead element, and leak the HA
+    // subscription forever (HA keeps streaming, the merge closure
+    // accumulates data, `unsub()` never called).
+    //
+    // The fix bumps `_fetchGen` on disconnect; when the pending
+    // subscribe resolves, its gen check fails and it tears itself down
+    // via the stale-gen branch (`unsub()` called).
+    const sub = captureSubscription();
+    // Defer the subscribeMessage resolution so the disconnect happens
+    // BEFORE the WS round-trip completes.
+    let resolveSub: (unsub: () => void) => void = () => {};
+    const subscribePromise = new Promise<() => void>((resolve) => {
+      resolveSub = resolve;
+    });
+    const slowConnection: HassConnection = {
+      subscribeMessage: vi.fn(async (_cb, _msg) => subscribePromise),
+    };
+    const el = await chart({ hass: makeHass(slowConnection), ...FULL_PROPS });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(slowConnection.subscribeMessage).toHaveBeenCalledOnce();
+
+    // Disconnect while the subscribe is still pending.
+    el.remove();
+
+    // Now resolve the pending subscribe with the real unsubscribe handle.
+    // The chart's gen-mismatch branch must call `realUnsub()` itself —
+    // proves the leak fix works.
+    const realUnsub = vi.fn();
+    resolveSub(realUnsub);
+    // Microtask drain for the await resumption.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(realUnsub).toHaveBeenCalledOnce();
+  });
+
   it('resubscribes when an entity prop changes', async () => {
     // Live-stream pattern: changing entities means the existing
     // subscription's entity list is stale. Tear it down and open a

@@ -68,6 +68,12 @@ export async function subscribeHistory(
   hours: number,
   callback: (response: HistoryResponse) => void,
 ): Promise<UnsubscribeFunc> {
+  // `start` is the fixed lower bound HA uses to construct the initial
+  // historical dump — set once at subscription time, not refreshed as the
+  // subscription runs. The eviction `cutoff` below is recomputed on every
+  // event so the merged snapshot tracks a rolling window. HA won't
+  // backfill events older than `start` even if `cutoff` moves; the
+  // initial dump covers it and deltas extend the right edge.
   const start = new Date(Date.now() - hours * 60 * 60 * 1000);
   const merged: HistoryResponse = {};
 
@@ -76,9 +82,17 @@ export async function subscribeHistory(
       const states = event.states ?? {};
       if (Object.keys(states).length === 0) {
         // Empty batch — HA sends one when no tracked entity changed in
-        // the coalescing window. Nothing to merge, but still notify the
-        // callback so it can clear a loading state if desired.
-        callback(merged);
+        // the coalescing window. Nothing to merge. We invoke the
+        // callback only if we already have *some* accumulated data;
+        // notifying with a still-empty `merged` (which only happens if
+        // a coalescing heartbeat slips in before the initial historical
+        // dump — protocol-unlikely but not impossible) would drive the
+        // chart into its "No history available" empty state before the
+        // real data arrives. Skipping the callback here leaves the
+        // chart in its loading state until the first non-empty event.
+        if (Object.keys(merged).length > 0) {
+          callback(merged);
+        }
         return;
       }
       const cutoff = (Date.now() - hours * 60 * 60 * 1000) / 1000;

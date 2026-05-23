@@ -108,6 +108,9 @@ export class ComfortBandApparentChart extends ComfortBandChartBase {
     this._error = null;
     this._empty = false;
 
+    // All three entities are required; the guard above ensures none is
+    // empty, so no `.filter(Boolean)` (unlike `history-chart.ts` where
+    // `lowEntity` / `highEntity` / `actionEntity` are optional).
     const entityIds = [this.roomEntity, this.apparentEntity, this.humidityEntity];
 
     try {

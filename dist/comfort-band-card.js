@@ -4546,7 +4546,7 @@ async function La(t, e, i, n) {
     (l) => {
       const u = l.states ?? {};
       if (Object.keys(u).length === 0) {
-        n(s);
+        Object.keys(s).length > 0 && n(s);
         return;
       }
       const d = (Date.now() - i * 60 * 60 * 1e3) / 1e3;
@@ -4663,7 +4663,7 @@ class _i extends zt {
     this.styles = cd;
   }
   disconnectedCallback() {
-    super.disconnectedCallback(), this._destroyPlot(), this._unsubscribe && (this._unsubscribe(), this._unsubscribe = null);
+    super.disconnectedCallback(), this._destroyPlot(), this._unsubscribe && (this._unsubscribe(), this._unsubscribe = null), this._fetchGen++;
   }
   connectedCallback() {
     super.connectedCallback(), this.hasUpdated && this.requestUpdate();
