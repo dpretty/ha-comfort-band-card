@@ -1,19 +1,30 @@
 /**
- * `<comfort-band-history-chart>` — custom uPlot chart for the Insights tab.
+ * `<comfort-band-history-chart>` — the single Insights-tab chart.
  *
- * Replaces the v0.1 `history-graph` wrapper. Plots room temperature, the
- * effective low band, and the effective high band on shared axes; renders
- * `current_action` as translucent shaded bars BEHIND the lines (heating =
- * red, cooling = blue, idle = blank). That's the visual the v0.1 chart
- * couldn't deliver because HA's built-in history-graph auto-assigns
- * colours to enum sensors and doesn't expose state-level overrides.
+ * Always renders: room temperature, the effective low + high band edges
+ * (as stepped lines — the schedule sets discrete values, so straight
+ * line interpolation between sample points would lie about what control
+ * is actually doing), and `current_action` as translucent shaded bars
+ * behind everything (heating = red, cooling = blue, idle = blank).
+ *
+ * Conditionally renders (when the entity props are set):
+ *   - apparent temperature (dashed, in the room colour — visual cue
+ *     that it's a derived version of room rather than an independent
+ *     reading)
+ *   - relative humidity (thin solid on a right-side `y2` axis pinned
+ *     to 0-100 %, so a working 35-45 % band doesn't auto-zoom into
+ *     looking like wild swings)
+ *
+ * v0.8.2 merges the v0.8.0-era `<comfort-band-apparent-chart>` into
+ * this one component — the side-by-side stacking made it hard to see
+ * whether apparent crossed a band while raw stayed inside. One chart with all
+ * lines overlaid is the only way to read that off the screen.
  *
  * Data comes from HA's `history/stream` websocket subscription (v0.8.1).
  * The initial event carries the 24h window; subsequent events stream
  * incremental state changes as they arrive. `subscribeHistory` merges
- * deltas into a running snapshot and feeds the same shape `_renderPlot`
- * already accepted as a one-shot response — so the rendering path is
- * unchanged, only the data source differs.
+ * deltas into a running snapshot; the renderer is unchanged across the
+ * initial dump and the live tail.
  */
 
 import { html, css, unsafeCSS, nothing } from 'lit';
@@ -43,6 +54,20 @@ interface ActionInterval {
  *  `.chart-host` rule (interpolated via `unsafeCSS` below). */
 const CHART_HEIGHT = 260;
 
+/** Stepped-path renderer for the discrete band series. Hoisted to
+ *  module scope so the same closure is reused across every re-render
+ *  instead of being constructed inside each `_buildOpts` call.
+ *  `align: 1` (right-aligned) means the new value takes effect AT the
+ *  sample's timestamp, matching HA's "this is the value at and after
+ *  `last_updated`" semantics. The optional-chaining guard handles
+ *  older uPlot bundles that pre-date `uPlot.paths.stepped` (v1.6+). */
+const STEPPED_PATHS = uPlot.paths.stepped?.({ align: 1 });
+
+/** Count of always-present series: room, low, high. Named so
+ *  `expectedSeriesCount` reads intentionally; if a future series is
+ *  promoted to always-present, the count update is one place. */
+const BASE_SERIES_COUNT = 3;
+
 @customElement('comfort-band-history-chart')
 export class ComfortBandHistoryChart extends ComfortBandChartBase {
   @property({ attribute: false }) public hass?: HomeAssistant;
@@ -50,6 +75,13 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
   @property({ type: String }) public lowEntity = '';
   @property({ type: String }) public highEntity = '';
   @property({ type: String }) public actionEntity = '';
+  /** Optional. When set, an apparent-temperature series is overlaid on
+   *  the room axis (dashed, room colour). Empty disables the overlay. */
+  @property({ type: String }) public apparentEntity = '';
+  /** Optional. When set, a humidity series is overlaid on a right-side
+   *  y2 axis (0-100 %, grey). Empty disables the overlay AND skips the
+   *  y2 axis entirely so the chart stays single-axis. */
+  @property({ type: String }) public humidityEntity = '';
 
   protected override get chartHeight(): number {
     return CHART_HEIGHT;
@@ -59,6 +91,16 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
    *  hook can read them every frame without rebinding). */
   private _intervals: ActionInterval[] = [];
 
+  /** Overlay-presence getters used by `_renderPlot`, `_buildOpts`, and
+   *  `render`. Single source of truth so the three branches can't
+   *  silently diverge (e.g. if `apparentEntity` is renamed). */
+  private get _hasApparent(): boolean {
+    return Boolean(this.apparentEntity);
+  }
+  private get _hasHumidity(): boolean {
+    return Boolean(this.humidityEntity);
+  }
+
   // Chart-specific rules only. Shared rules (status / legend / chart-host
   // base / uPlot theme overrides) come from `ComfortBandChartBase.styles`.
   public static override styles = [
@@ -66,6 +108,19 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     css`
       .chart-host {
         height: ${unsafeCSS(CHART_HEIGHT)}px;
+      }
+      /* "Dashed" swatch mirrors the dashed apparent stroke in the chart.
+         Picks up the legend item's inline color (set to roomColor) via
+         currentColor — no per-instance CSS variable plumbing needed. */
+      .legend .swatch.dashed {
+        background-image: repeating-linear-gradient(
+          90deg,
+          currentColor 0,
+          currentColor 4px,
+          transparent 4px,
+          transparent 7px
+        );
+        background-color: transparent;
       }
     `,
   ];
@@ -83,7 +138,9 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       changed.has('roomEntity') ||
       changed.has('lowEntity') ||
       changed.has('highEntity') ||
-      changed.has('actionEntity')
+      changed.has('actionEntity') ||
+      changed.has('apparentEntity') ||
+      changed.has('humidityEntity')
     ) {
       void this._subscribe();
     }
@@ -104,14 +161,34 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     // unsub once the WS subscribe resolves.
     this._unsubscribe = SUBSCRIBE_PENDING;
 
+    // If the plot was built for a different series count (e.g. the
+    // parent toggled `apparentEntity` or `humidityEntity` while the
+    // chart was mounted — happens on zone switch), the existing uPlot
+    // instance can't accept the new data: `setData` requires the
+    // data-array count to match the configured series count exactly,
+    // or it silently mis-aligns / throws. Tear down so the next
+    // `_renderPlot` takes the construction branch and rebuilds the
+    // config from scratch. `+1` accounts for uPlot's mandatory x-axis
+    // pseudo-series at index 0.
+    const expectedSeriesCount =
+      BASE_SERIES_COUNT + (this._hasApparent ? 1 : 0) + (this._hasHumidity ? 1 : 0);
+    if (this._plot && this._plot.series.length !== 1 + expectedSeriesCount) {
+      this._destroyPlot();
+    }
+
     const gen = ++this._fetchGen;
     this._loading = true;
     this._error = null;
     this._empty = false;
 
-    const entityIds = [this.roomEntity, this.lowEntity, this.highEntity, this.actionEntity].filter(
-      (e): e is string => Boolean(e),
-    );
+    const entityIds = [
+      this.roomEntity,
+      this.lowEntity,
+      this.highEntity,
+      this.actionEntity,
+      this.apparentEntity,
+      this.humidityEntity,
+    ].filter((e): e is string => Boolean(e));
 
     try {
       const unsub = await subscribeHistory(this.hass, entityIds, HOURS_TO_SHOW, (response) => {
@@ -168,16 +245,42 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     const room = numericSeries(response[this.roomEntity]);
     const low = numericSeries(response[this.lowEntity]);
     const high = numericSeries(response[this.highEntity]);
+    // Apparent + humidity only when the parent passed the entity prop —
+    // otherwise we return `[]` for the data and skip the series + axis
+    // in `_buildOpts`, so the chart degrades to the v0.8.1 four-series
+    // shape for zones without a humidity sensor.
+    const apparent = this._hasApparent ? numericSeries(response[this.apparentEntity]) : [];
+    const humidity = this._hasHumidity ? numericSeries(response[this.humidityEntity]) : [];
     this._intervals = this._actionIntervals(response[this.actionEntity], nowSec);
 
-    if (room.length === 0 && low.length === 0 && high.length === 0) {
+    // Empty-state: nothing to plot AND no action intervals to shade.
+    // Action shading is informative on its own (heating/cooling events
+    // are visible even if temperature history is missing), so a zone
+    // with action data but empty series shouldn't drop into the empty
+    // state. Pre-v0.8.2 the conjunction omitted action; the merge is
+    // the natural moment to fix that.
+    if (
+      room.length === 0 &&
+      low.length === 0 &&
+      high.length === 0 &&
+      apparent.length === 0 &&
+      humidity.length === 0 &&
+      this._intervals.length === 0
+    ) {
       this._destroyPlot();
       this._empty = true;
       return;
     }
     this._empty = false;
 
-    const data = alignSeries([room, low, high], nowSec);
+    // Series order MUST match `_buildOpts` series array order: room, low,
+    // high, apparent?, humidity?. Conditional pushes keep uPlot's series
+    // count and data length in sync — passing 5 data slots when only 3
+    // series are declared would mis-align labels and scales.
+    const seriesData: Array<Array<[number, number]>> = [room, low, high];
+    if (this._hasApparent) seriesData.push(apparent);
+    if (this._hasHumidity) seriesData.push(humidity);
+    const data = alignSeries(seriesData, nowSec);
     const opts: UPlotOptions = this._buildOpts(this._host.clientWidth || 400);
 
     if (this._plot) {
@@ -192,10 +295,100 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
   }
 
   private _buildOpts(width: number): UPlotOptions {
-    const styles = getComputedStyle(this);
-    const heatColor = styles.getPropertyValue('--cb-action-heating').trim() || '#d9603f';
-    const coolColor = styles.getPropertyValue('--cb-action-cooling').trim() || '#2f7fcc';
-    const roomColor = styles.getPropertyValue('--primary-color').trim() || '#03a9f4';
+    const heatColor = this._resolveColor('--cb-action-heating', '#d9603f');
+    const coolColor = this._resolveColor('--cb-action-cooling', '#2f7fcc');
+    const roomColor = this._resolveColor('--primary-color', '#03a9f4');
+    // Axes are canvas-drawn so the `var(--*)` strings can't be passed
+    // through to uPlot directly — v0.8.1 did, and rendered axis text in
+    // uPlot's default black (invisible on HA's dark theme). Resolve
+    // once here and reuse for the axis stroke AND the humidity series
+    // stroke (both intentionally share the secondary-text token).
+    const secondaryText = this._resolveColor('--secondary-text-color', '#727272');
+    const gridStroke = this._resolveColor('--divider-color', '#e0e0e0');
+
+    // Build the series array conditionally so the slot count stays in
+    // lockstep with `_renderPlot`'s data array. Apparent uses the room
+    // colour (dashed) to signal "this is a derived version of room" —
+    // the v0.8.0 apparent-chart used heat-red here, which clashed with
+    // the low-band's heat-red dash once both lived in the same plot.
+    const series: UPlotOptions['series'] = [
+      {},
+      {
+        label: 'Room',
+        stroke: roomColor,
+        width: 2,
+        spanGaps: true,
+      },
+      {
+        label: 'Low',
+        stroke: heatColor,
+        width: 1.5,
+        dash: [6, 3],
+        spanGaps: true,
+        paths: STEPPED_PATHS,
+      },
+      {
+        label: 'High',
+        stroke: coolColor,
+        width: 1.5,
+        dash: [6, 3],
+        spanGaps: true,
+        paths: STEPPED_PATHS,
+      },
+    ];
+    if (this._hasApparent) {
+      series.push({
+        label: 'Apparent',
+        stroke: roomColor,
+        width: 1.5,
+        dash: [4, 3],
+        spanGaps: true,
+      });
+    }
+    if (this._hasHumidity) {
+      series.push({
+        label: 'Humidity',
+        scale: 'y2',
+        stroke: secondaryText,
+        width: 1.2,
+        spanGaps: true,
+      });
+    }
+
+    // Axes mirror the series shape. The right-side humidity axis (y2)
+    // only appears when humidity is wired — empty axes are visual
+    // noise. `grid: { show: false }` on y2 avoids two overlapping grid
+    // sets when both axes have a grid.
+    const axes: NonNullable<UPlotOptions['axes']> = [
+      {
+        stroke: secondaryText,
+        grid: { stroke: gridStroke },
+      },
+      {
+        stroke: secondaryText,
+        grid: { stroke: gridStroke },
+        size: 38,
+      },
+    ];
+    if (this._hasHumidity) {
+      axes.push({
+        scale: 'y2',
+        side: 1,
+        size: 38,
+        stroke: secondaryText,
+        grid: { show: false },
+        values: (_u: uPlot, vs: number[]) => vs.map((v) => `${v.toFixed(0)}%`),
+      });
+    }
+
+    // Pin humidity to 0-100 so a 35-45 % working band doesn't auto-zoom
+    // into looking like wild swings; users want the absolute scale here.
+    const scales: NonNullable<UPlotOptions['scales']> = {
+      x: { time: true },
+    };
+    if (this._hasHumidity) {
+      scales.y2 = { auto: false, range: [0, 100] };
+    }
 
     return {
       width,
@@ -203,43 +396,9 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       pxAlign: 1,
       cursor: { drag: { x: false, y: false }, points: { size: 6 } },
       legend: { show: false },
-      scales: {
-        x: { time: true },
-      },
-      axes: [
-        {
-          stroke: 'var(--secondary-text-color)',
-          grid: { stroke: 'var(--divider-color)' },
-        },
-        {
-          stroke: 'var(--secondary-text-color)',
-          grid: { stroke: 'var(--divider-color)' },
-          size: 38,
-        },
-      ],
-      series: [
-        {},
-        {
-          label: 'Room',
-          stroke: roomColor,
-          width: 2,
-          spanGaps: true,
-        },
-        {
-          label: 'Low',
-          stroke: heatColor,
-          width: 1.5,
-          dash: [6, 3],
-          spanGaps: true,
-        },
-        {
-          label: 'High',
-          stroke: coolColor,
-          width: 1.5,
-          dash: [6, 3],
-          spanGaps: true,
-        },
-      ],
+      scales,
+      axes,
+      series,
       hooks: {
         draw: [
           (u: uPlot): void => {
@@ -271,8 +430,17 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     }
     // Collapse the canvas host while a status message is showing so the
     // user sees the message at the top of the panel instead of a blank
-    // 260 px gap above it.
+    // CHART_HEIGHT gap above it.
     const idle = this._loading || this._error !== null || this._empty;
+    // Reflect what's actually plotted so screen-reader users get the
+    // same disclosure sighted users get from the legend.
+    const ariaLabel = [
+      'Room temperature',
+      this._hasApparent ? ', apparent temperature' : '',
+      ', effective band edges',
+      this._hasHumidity ? ', humidity' : '',
+      ' and heating/cooling shading — last 24 hours',
+    ].join('');
     return html`
       ${this._loading ? html`<div class="status">Loading 24 h history…</div>` : nothing}
       ${this._error ? html`<div class="status">${this._error}</div>` : nothing}
@@ -281,15 +449,17 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
             No history available yet — check back after the first hour of data.
           </div>`
         : nothing}
-      <div
-        class="chart-host ${idle ? 'idle' : ''}"
-        role="img"
-        aria-label="Room temperature with effective band edges and heating/cooling shading — last 24 hours"
-      ></div>
+      <div class="chart-host ${idle ? 'idle' : ''}" role="img" aria-label=${ariaLabel}></div>
       ${idle
         ? nothing
         : html`<div class="legend">
             <span><span class="swatch" style="background:var(--primary-color)"></span>Room</span>
+            ${this._hasApparent
+              ? html`<span
+                  ><span class="swatch dashed" style="color:var(--primary-color)"></span
+                  >Apparent</span
+                >`
+              : nothing}
             <span
               ><span class="swatch" style="background:var(--cb-action-heating)"></span>Low
               band</span
@@ -298,6 +468,12 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
               ><span class="swatch" style="background:var(--cb-action-cooling)"></span>High
               band</span
             >
+            ${this._hasHumidity
+              ? html`<span
+                  ><span class="swatch" style="background:var(--secondary-text-color)"></span
+                  >Humidity (%, right axis)</span
+                >`
+              : nothing}
             <span
               ><span class="swatch" style="background:var(--cb-action-heating);opacity:0.18"></span>
               Heating</span

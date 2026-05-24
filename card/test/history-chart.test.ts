@@ -28,6 +28,13 @@ const FULL_PROPS = {
   actionEntity: 'sensor.gym_current_action',
 };
 
+/** v0.8.2: superset including the new apparent + humidity overlay entities. */
+const FULL_PROPS_WITH_OVERLAYS = {
+  ...FULL_PROPS,
+  apparentEntity: 'sensor.gym_apparent_temperature',
+  humidityEntity: 'sensor.gym_humidity',
+};
+
 describe('comfort-band-history-chart', () => {
   it('renders an empty message when roomEntity is missing', async () => {
     const sub = captureSubscription();
@@ -80,6 +87,39 @@ describe('comfort-band-history-chart', () => {
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain('No history available');
   });
+
+  it('shows the empty state when overlays are wired but every series is empty', async () => {
+    // v0.8.2 added apparent + humidity to the empty-check conjunction
+    // (`room && low && high && apparent && humidity` all length 0). A
+    // regression would let the chart escape the empty branch when only
+    // the overlay series are empty and try to render against a
+    // zero-row alignSeries result.
+    const sub = captureSubscription();
+    const el = await chart({ hass: makeHass(sub.connection), ...FULL_PROPS_WITH_OVERLAYS });
+    await new Promise((r) => setTimeout(r, 0));
+    sub.emit({
+      states: {
+        'sensor.gym_room_temperature': [],
+        'sensor.gym_effective_low': [],
+        'sensor.gym_effective_high': [],
+        'sensor.gym_apparent_temperature': [],
+        'sensor.gym_humidity': [],
+      },
+    });
+    await el.updateComplete;
+    expect(el.shadowRoot!.textContent).toContain('No history available');
+  });
+
+  // Not tested at the DOM level: the symmetric "action-only data
+  // keeps chart out of empty state" case (the F12 fix that added
+  // `this._intervals.length === 0` to the empty-check conjunction).
+  // Any test that asserts the chart escapes the empty branch by
+  // construction triggers a `new uPlot(...)` and the same teardown
+  // race we work around in the legend tests above — and here the
+  // workaround (force `_loading = false` directly) doesn't help
+  // because the construction happens inside `_renderPlot` regardless
+  // of `_loading`. The fix is a single AND-clause addition pinned by
+  // its inline rationale.
 
   it('shows an error status when subscribeMessage rejects', async () => {
     // Custom connection that rejects on subscribe (e.g. recorder
@@ -217,6 +257,128 @@ describe('comfort-band-history-chart', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(sub.callCount).toBe(1);
     expect(sub.subscriptions[0].unsubscribe).not.toHaveBeenCalled();
+  });
+
+  // ----- v0.8.2: apparent + humidity overlays -----
+
+  it('extends the subscription with apparent + humidity entities when those props are set', async () => {
+    // The merged chart subscribes to up to 6 entities. The order
+    // matches the props declaration so the subscription request is
+    // deterministic for HACS users debugging WS frames.
+    const sub = captureSubscription();
+    await chart({ hass: makeHass(sub.connection), ...FULL_PROPS_WITH_OVERLAYS });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sub.subscriptions[0].message.entity_ids).toEqual([
+      'sensor.gym_room_temperature',
+      'sensor.gym_effective_low',
+      'sensor.gym_effective_high',
+      'sensor.gym_current_action',
+      'sensor.gym_apparent_temperature',
+      'sensor.gym_humidity',
+    ]);
+  });
+
+  it('omits apparent + humidity from the subscription when those props are empty', async () => {
+    // The v0.8.1 four-entity shape still works for zones without an
+    // apparent or humidity sensor — defends the degraded path.
+    const sub = captureSubscription();
+    await chart({ hass: makeHass(sub.connection), ...FULL_PROPS });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sub.subscriptions[0].message.entity_ids).toEqual([
+      'sensor.gym_room_temperature',
+      'sensor.gym_effective_low',
+      'sensor.gym_effective_high',
+      'sensor.gym_current_action',
+    ]);
+  });
+
+  it('resubscribes when apparentEntity changes', async () => {
+    // Apparent is an optional overlay; switching zones (e.g. Insights
+    // tab swapping the device) must tear down + reopen so the chart
+    // doesn't keep streaming the old zone's apparent series.
+    const sub = captureSubscription();
+    const el = await chart({ hass: makeHass(sub.connection), ...FULL_PROPS_WITH_OVERLAYS });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sub.callCount).toBe(1);
+
+    el.apparentEntity = 'sensor.living_apparent_temperature';
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sub.callCount).toBe(2);
+    expect(sub.subscriptions[1].message.entity_ids).toContain('sensor.living_apparent_temperature');
+  });
+
+  it('resubscribes when humidityEntity changes', async () => {
+    // Symmetric with the apparent test above. Also covers the case
+    // where the user wires a humidity sensor on a previously dry zone:
+    // the chart picks up the new entity on the next refresh.
+    const sub = captureSubscription();
+    const el = await chart({ hass: makeHass(sub.connection), ...FULL_PROPS_WITH_OVERLAYS });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sub.callCount).toBe(1);
+
+    el.humidityEntity = 'sensor.gym_humidity_v2';
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sub.callCount).toBe(2);
+    expect(sub.subscriptions[1].message.entity_ids).toContain('sensor.gym_humidity_v2');
+  });
+
+  it('renders Apparent + Humidity legend entries only when those props are set', async () => {
+    // Legend reflects what the chart is actually drawing. Empty
+    // overlays must NOT advertise themselves; otherwise a swatch
+    // without a series is confusing.
+    //
+    // We force the chart out of its loading state directly instead of
+    // emitting subscription data — emitting would trigger `_renderPlot`
+    // and a uPlot construction, whose deferred initial commit can fire
+    // AFTER teardown nulls the canvas (uPlot has no public API to
+    // synchronously flush pending draws). The legend itself depends
+    // only on the `_loading` / `_empty` / `_error` `@state` fields,
+    // not on uPlot — so this gets us identical Lit render coverage
+    // without the asynchronous-cleanup race.
+    const sub = captureSubscription();
+    const el = await chart({ hass: makeHass(sub.connection), ...FULL_PROPS_WITH_OVERLAYS });
+    await new Promise((r) => setTimeout(r, 0));
+    (el as unknown as { _loading: boolean })._loading = false;
+    await el.updateComplete;
+    const legendText = el.shadowRoot!.querySelector('.legend')!.textContent ?? '';
+    expect(legendText).toContain('Apparent');
+    expect(legendText).toContain('Humidity');
+  });
+
+  it('omits Apparent + Humidity legend entries when those props are empty', async () => {
+    const sub = captureSubscription();
+    const el = await chart({ hass: makeHass(sub.connection), ...FULL_PROPS });
+    await new Promise((r) => setTimeout(r, 0));
+    (el as unknown as { _loading: boolean })._loading = false;
+    await el.updateComplete;
+    const legendText = el.shadowRoot!.querySelector('.legend')!.textContent ?? '';
+    expect(legendText).not.toContain('Apparent');
+    expect(legendText).not.toContain('Humidity');
+  });
+
+  it('reflects the active overlays in the aria-label', async () => {
+    // Screen-reader users get the same disclosure sighted users get
+    // from the legend — when apparent and humidity are absent, the
+    // label says so by omission; when present, the label lists them.
+    const sub = captureSubscription();
+    const elWith = await chart({ hass: makeHass(sub.connection), ...FULL_PROPS_WITH_OVERLAYS });
+    await new Promise((r) => setTimeout(r, 0));
+    const labelWith = elWith.shadowRoot!.querySelector('.chart-host')!.getAttribute('aria-label');
+    expect(labelWith).toContain('apparent temperature');
+    expect(labelWith).toContain('humidity');
+
+    const elWithout = await chart({
+      hass: makeHass(captureSubscription().connection),
+      ...FULL_PROPS,
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    const labelWithout = elWithout
+      .shadowRoot!.querySelector('.chart-host')!
+      .getAttribute('aria-label');
+    expect(labelWithout).not.toContain('apparent temperature');
+    expect(labelWithout).not.toContain('humidity');
   });
 
   // Smoke check: stubConnection still satisfies HomeAssistant type for

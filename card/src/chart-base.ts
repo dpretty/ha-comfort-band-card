@@ -1,18 +1,14 @@
 /**
- * Base class for the Insights tab's two uPlot charts
- * (`<comfort-band-history-chart>`, `<comfort-band-apparent-chart>`).
- *
- * Holds the lifecycle state and the two byte-identical methods that
- * both charts need (`_observeResize`, `_destroyPlot`), plus the
- * stale-fetch guard counter and the disconnect cleanup. Visual config
- * (`_buildOpts`, `_renderPlot`, `_fetch`, `render`) stays on each
- * subclass because the band chart and the apparent chart have genuinely
- * different axes, series, hooks, and data-fetch entity sets.
- *
- * Deliberately narrow: no abstract template methods, no contracts on
- * the subclass beyond "you own a uPlot instance pointed at a
- * `.chart-host` element." This is closer to a "mixin holding shared
- * fields" than to a polymorphic base class.
+ * Base class for the Insights tab's uPlot chart
+ * (`<comfort-band-history-chart>`). v0.8.2 collapsed the two-chart
+ * design into one. The base now has a single concrete consumer but
+ * stays in its own file so the non-trivial lifecycle plumbing
+ * (`_observeResize`, `_destroyPlot`, the `_fetchGen` stale-fetch
+ * guard, the `_unsubscribe` handle + `SUBSCRIBE_PENDING` sentinel,
+ * the `_resolveColor` canvas-axis helper) reads independently from
+ * the chart's visual config. Deliberately narrow: no abstract
+ * template methods, no contracts beyond "you own a uPlot instance
+ * pointed at a `.chart-host` element."
  */
 
 import { LitElement, css, unsafeCSS } from 'lit';
@@ -23,7 +19,7 @@ import { tokens } from './styles.js';
 import type { UnsubscribeFunc } from './types.js';
 
 /**
- * Shared styles for both Insights-tab charts. Lit's `static styles` is
+ * Shared styles for the Insights-tab chart. Lit's `static styles` is
  * inheritable: declaring this on the base class makes it available to
  * every subclass without each one having to re-import uPlot's CSS,
  * re-declare the `.status` / `.legend` / `.chart-host` rules, or repeat
@@ -187,6 +183,20 @@ export abstract class ComfortBandChartBase extends LitElement {
       }
     });
     this._resizeObserver.observe(this._host);
+  }
+
+  /**
+   * Resolve a CSS custom property to a literal colour string for handing to
+   * uPlot. uPlot draws axes via the canvas API, which (unlike SVG/DOM) does
+   * NOT parse `var(--*)` references — passing `'var(--secondary-text-color)'`
+   * straight to uPlot leaves canvas text/lines at uPlot's default (~black),
+   * invisible on HA's dark theme. Resolving once per `_buildOpts()` call lets
+   * a theme change propagate automatically on the next history-stream event;
+   * `getComputedStyle` is microseconds and stream events are infrequent, so
+   * memoising would add staleness without buying us anything.
+   */
+  protected _resolveColor(varName: string, fallback: string): string {
+    return getComputedStyle(this).getPropertyValue(varName).trim() || fallback;
   }
 
   protected _destroyPlot(): void {

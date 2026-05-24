@@ -1,14 +1,18 @@
 /**
  * `<comfort-band-insights-tab>` — Insights tab content.
  *
- * Renders two stacked charts:
- *   - `<comfort-band-history-chart>` — room temperature, effective band
- *     edges, and heating/cooling shading. Always rendered when a room
- *     temperature sensor exists.
- *   - `<comfort-band-apparent-chart>` — room vs apparent temperature
- *     with humidity overlay. Rendered only when the zone has a humidity
- *     sensor configured (otherwise apparent equals room by design and
- *     the comparison is uninformative).
+ * Renders the unified `<comfort-band-history-chart>`: room temperature,
+ * effective low/high band edges (stepped), heating/cooling shading,
+ * plus an optional apparent-temperature overlay AND optional humidity
+ * overlay on a right-side y2 axis. v0.8.2 folded the separate
+ * `<comfort-band-apparent-chart>` into the unified chart — stacking
+ * them made it hard to read whether apparent crossed a band while raw
+ * stayed inside.
+ *
+ * Pedagogical hint banners still show beneath the chart when apparent
+ * (pre-v0.4 backend) or humidity (sensor not configured) are missing —
+ * these point users to the action that unlocks the overlay, and would
+ * just be lost if the chart silently skipped the series.
  *
  * The humidity sensor entity_id isn't a first-class `ZoneEntities`
  * field — the backend exposes it as a `humidity_sensor` attribute on
@@ -16,10 +20,9 @@
  * Settings tab uses.
  */
 
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import '../history-chart.js';
-import '../apparent-chart.js';
 import { readHumiditySensor, type ZoneEntities } from '../helpers.js';
 import type { HomeAssistant } from '../types.js';
 import { tokens } from '../styles.js';
@@ -73,6 +76,16 @@ export class ComfortBandInsightsTab extends LitElement {
     const apparent = this.entities?.apparentTemperature;
     const humidity = readHumiditySensor(this.hass, room);
 
+    // Chart always renders (we have a room sensor). Apparent + humidity
+    // are wired in only when BOTH are available — humidity alone
+    // (without apparent) would render a bare grey trace on a 0-100 %
+    // axis with no temperature context, contradicting the
+    // pedagogical hint banner below ("upgrade to overlay apparent").
+    // Pre-v0.4 backend: no apparent → no humidity, only base chart.
+    // Apparent present but humidity sensor unconfigured: apparent
+    // overlay only, no humidity. Both present: both overlays.
+    const apparentEntity = apparent ?? '';
+    const humidityEntity = apparent && humidity ? humidity : '';
     return html`
       <comfort-band-history-chart
         .hass=${this.hass}
@@ -80,40 +93,40 @@ export class ComfortBandInsightsTab extends LitElement {
         .lowEntity=${this.entities?.effectiveLow ?? ''}
         .highEntity=${this.entities?.effectiveHigh ?? ''}
         .actionEntity=${this.entities?.currentAction ?? ''}
+        .apparentEntity=${apparentEntity}
+        .humidityEntity=${humidityEntity}
       ></comfort-band-history-chart>
-      ${this._renderApparentSection(room, apparent, humidity)}
+      ${this._renderOverlayHint(apparent, humidity)}
     `;
   }
 
-  /** Three states, in priority order:
-   *  1. apparent entity missing — pre-v0.4 backend, can't render the chart at all
-   *     and pointing at Settings would just chain to another upgrade hint
-   *  2. humidity sensor unconfigured — the integration supports it, user just
-   *     needs to attach one via the OptionsFlow surfaced in the Settings tab
-   *  3. both present — render the chart */
-  private _renderApparentSection(
-    room: string,
+  /** Hint banner shown when one of the optional overlays can't render.
+   *  Covers both the apparent-missing and humidity-missing cases (was
+   *  `_renderApparentSection` pre-v0.8.2, which chose between rendering
+   *  the standalone apparent chart OR a hint; the v0.8.2 merge removed
+   *  the chart branch and renamed accordingly). Priority order: apparent
+   *  missing first (pre-v0.4 backend — pointing at Settings would chain
+   *  to a second upgrade hint), then humidity (configurable via Settings
+   *  → OptionsFlow). Both present → no hint. */
+  private _renderOverlayHint(
     apparent: string | null | undefined,
     humidity: string | null,
-  ) {
+  ): TemplateResult | typeof nothing {
     if (!apparent) {
       return html`<div class="hint">
-        Upgrade the <code>comfort_band</code> integration to v0.4.0 or later to see how apparent
-        temperature diverges from the raw reading.
+        Upgrade the <code>comfort_band</code> integration to v0.4.0 or later to overlay apparent
+        temperature on the chart.
       </div>`;
     }
     if (!humidity) {
+      // Apparent IS already on the chart at this point (the gate
+      // above passed) — the hint adds humidity to the picture, not
+      // both at once.
       return html`<div class="hint">
-        Configure a humidity sensor in the Settings tab to see how apparent temperature diverges
-        from the raw reading.
+        Configure a humidity sensor in the Settings tab to also add humidity to the chart.
       </div>`;
     }
-    return html`<comfort-band-apparent-chart
-      .hass=${this.hass}
-      .roomEntity=${room}
-      .apparentEntity=${apparent}
-      .humidityEntity=${humidity}
-    ></comfort-band-apparent-chart>`;
+    return nothing;
   }
 }
 

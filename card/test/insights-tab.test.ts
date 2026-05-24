@@ -102,9 +102,13 @@ describe('comfort-band-insights-tab', () => {
     expect(chart.actionEntity).toBe('');
   });
 
-  // ----- v0.8: Room vs Apparent + Humidity chart gating -----
+  // ----- v0.8.2: Apparent + Humidity merged into the single history-chart -----
 
-  it('mounts the apparent-chart when humidity_sensor attribute + apparent entity are present', async () => {
+  it('wires apparent + humidity entities onto the history-chart when both are present', async () => {
+    // v0.8.2 folded the standalone apparent-chart into the main chart;
+    // the Insights tab now passes apparent + humidity entities as
+    // optional props on `<comfort-band-history-chart>` instead of
+    // mounting a separate component.
     const hass = makeHass({
       'sensor.gym_room_temperature': {
         state: '21.0',
@@ -115,22 +119,21 @@ describe('comfort-band-insights-tab', () => {
       apparentTemperature: 'sensor.gym_apparent_temperature',
     });
     const el = await tab({ hass, entities });
-    const apparent = el.shadowRoot!.querySelector('comfort-band-apparent-chart') as HTMLElement & {
-      hass?: HomeAssistant;
-      roomEntity: string;
+    const chart = el.shadowRoot!.querySelector('comfort-band-history-chart') as HTMLElement & {
       apparentEntity: string;
       humidityEntity: string;
     };
-    expect(apparent).not.toBeNull();
-    expect(apparent.hass).toBe(hass);
-    expect(apparent.roomEntity).toBe('sensor.gym_room_temperature');
-    expect(apparent.apparentEntity).toBe('sensor.gym_apparent_temperature');
-    expect(apparent.humidityEntity).toBe('sensor.gym_humidity');
-    // No hint when the chart is rendered.
+    expect(chart).not.toBeNull();
+    expect(chart.apparentEntity).toBe('sensor.gym_apparent_temperature');
+    expect(chart.humidityEntity).toBe('sensor.gym_humidity');
+    // No hint when both overlays are wired.
     expect(el.shadowRoot!.querySelector('.hint')).toBeNull();
   });
 
-  it('renders the configure-humidity hint when apparent exists but no humidity sensor', async () => {
+  it('renders the configure-humidity hint and passes empty humidityEntity when no humidity sensor', async () => {
+    // Chart still renders (room + bands + apparent overlay), but the
+    // humidity overlay is skipped because `humidityEntity=''`. Hint
+    // banner sits below, pointing at the Settings tab to configure one.
     const hass = makeHass({
       'sensor.gym_room_temperature': {
         state: '21.0',
@@ -141,7 +144,13 @@ describe('comfort-band-insights-tab', () => {
       apparentTemperature: 'sensor.gym_apparent_temperature',
     });
     const el = await tab({ hass, entities });
-    expect(el.shadowRoot!.querySelector('comfort-band-apparent-chart')).toBeNull();
+    const chart = el.shadowRoot!.querySelector('comfort-band-history-chart') as HTMLElement & {
+      apparentEntity: string;
+      humidityEntity: string;
+    };
+    expect(chart).not.toBeNull();
+    expect(chart.apparentEntity).toBe('sensor.gym_apparent_temperature');
+    expect(chart.humidityEntity).toBe('');
     const hint = el.shadowRoot!.querySelector('.hint');
     expect(hint).not.toBeNull();
     expect(hint!.textContent).toContain('Settings tab');
@@ -149,9 +158,11 @@ describe('comfort-band-insights-tab', () => {
     expect(hint!.textContent).not.toContain('v0.4.0');
   });
 
-  it('renders the upgrade hint (not Settings copy) when apparent entity is missing', async () => {
+  it('renders the upgrade hint and passes empty apparentEntity when apparent entity is missing', async () => {
     // Pre-v0.4 backend: pointing the user at Settings would just chain
-    // them to another upgrade message. Direct upgrade copy instead.
+    // them to another upgrade message. Direct upgrade copy instead. The
+    // chart still renders the band/room/action triplet — the apparent
+    // overlay is just absent.
     const hass = makeHass({
       'sensor.gym_room_temperature': {
         state: '21.0',
@@ -159,7 +170,19 @@ describe('comfort-band-insights-tab', () => {
       },
     });
     const el = await tab({ hass, entities: makeEntities() });
-    expect(el.shadowRoot!.querySelector('comfort-band-apparent-chart')).toBeNull();
+    const chart = el.shadowRoot!.querySelector('comfort-band-history-chart') as HTMLElement & {
+      apparentEntity: string;
+      humidityEntity: string;
+    };
+    expect(chart).not.toBeNull();
+    expect(chart.apparentEntity).toBe('');
+    // Humidity sensor IS configured but the tab gates `humidityEntity`
+    // on apparent also being present — a bare humidity trace on a
+    // 0-100 % y2 axis with no temperature context to correlate it
+    // against would render alongside the "upgrade integration" hint
+    // saying "overlay apparent temperature", which is contradictory.
+    // Both overlays are wired only when both data sources exist.
+    expect(chart.humidityEntity).toBe('');
     const hint = el.shadowRoot!.querySelector('.hint');
     expect(hint).not.toBeNull();
     expect(hint!.textContent).toContain('v0.4.0');

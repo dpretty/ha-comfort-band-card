@@ -1,9 +1,10 @@
 /**
  * Shared history-fetch + series-shaping utilities for the Insights tab
- * charts. Pure functions, framework-free — `history-chart.ts` and
- * `apparent-chart.ts` both consume these. Extracted so the two charts
- * can stay focused on their own visual configs instead of duplicating
- * ~70 lines of HA WebSocket plumbing and sparse-series forward-fill.
+ * chart. Pure functions, framework-free — `history-chart.ts` consumes
+ * these. Extracted as a standalone module so the WS plumbing and the
+ * sparse-series forward-fill stay testable independent of any
+ * particular chart's visual config, and so a future second uPlot chart
+ * can reuse them without inheriting `chart-base.ts`'s lifecycle.
  */
 
 import type { AlignedData } from 'uplot';
