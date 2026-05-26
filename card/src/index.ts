@@ -30,7 +30,7 @@ declare global {
 // `define` would import `package.json` into the bundle for one string,
 // which isn't worth the build-config delta.
 console.info(
-  '%c COMFORT-BAND-CARD %c v0.8.2 ',
+  '%c COMFORT-BAND-CARD %c v0.8.3 ',
   'color:white;background:#2196F3;padding:2px 4px;border-radius:3px',
   'color:#000;background:#fff;padding:2px 4px;border-radius:3px',
 );

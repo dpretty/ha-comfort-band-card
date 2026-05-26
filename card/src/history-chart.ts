@@ -28,8 +28,8 @@
  */
 
 import { html, css, unsafeCSS, nothing } from 'lit';
-import type { PropertyValues } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import type { PropertyValues, TemplateResult } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
 import uPlot from 'uplot';
 import type { Options as UPlotOptions } from 'uplot';
 import type { HomeAssistant } from './types.js';
@@ -101,6 +101,19 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     return Boolean(this.humidityEntity);
   }
 
+  /** Labels (e.g. "Room", "Apparent") the user has clicked to hide in
+   *  the legend. v0.8.3 added per-series toggles so a busy chart can
+   *  be focused on a subset of lines without losing the rest of the
+   *  context (band edges + action shading stay visible by default).
+   *
+   *  In-session only — re-mounting the chart (zone switch, dialog
+   *  close-and-reopen, HA restart) returns all series to visible.
+   *  Persistence is a v0.8.x+ follow-up if it proves useful.
+   *
+   *  Lit dirty-checks by reference, so toggling reassigns to a fresh
+   *  Set rather than mutating in place. */
+  @state() private _hiddenLabels = new Set<string>();
+
   // Chart-specific rules only. Shared rules (status / legend / chart-host
   // base / uPlot theme overrides) come from `ComfortBandChartBase.styles`.
   public static override styles = [
@@ -121,6 +134,27 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
           transparent 7px
         );
         background-color: transparent;
+      }
+      /* v0.8.3: clickable legend toggles. Pointer cursor signals
+         interactivity; no underline on hover (the legend isn't a
+         link). Hidden state dims the whole item and strikes the
+         label so it's obvious which series the user has muted. */
+      .legend .toggle {
+        cursor: pointer;
+        user-select: none;
+        transition: opacity 120ms ease;
+      }
+      .legend .toggle:hover {
+        opacity: 0.85;
+      }
+      .legend .toggle.hidden {
+        opacity: 0.4;
+        text-decoration: line-through;
+      }
+      .legend .toggle:focus-visible {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 2px;
+        border-radius: 2px;
       }
     `,
   ];
@@ -221,6 +255,71 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     }
   }
 
+  /** Map a legend label to its uPlot series index. Returns -1 when the
+   *  label isn't currently in the chart (e.g. "Apparent" with no
+   *  apparent entity wired). Indices must agree with the series order
+   *  in `_buildOpts` AND the data order in `_renderPlot`'s
+   *  `seriesData` — a refactor adding a new series must update all
+   *  three locations. uPlot's mandatory x-axis pseudo-series sits at
+   *  index 0, hence the off-by-one for Room.
+   */
+  private _seriesIndexForLabel(label: string): number {
+    switch (label) {
+      case 'Room':
+        return 1;
+      case 'Low band':
+        return 2;
+      case 'High band':
+        return 3;
+      case 'Apparent':
+        return this._hasApparent ? 4 : -1;
+      case 'Humidity':
+        if (!this._hasHumidity) return -1;
+        return this._hasApparent ? 5 : 4;
+      default:
+        return -1;
+    }
+  }
+
+  /** Click handler for legend toggles. Flips the label's hidden state,
+   *  pokes uPlot directly via `setSeries` so the change is immediate
+   *  (no waiting for the next refresh), and Lit re-renders the legend
+   *  to reflect the new state.
+   *
+   *  The `setSeries` call is a no-op when the chart hasn't constructed
+   *  uPlot yet (loading / empty state) — the next `_buildOpts` call
+   *  will honour the hidden set via the `show:` field on each toggleable
+   *  series, so the state stays consistent across plot re-creations.
+   */
+  private _toggleLabel(label: string): void {
+    const idx = this._seriesIndexForLabel(label);
+    if (idx < 0) return;
+    const next = new Set(this._hiddenLabels);
+    const wasHidden = next.has(label);
+    if (wasHidden) {
+      next.delete(label);
+    } else {
+      next.add(label);
+    }
+    this._hiddenLabels = next;
+    if (this._plot) {
+      // `show: wasHidden` is the post-toggle state: if it WAS hidden,
+      // un-hide; if it was visible, hide. The variable name reads
+      // backwards at a glance — keep the inversion in mind when
+      // skimming this line.
+      this._plot.setSeries(idx, { show: wasHidden });
+    }
+  }
+
+  /** Keyboard equivalent of click — Enter or Space activates the toggle.
+   *  Matches WAI-ARIA "button" pattern for keyboard accessibility. */
+  private _onLabelKeyDown(event: KeyboardEvent, label: string): void {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this._toggleLabel(label);
+    }
+  }
+
   /** Convert the action history into [{start, end, action}] intervals,
    *  filtering out idle/unknown so we only paint heating/cooling. */
   private _actionIntervals(points: HistoryPoint[] | undefined, nowSec: number): ActionInterval[] {
@@ -311,6 +410,13 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     // colour (dashed) to signal "this is a derived version of room" —
     // the v0.8.0 apparent-chart used heat-red here, which clashed with
     // the low-band's heat-red dash once both lived in the same plot.
+    // `show` reflects the legend toggles tracked in `_hiddenLabels`
+    // (v0.8.3+). The runtime click handler also pokes uPlot via
+    // setSeries for immediate effect; this initialisation matters when
+    // the plot is (re-)created — e.g. zone switch, theme change forcing
+    // a destroy + rebuild — so the new instance starts in the right
+    // visibility state. The label strings here must agree with the
+    // ones in `_seriesIndexForLabel` and `_renderLegend`.
     const series: UPlotOptions['series'] = [
       {},
       {
@@ -318,22 +424,25 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
         stroke: roomColor,
         width: 2,
         spanGaps: true,
+        show: !this._hiddenLabels.has('Room'),
       },
       {
-        label: 'Low',
+        label: 'Low band',
         stroke: heatColor,
         width: 1.5,
         dash: [6, 3],
         spanGaps: true,
         paths: STEPPED_PATHS,
+        show: !this._hiddenLabels.has('Low band'),
       },
       {
-        label: 'High',
+        label: 'High band',
         stroke: coolColor,
         width: 1.5,
         dash: [6, 3],
         spanGaps: true,
         paths: STEPPED_PATHS,
+        show: !this._hiddenLabels.has('High band'),
       },
     ];
     if (this._hasApparent) {
@@ -343,6 +452,7 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
         width: 1.5,
         dash: [4, 3],
         spanGaps: true,
+        show: !this._hiddenLabels.has('Apparent'),
       });
     }
     if (this._hasHumidity) {
@@ -352,6 +462,7 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
         stroke: secondaryText,
         width: 1.2,
         spanGaps: true,
+        show: !this._hiddenLabels.has('Humidity'),
       });
     }
 
@@ -450,40 +561,79 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
           </div>`
         : nothing}
       <div class="chart-host ${idle ? 'idle' : ''}" role="img" aria-label=${ariaLabel}></div>
-      ${idle
-        ? nothing
-        : html`<div class="legend">
-            <span><span class="swatch" style="background:var(--primary-color)"></span>Room</span>
-            ${this._hasApparent
-              ? html`<span
-                  ><span class="swatch dashed" style="color:var(--primary-color)"></span
-                  >Apparent</span
-                >`
-              : nothing}
-            <span
-              ><span class="swatch" style="background:var(--cb-action-heating)"></span>Low
-              band</span
-            >
-            <span
-              ><span class="swatch" style="background:var(--cb-action-cooling)"></span>High
-              band</span
-            >
-            ${this._hasHumidity
-              ? html`<span
-                  ><span class="swatch" style="background:var(--secondary-text-color)"></span
-                  >Humidity (%, right axis)</span
-                >`
-              : nothing}
-            <span
-              ><span class="swatch" style="background:var(--cb-action-heating);opacity:0.18"></span>
-              Heating</span
-            >
-            <span
-              ><span class="swatch" style="background:var(--cb-action-cooling);opacity:0.18"></span>
-              Cooling</span
-            >
-          </div>`}
+      ${idle ? nothing : this._renderLegend()}
     `;
+  }
+
+  /** Custom legend with per-series toggles (v0.8.3+). Each line-series
+   *  swatch is a button — click / Enter / Space flips that series'
+   *  `_hiddenLabels` membership, uPlot's setSeries hides / shows the
+   *  line immediately, and the toggle's visual reflects the new state.
+   *  Heating / Cooling shading items are non-interactive in v0.8.3
+   *  because they live in a `draw` hook rather than as uPlot series;
+   *  toggling them needs a different code path. Marked with
+   *  `aria-pressed="false"` only on the toggleable items so screen
+   *  readers don't announce the shading swatches as buttons. */
+  private _renderLegend() {
+    return html`<div class="legend">
+      ${this._toggleItem(
+        'Room',
+        html`<span class="swatch" style="background:var(--primary-color)"></span>`,
+      )}
+      ${this._hasApparent
+        ? this._toggleItem(
+            'Apparent',
+            html`<span class="swatch dashed" style="color:var(--primary-color)"></span>`,
+          )
+        : nothing}
+      ${this._toggleItem(
+        'Low band',
+        html`<span class="swatch" style="background:var(--cb-action-heating)"></span>`,
+      )}
+      ${this._toggleItem(
+        'High band',
+        html`<span class="swatch" style="background:var(--cb-action-cooling)"></span>`,
+      )}
+      ${this._hasHumidity
+        ? this._toggleItem(
+            'Humidity',
+            html`<span class="swatch" style="background:var(--secondary-text-color)"></span>`,
+            'Humidity (%, right axis)',
+          )
+        : nothing}
+      <span
+        ><span class="swatch" style="background:var(--cb-action-heating);opacity:0.18"></span>
+        Heating</span
+      >
+      <span
+        ><span class="swatch" style="background:var(--cb-action-cooling);opacity:0.18"></span>
+        Cooling</span
+      >
+    </div>`;
+  }
+
+  /** Build a single clickable legend item. `label` is the canonical
+   *  series label used both for display and for `_seriesIndexForLabel`
+   *  / `_hiddenLabels` lookups; `displayText` lets callers override the
+   *  visible string (Humidity's "(%, right axis)" suffix doesn't belong
+   *  in the toggle key). */
+  private _toggleItem(label: string, swatch: TemplateResult, displayText?: string) {
+    const hidden = this._hiddenLabels.has(label);
+    // `aria-pressed=${...}` is a string-attribute binding (no `.`
+    // prefix), which is the correct ARIA shape — values are
+    // literally "true" / "false" strings, not booleans. Don't refactor
+    // to `.ariaPressed=${hidden}` even though the runtime would
+    // happen to work; assistive tech sniffs the attribute, not the
+    // property.
+    return html`<span
+      class="toggle ${hidden ? 'hidden' : ''}"
+      role="button"
+      tabindex="0"
+      aria-pressed=${hidden ? 'true' : 'false'}
+      @click=${() => this._toggleLabel(label)}
+      @keydown=${(e: KeyboardEvent) => this._onLabelKeyDown(e, label)}
+      >${swatch}${displayText ?? label}</span
+    >`;
   }
 }
 
