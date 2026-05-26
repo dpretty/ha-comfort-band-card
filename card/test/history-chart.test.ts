@@ -381,6 +381,149 @@ describe('comfort-band-history-chart', () => {
     expect(labelWithout).not.toContain('humidity');
   });
 
+  // ----- v0.8.3: per-series legend toggles -----
+
+  it('toggles a series into the hidden set when its legend item is clicked', async () => {
+    // Use the same `_loading = false` workaround as the other legend
+    // tests above to bypass uPlot construction — we're asserting on
+    // Lit-rendered legend state, not on the canvas. The toggle's
+    // setSeries call is no-op when `_plot` is null (correct: the
+    // hidden set is captured for the next plot construction).
+    const sub = captureSubscription();
+    const el = await chart({ hass: makeHass(sub.connection), ...FULL_PROPS_WITH_OVERLAYS });
+    await new Promise((r) => setTimeout(r, 0));
+    (el as unknown as { _loading: boolean })._loading = false;
+    await el.updateComplete;
+
+    const toggles = Array.from(el.shadowRoot!.querySelectorAll<HTMLElement>('.legend .toggle'));
+    const apparent = toggles.find((t) => t.textContent?.includes('Apparent'));
+    expect(apparent).toBeDefined();
+    expect(apparent!.classList.contains('hidden')).toBe(false);
+    expect(apparent!.getAttribute('aria-pressed')).toBe('false');
+
+    apparent!.click();
+    await el.updateComplete;
+
+    expect((el as unknown as { _hiddenLabels: Set<string> })._hiddenLabels.has('Apparent')).toBe(
+      true,
+    );
+    const apparentAfter = Array.from(
+      el.shadowRoot!.querySelectorAll<HTMLElement>('.legend .toggle'),
+    ).find((t) => t.textContent?.includes('Apparent'));
+    expect(apparentAfter!.classList.contains('hidden')).toBe(true);
+    expect(apparentAfter!.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('removes a label from the hidden set on a second click', async () => {
+    // Round-trip the toggle to confirm un-hiding works too.
+    const sub = captureSubscription();
+    const el = await chart({ hass: makeHass(sub.connection), ...FULL_PROPS_WITH_OVERLAYS });
+    await new Promise((r) => setTimeout(r, 0));
+    (el as unknown as { _loading: boolean })._loading = false;
+    await el.updateComplete;
+
+    const findRoom = () =>
+      Array.from(el.shadowRoot!.querySelectorAll<HTMLElement>('.legend .toggle')).find((t) =>
+        t.textContent?.includes('Room'),
+      )!;
+
+    findRoom().click();
+    await el.updateComplete;
+    expect((el as unknown as { _hiddenLabels: Set<string> })._hiddenLabels.has('Room')).toBe(true);
+
+    findRoom().click();
+    await el.updateComplete;
+    expect((el as unknown as { _hiddenLabels: Set<string> })._hiddenLabels.has('Room')).toBe(false);
+    expect(findRoom().classList.contains('hidden')).toBe(false);
+  });
+
+  it('ignores toggle clicks for labels not currently in the chart', async () => {
+    // Apparent isn't wired in this scenario (FULL_PROPS, not _WITH_OVERLAYS).
+    // The legend won't show an Apparent item, but the internal toggle method
+    // — if called externally — should no-op for an absent series rather
+    // than poison `_hiddenLabels` with a label that doesn't map to any series.
+    const sub = captureSubscription();
+    const el = await chart({ hass: makeHass(sub.connection), ...FULL_PROPS });
+    await new Promise((r) => setTimeout(r, 0));
+    (el as unknown as { _loading: boolean })._loading = false;
+    await el.updateComplete;
+
+    // Directly invoke the internal toggle for a non-present label.
+    (el as unknown as { _toggleLabel: (l: string) => void })._toggleLabel('Apparent');
+    await el.updateComplete;
+    expect((el as unknown as { _hiddenLabels: Set<string> })._hiddenLabels.has('Apparent')).toBe(
+      false,
+    );
+  });
+
+  it('persists hidden state through plot re-creation via the show: field', async () => {
+    // The toggle's setSeries call is no-op when the plot is null
+    // (loading, or just after _destroyPlot during a zone-shape switch).
+    // The hidden set is captured in _hiddenLabels and applied at the
+    // next _buildOpts call via the `show: !this._hiddenLabels.has(...)`
+    // line on each toggleable series. If someone removes those lines,
+    // a hidden series would silently reappear on the next plot
+    // construction — this test pins the regression.
+    const sub = captureSubscription();
+    const el = await chart({ hass: makeHass(sub.connection), ...FULL_PROPS_WITH_OVERLAYS });
+    await new Promise((r) => setTimeout(r, 0));
+    (el as unknown as { _loading: boolean })._loading = false;
+    await el.updateComplete;
+
+    // Hide Apparent via the public toggle path.
+    const findApparent = () =>
+      Array.from(el.shadowRoot!.querySelectorAll<HTMLElement>('.legend .toggle')).find((t) =>
+        t.textContent?.includes('Apparent'),
+      )!;
+    findApparent().click();
+    await el.updateComplete;
+
+    // Inspect what _buildOpts would emit if it ran now (e.g. fresh
+    // plot construction). The series array should mark Apparent as
+    // show: false.
+    const opts = (
+      el as unknown as {
+        _buildOpts: (w: number) => { series: { label?: string; show?: boolean }[] };
+      }
+    )._buildOpts(400);
+    const apparentSeries = opts.series.find((s) => s.label === 'Apparent');
+    expect(apparentSeries).toBeDefined();
+    expect(apparentSeries!.show).toBe(false);
+    // Sanity: a non-hidden series remains show: true (or undefined,
+    // which uPlot treats as visible by default — but our code sets
+    // it explicitly).
+    const roomSeries = opts.series.find((s) => s.label === 'Room');
+    expect(roomSeries!.show).toBe(true);
+  });
+
+  it('responds to keyboard activation (Enter / Space) on a toggle', async () => {
+    // WAI-ARIA button pattern: Enter and Space must activate the
+    // toggle the same way a mouse click does, so keyboard users get
+    // the same control. Sanity-check both keys.
+    const sub = captureSubscription();
+    const el = await chart({ hass: makeHass(sub.connection), ...FULL_PROPS_WITH_OVERLAYS });
+    await new Promise((r) => setTimeout(r, 0));
+    (el as unknown as { _loading: boolean })._loading = false;
+    await el.updateComplete;
+
+    const findHumidity = () =>
+      Array.from(el.shadowRoot!.querySelectorAll<HTMLElement>('.legend .toggle')).find((t) =>
+        t.textContent?.includes('Humidity'),
+      )!;
+
+    findHumidity().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await el.updateComplete;
+    expect((el as unknown as { _hiddenLabels: Set<string> })._hiddenLabels.has('Humidity')).toBe(
+      true,
+    );
+
+    findHumidity().dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+    await el.updateComplete;
+    expect((el as unknown as { _hiddenLabels: Set<string> })._hiddenLabels.has('Humidity')).toBe(
+      false,
+    );
+  });
+
   // Smoke check: stubConnection still satisfies HomeAssistant type for
   // tests that don't exercise the subscription path.
   it('compiles against the stubConnection no-op helper', async () => {
