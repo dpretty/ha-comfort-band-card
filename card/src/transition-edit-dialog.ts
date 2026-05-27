@@ -38,19 +38,17 @@ export class TransitionEditDialog extends LitElement {
            per-card theme overrides (e.g. a transparent floorplan
            overlay) would otherwise make this nested dialog unreadable. */
         background: var(--card-background-color, var(--primary-background-color, #ffffff));
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
         border-radius: var(--cb-radius-card);
-        /* Tells the browser to use dark-mode defaults for native form
-           controls when the HA theme is dark. Without this, native
-           <input>s render with OS light-mode chrome and our color rules
-           lose to the user-agent stylesheet. */
-        color-scheme: light dark;
+        /* color-scheme: light dark inherited from tokens; tells the
+           browser to use dark-mode defaults for native form controls
+           when the HA theme is dark. */
       }
       h3 {
         margin: 0 0 var(--cb-gap-md);
         font-size: 14px;
         font-weight: 500;
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       label {
         display: flex;
@@ -60,7 +58,7 @@ export class TransitionEditDialog extends LitElement {
         font-size: 12px;
         /* Bumped from secondary → primary; the secondary contrast was
            too low against HA's dark dialog bg in real-world testing. */
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       input {
         font: inherit;
@@ -68,7 +66,7 @@ export class TransitionEditDialog extends LitElement {
         padding: 8px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 6px;
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
         background-color: var(
           --mdc-text-field-fill-color,
           var(--secondary-background-color, var(--card-background-color, #ffffff))
@@ -77,7 +75,7 @@ export class TransitionEditDialog extends LitElement {
         -webkit-appearance: none;
       }
       input::placeholder {
-        color: var(--secondary-text-color, #727272);
+        color: var(--cb-text-secondary);
         opacity: 1;
       }
       input:focus-visible {
@@ -114,7 +112,7 @@ export class TransitionEditDialog extends LitElement {
       .button.secondary {
         background: transparent;
         border-color: var(--divider-color, #cccccc);
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       .button.danger {
         background: transparent;

@@ -34,7 +34,7 @@ const sharedChartStyles = [
     :host {
       display: block;
       width: 100%;
-      color-scheme: light dark;
+      /* color-scheme: light dark inherited from tokens. */
     }
     .chart-host {
       width: 100%;
@@ -68,16 +68,19 @@ const sharedChartStyles = [
       margin-right: 4px;
     }
     /* Theme uPlot grid + axes via its own CSS variables so they pick
-       up HA's dark/light tokens automatically. */
+       up HA's dark/light tokens automatically. v0.9.1: use the cb-*
+       tokens (which carry light-dark fallbacks) instead of the raw
+       HA variables, so a chart in a top-layer dialog still renders
+       readable when HA's tokens do not propagate. */
     .u-wrap {
-      --u-fg: var(--primary-text-color, #212121);
+      --u-fg: var(--cb-text-primary);
     }
     .u-axis,
     .u-legend {
-      color: var(--secondary-text-color, #727272);
+      color: var(--cb-text-secondary);
     }
     .u-grid line {
-      stroke: var(--divider-color, #e0e0e0);
+      stroke: var(--cb-track-bg);
     }
   `,
 ];

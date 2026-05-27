@@ -545,14 +545,16 @@ function gn(e, t) {
 }
 const Xe = je`
   :host {
+    color-scheme: light dark;
+
     --cb-action-heating: var(--cb-color-heat, var(--state-climate-heat-color, #d9603f));
     --cb-action-cooling: var(--cb-color-cool, var(--state-climate-cool-color, #2f7fcc));
     --cb-action-idle: var(--cb-color-idle, var(--state-inactive-color, #888888));
     --cb-action-unknown: var(--cb-color-unknown, var(--disabled-color, #bdbdbd));
 
-    --cb-track-bg: var(--divider-color, #e0e0e0);
-    --cb-text-primary: var(--primary-text-color, #212121);
-    --cb-text-secondary: var(--secondary-text-color, #727272);
+    --cb-track-bg: var(--divider-color, light-dark(#e0e0e0, #3a3a3a));
+    --cb-text-primary: var(--primary-text-color, light-dark(#212121, #ffffff));
+    --cb-text-secondary: var(--secondary-text-color, light-dark(#727272, #b3b3b3));
 
     --cb-radius-card: 12px;
     --cb-radius-pill: 999px;
@@ -1467,20 +1469,20 @@ Pt.styles = [
         display: block;
         padding: var(--cb-gap-md);
         background: var(--card-background-color, var(--primary-background-color, #ffffff));
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
         border-radius: var(--cb-radius-card);
-        color-scheme: light dark;
+        /* color-scheme: light dark inherited from tokens. */
       }
       h3 {
         margin: 0 0 var(--cb-gap-md);
         font-size: 14px;
         font-weight: 500;
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       .source {
         margin: 0 0 var(--cb-gap-md);
         font-size: 12px;
-        color: var(--secondary-text-color, #727272);
+        color: var(--cb-text-secondary);
       }
       label {
         display: flex;
@@ -1488,7 +1490,7 @@ Pt.styles = [
         gap: 4px;
         margin-bottom: var(--cb-gap-md);
         font-size: 12px;
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       input {
         font: inherit;
@@ -1496,7 +1498,7 @@ Pt.styles = [
         padding: 8px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 6px;
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
         background-color: var(
           --mdc-text-field-fill-color,
           var(--secondary-background-color, var(--card-background-color, #ffffff))
@@ -1505,7 +1507,7 @@ Pt.styles = [
         -webkit-appearance: none;
       }
       input::placeholder {
-        color: var(--secondary-text-color, #727272);
+        color: var(--cb-text-secondary);
         opacity: 1;
       }
       input:focus-visible {
@@ -1539,7 +1541,7 @@ Pt.styles = [
       .button.secondary {
         background: transparent;
         border-color: var(--divider-color, #cccccc);
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
     `
 ];
@@ -2049,7 +2051,7 @@ qt.styles = [
         min-width: 140px;
         padding: 4px;
         background: var(--card-background-color, var(--primary-background-color, #ffffff));
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: var(--cb-radius-card);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -2065,7 +2067,7 @@ qt.styles = [
         padding: 8px 12px;
         border-radius: 4px;
         cursor: pointer;
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       .menu button:hover:not([disabled]) {
         background: var(--cb-track-bg);
@@ -2085,7 +2087,7 @@ qt.styles = [
       .confirm-delete {
         padding: var(--cb-gap-md);
         background: var(--card-background-color, var(--primary-background-color, #ffffff));
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
         border-radius: var(--cb-radius-card);
       }
       .confirm-delete h3 {
@@ -2115,7 +2117,7 @@ qt.styles = [
       .button.secondary {
         background: transparent;
         border-color: var(--divider-color, #cccccc);
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       .button.danger {
         background: transparent;
@@ -4607,7 +4609,7 @@ const nd = [
     :host {
       display: block;
       width: 100%;
-      color-scheme: light dark;
+      /* color-scheme: light dark inherited from tokens. */
     }
     .chart-host {
       width: 100%;
@@ -4641,16 +4643,19 @@ const nd = [
       margin-right: 4px;
     }
     /* Theme uPlot grid + axes via its own CSS variables so they pick
-       up HA's dark/light tokens automatically. */
+       up HA's dark/light tokens automatically. v0.9.1: use the cb-*
+       tokens (which carry light-dark fallbacks) instead of the raw
+       HA variables, so a chart in a top-layer dialog still renders
+       readable when HA's tokens do not propagate. */
     .u-wrap {
-      --u-fg: var(--primary-text-color, #212121);
+      --u-fg: var(--cb-text-primary);
     }
     .u-axis,
     .u-legend {
-      color: var(--secondary-text-color, #727272);
+      color: var(--cb-text-secondary);
     }
     .u-grid line {
-      stroke: var(--divider-color, #e0e0e0);
+      stroke: var(--cb-track-bg);
     }
   `
 ], Sl = () => {
@@ -4971,7 +4976,7 @@ let Dt = class extends yn {
     )}
       ${this._hasHumidity ? this._toggleItem(
       "Humidity",
-      x`<span class="swatch" style="background:var(--secondary-text-color)"></span>`,
+      x`<span class="swatch" style="background:var(--cb-text-secondary)"></span>`,
       "Humidity (%, right axis)"
     ) : G}
       <span
@@ -5431,19 +5436,17 @@ Bt.styles = [
            per-card theme overrides (e.g. a transparent floorplan
            overlay) would otherwise make this nested dialog unreadable. */
         background: var(--card-background-color, var(--primary-background-color, #ffffff));
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
         border-radius: var(--cb-radius-card);
-        /* Tells the browser to use dark-mode defaults for native form
-           controls when the HA theme is dark. Without this, native
-           <input>s render with OS light-mode chrome and our color rules
-           lose to the user-agent stylesheet. */
-        color-scheme: light dark;
+        /* color-scheme: light dark inherited from tokens; tells the
+           browser to use dark-mode defaults for native form controls
+           when the HA theme is dark. */
       }
       h3 {
         margin: 0 0 var(--cb-gap-md);
         font-size: 14px;
         font-weight: 500;
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       label {
         display: flex;
@@ -5453,7 +5456,7 @@ Bt.styles = [
         font-size: 12px;
         /* Bumped from secondary → primary; the secondary contrast was
            too low against HA's dark dialog bg in real-world testing. */
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       input {
         font: inherit;
@@ -5461,7 +5464,7 @@ Bt.styles = [
         padding: 8px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 6px;
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
         background-color: var(
           --mdc-text-field-fill-color,
           var(--secondary-background-color, var(--card-background-color, #ffffff))
@@ -5470,7 +5473,7 @@ Bt.styles = [
         -webkit-appearance: none;
       }
       input::placeholder {
-        color: var(--secondary-text-color, #727272);
+        color: var(--cb-text-secondary);
         opacity: 1;
       }
       input:focus-visible {
@@ -5507,7 +5510,7 @@ Bt.styles = [
       .button.secondary {
         background: transparent;
         border-color: var(--divider-color, #cccccc);
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       .button.danger {
         background: transparent;
@@ -6518,7 +6521,7 @@ Wn.styles = [
         padding: 8px 32px 8px 8px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 6px;
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
         background-color: var(
           --mdc-text-field-fill-color,
           var(--secondary-background-color, var(--card-background-color, #ffffff))
@@ -6546,7 +6549,7 @@ Wn.styles = [
          theme-aware defaults so most cases are readable in dark mode. */
       option {
         background-color: var(--card-background-color, #ffffff);
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       .checkbox-row {
         display: flex;
@@ -6694,7 +6697,7 @@ pn = Dr([
   preview: !1
 });
 console.info(
-  "%c COMFORT-BAND-CARD %c v0.9.0 ",
+  "%c COMFORT-BAND-CARD %c v0.9.1 ",
   "color:white;background:#2196F3;padding:2px 4px;border-radius:3px",
   "color:#000;background:#fff;padding:2px 4px;border-radius:3px"
 );

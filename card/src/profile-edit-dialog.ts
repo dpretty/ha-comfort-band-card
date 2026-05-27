@@ -44,20 +44,20 @@ export class ProfileEditDialog extends LitElement {
         display: block;
         padding: var(--cb-gap-md);
         background: var(--card-background-color, var(--primary-background-color, #ffffff));
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
         border-radius: var(--cb-radius-card);
-        color-scheme: light dark;
+        /* color-scheme: light dark inherited from tokens. */
       }
       h3 {
         margin: 0 0 var(--cb-gap-md);
         font-size: 14px;
         font-weight: 500;
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       .source {
         margin: 0 0 var(--cb-gap-md);
         font-size: 12px;
-        color: var(--secondary-text-color, #727272);
+        color: var(--cb-text-secondary);
       }
       label {
         display: flex;
@@ -65,7 +65,7 @@ export class ProfileEditDialog extends LitElement {
         gap: 4px;
         margin-bottom: var(--cb-gap-md);
         font-size: 12px;
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       input {
         font: inherit;
@@ -73,7 +73,7 @@ export class ProfileEditDialog extends LitElement {
         padding: 8px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 6px;
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
         background-color: var(
           --mdc-text-field-fill-color,
           var(--secondary-background-color, var(--card-background-color, #ffffff))
@@ -82,7 +82,7 @@ export class ProfileEditDialog extends LitElement {
         -webkit-appearance: none;
       }
       input::placeholder {
-        color: var(--secondary-text-color, #727272);
+        color: var(--cb-text-secondary);
         opacity: 1;
       }
       input:focus-visible {
@@ -116,7 +116,7 @@ export class ProfileEditDialog extends LitElement {
       .button.secondary {
         background: transparent;
         border-color: var(--divider-color, #cccccc);
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
     `,
   ];
