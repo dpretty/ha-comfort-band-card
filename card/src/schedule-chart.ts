@@ -1,62 +1,32 @@
 /**
- * `<comfort-band-schedule-chart>` — 2D schedule editor.
+ * `<comfort-band-schedule-chart>` — read-only schedule visualization.
  *
- * Replaces the v0.1 thin-ribbon timeline. Renders the active profile's
- * baseline schedule as two stepped lines (low + high band edges) with
- * the area between filled lightly. Each transition gets two interactive
- * handles — one at the low edge, one at the high edge — that the user
- * can drag in both axes.
+ * Renders the active profile's baseline schedule as two stepped lines
+ * (low + high band edges) with the area between filled lightly. Each
+ * transition shows a small marker circle at the low + high points.
  *
- * Events (all bubble, composed=true so they reach `<comfort-band-schedule-tab>`):
- *   - transition-add    { at, low, high } — tap on empty space
- *   - transition-edit   { transition }    — tap on a handle (no drag)
- *   - transition-delete { at }            — long-press or Delete key
- *   - transition-update { oldAt, transition } — drag release or arrow-key nudge
+ * **v0.9.0**: editing moved out of the chart. The chart is now a pure
+ * data-in, SVG-out visualization with no pointer or keyboard handlers,
+ * no drag, no long-press-to-delete (the latter caused the "circles
+ * disappear when I try to drag them" bug in v0.8.x — see plan
+ * pls-review-issues-in-deep-acorn.md). Editing happens in the
+ * `<comfort-band-schedule-tab>`'s list view via explicit
+ * Add / Edit / Delete buttons + the existing `transition-edit-dialog`.
  */
 
 import { LitElement, css, html, svg } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { customElement, property } from 'lit/decorators.js';
 import { tokens } from './styles.js';
-import type { BandHandle, Transition } from './types.js';
+import type { Transition } from './types.js';
 
-const SNAP_MINUTES = 15;
-const SNAP_TEMP_C = 0.5;
 const Y_AXIS_MIN = 14;
 const Y_AXIS_MAX = 28;
-const DRAG_THRESHOLD_PX = 4;
-const LONG_PRESS_MS = 500;
 
 const VIEW_W = 600;
 const VIEW_H = 200;
-const MIN_MINUTES = 0;
-const MAX_MINUTES = 24 * 60 - SNAP_MINUTES;
 
 const HOUR_TICKS = [0, 6, 12, 18, 24];
 const TEMP_TICKS = [14, 18, 22, 26];
-
-interface HandleDrag {
-  kind: 'handle';
-  handle: BandHandle;
-  origin: Transition;
-  startX: number;
-  startY: number;
-  moved: boolean;
-  longPressTimer: number | null;
-  longPressed: boolean;
-  // Cached at pointerdown; the schedule can't mutate during a single drag
-  // (the only writer is `_writeSchedule`, which is invoked on release), so
-  // there's no need to recompute neighbour bounds on every pointermove.
-  range: { min: number; max: number };
-}
-
-interface EmptyDrag {
-  kind: 'empty';
-  startX: number;
-  startY: number;
-  moved: boolean;
-}
-
-type DragState = HandleDrag | EmptyDrag | null;
 
 /** Parse an `HH:MM` (or `H:MM`) string to minutes-since-midnight.
  *  Exported so other modules (e.g. `schedule-tab.ts`) sort the same way the
@@ -67,25 +37,6 @@ export function parseTime(at: string): number {
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
 }
 
-function formatTime(mins: number): string {
-  // Defensive ceiling — every caller clamps to MAX_MINUTES first, but
-  // formatTime(1440) would produce "24:00", which the backend's
-  // `^[0-2]\d:[0-5]\d$` validator rejects. Guard here too so a future
-  // caller that skips the clamp can't silently produce an invalid value.
-  const clamped = Math.max(0, Math.min(MAX_MINUTES, mins));
-  const h = Math.floor(clamped / 60);
-  const m = clamped % 60;
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-}
-
-function snapMinutes(mins: number): number {
-  return Math.round(mins / SNAP_MINUTES) * SNAP_MINUTES;
-}
-
-function snapTemp(t: number): number {
-  return Math.round(t / SNAP_TEMP_C) * SNAP_TEMP_C;
-}
-
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }
@@ -93,13 +44,6 @@ function clamp(v: number, lo: number, hi: number): number {
 @customElement('comfort-band-schedule-chart')
 export class ComfortBandScheduleChart extends LitElement {
   @property({ type: Array }) public transitions: Transition[] = [];
-
-  @state() private _drag: DragState = null;
-  // While dragging a handle, render the in-progress position from this preview
-  // (keyed by the original `at`) instead of from the prop.
-  @state() private _preview: { at: string; low: number; high: number } | null = null;
-  @state() private _focusedAt: string | null = null;
-  @state() private _focusedHandle: BandHandle | null = null;
 
   public static override styles = [
     tokens,
@@ -113,8 +57,6 @@ export class ComfortBandScheduleChart extends LitElement {
         position: relative;
         width: 100%;
         height: 200px;
-        user-select: none;
-        touch-action: none;
         /* Reserve a left gutter so the Y-axis temperature labels sit
            inside the chart's bounding box. Without this they overflow
            the schedule-tab's 12 px padding and the modal clips their
@@ -127,7 +69,6 @@ export class ComfortBandScheduleChart extends LitElement {
         width: 100%;
         height: 100%;
         overflow: visible;
-        cursor: crosshair;
       }
       .grid {
         stroke: var(--cb-track-bg);
@@ -148,21 +89,12 @@ export class ComfortBandScheduleChart extends LitElement {
         vector-effect: non-scaling-stroke;
         pointer-events: none;
       }
-      .handle {
+      .marker {
         fill: var(--ha-card-background, #ffffff);
         stroke: var(--cb-accent, var(--primary-color, #03a9f4));
         stroke-width: 2;
         vector-effect: non-scaling-stroke;
-        cursor: grab;
-      }
-      .handle:focus-visible,
-      .handle.focused {
-        outline: none;
-        stroke-width: 3;
-        filter: drop-shadow(0 0 2px var(--cb-accent, var(--primary-color, #03a9f4)));
-      }
-      .handle.dragging {
-        cursor: grabbing;
+        pointer-events: none;
       }
       .axis-label {
         position: absolute;
@@ -187,32 +119,8 @@ export class ComfortBandScheduleChart extends LitElement {
         text-align: right;
         width: 24px;
       }
-      .empty-hint {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 12px;
-        color: var(--cb-text-secondary);
-        pointer-events: none;
-      }
     `,
   ];
-
-  public override disconnectedCallback(): void {
-    if (this._drag && this._drag.kind === 'handle' && this._drag.longPressTimer !== null) {
-      window.clearTimeout(this._drag.longPressTimer);
-    }
-    // Drop in-flight drag context so a re-attached element doesn't pick up
-    // residual `_drag`/`_preview` and mistake the next pointer event for a
-    // continuation. Pointer capture is browser-bound to the disconnecting
-    // element so it's released automatically — no releasePointerCapture
-    // call needed here.
-    this._drag = null;
-    this._preview = null;
-    super.disconnectedCallback();
-  }
 
   private _timeToX(mins: number): number {
     return (mins / (24 * 60)) * VIEW_W;
@@ -223,339 +131,10 @@ export class ComfortBandScheduleChart extends LitElement {
     return VIEW_H - ((clamped - Y_AXIS_MIN) / (Y_AXIS_MAX - Y_AXIS_MIN)) * VIEW_H;
   }
 
-  private _clientToMinutes(clientX: number, rect: DOMRect): number {
-    if (rect.width === 0) return 0;
-    const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
-    return snapMinutes(ratio * 24 * 60);
-  }
-
-  private _clientToTemp(clientY: number, rect: DOMRect): number {
-    if (rect.height === 0) return Y_AXIS_MIN;
-    const ratio = clamp((clientY - rect.top) / rect.height, 0, 1);
-    const raw = Y_AXIS_MAX - ratio * (Y_AXIS_MAX - Y_AXIS_MIN);
-    return snapTemp(raw);
-  }
-
-  private _svg(): SVGElement | null {
-    return this.shadowRoot?.querySelector('svg') ?? null;
-  }
-
-  private _sortedAts(): number[] {
-    return this.transitions.map((t) => parseTime(t.at)).sort((a, b) => a - b);
-  }
-
-  /** Allowed time range for a dragging transition: open interval between its neighbours. */
-  private _timeRangeFor(originAt: string): { min: number; max: number } {
-    const originMins = parseTime(originAt);
-    const others = this._sortedAts().filter((m) => m !== originMins);
-    let min = MIN_MINUTES;
-    let max = MAX_MINUTES;
-    for (const m of others) {
-      if (m < originMins && m + SNAP_MINUTES > min) min = m + SNAP_MINUTES;
-      if (m > originMins && m - SNAP_MINUTES < max) max = m - SNAP_MINUTES;
-    }
-    return { min, max };
-  }
-
-  private _fire(
-    name: 'transition-add' | 'transition-edit' | 'transition-delete' | 'transition-update',
-    detail: unknown,
-  ): void {
-    this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
-  }
-
-  // ----- pointer handlers -----
-
-  private _onHandlePointerDown = (
-    event: PointerEvent,
-    transition: Transition,
-    handle: BandHandle,
-  ) => {
-    event.stopPropagation();
-    event.preventDefault();
-    const target = event.currentTarget as SVGElement;
-    target.setPointerCapture(event.pointerId);
-
-    const drag: HandleDrag = {
-      kind: 'handle',
-      handle,
-      origin: { ...transition },
-      startX: event.clientX,
-      startY: event.clientY,
-      moved: false,
-      longPressTimer: null,
-      longPressed: false,
-      range: this._timeRangeFor(transition.at),
-    };
-    drag.longPressTimer = window.setTimeout(() => {
-      drag.longPressTimer = null;
-      if (this._drag === drag && !drag.moved) {
-        drag.longPressed = true;
-        this._fire('transition-delete', { at: drag.origin.at });
-      }
-    }, LONG_PRESS_MS);
-    this._drag = drag;
-  };
-
-  private _onHandlePointerMove = (event: PointerEvent) => {
-    const drag = this._drag;
-    if (!drag || drag.kind !== 'handle') return;
-    if (drag.longPressed) return;
-
-    const dx = event.clientX - drag.startX;
-    const dy = event.clientY - drag.startY;
-    if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
-    if (!drag.moved) {
-      // Direct mutation on the non-@state `drag.moved` flag — Lit's dirty
-      // check is reference-based, so mutating a property of `_drag`'s
-      // value object doesn't trigger a re-render. The first `_preview`
-      // write below is what schedules the render for this drag tick.
-      drag.moved = true;
-      if (drag.longPressTimer !== null) {
-        window.clearTimeout(drag.longPressTimer);
-        drag.longPressTimer = null;
-      }
-    }
-
-    const svgEl = this._svg();
-    if (!svgEl) {
-      // Shouldn't happen in practice (Lit guarantees `shadowRoot` is ready
-      // by the time pointer handlers can fire) but if it does, preserve
-      // the origin so a subsequent pointerup with no preview still fires
-      // an idempotent `transition-update` rather than silently dropping.
-      this._preview = { at: drag.origin.at, low: drag.origin.low, high: drag.origin.high };
-      return;
-    }
-    const rect = svgEl.getBoundingClientRect();
-
-    const newAtMins = clamp(
-      this._clientToMinutes(event.clientX, rect),
-      drag.range.min,
-      drag.range.max,
-    );
-    const newTemp = this._clientToTemp(event.clientY, rect);
-
-    let low = drag.origin.low;
-    let high = drag.origin.high;
-    if (drag.handle === 'low') {
-      low = clamp(newTemp, Y_AXIS_MIN, high - SNAP_TEMP_C);
-    } else {
-      high = clamp(newTemp, low + SNAP_TEMP_C, Y_AXIS_MAX);
-    }
-
-    this._preview = { at: formatTime(newAtMins), low, high };
-  };
-
-  private _onHandlePointerUp = (event: PointerEvent) => {
-    const drag = this._drag;
-    if (!drag || drag.kind !== 'handle') return;
-    const target = event.currentTarget as SVGElement;
-    try {
-      target.releasePointerCapture(event.pointerId);
-    } catch {
-      // jsdom may throw if capture was never set; safe to ignore.
-    }
-    if (drag.longPressTimer !== null) {
-      window.clearTimeout(drag.longPressTimer);
-      drag.longPressTimer = null;
-    }
-    const preview = this._preview;
-    this._drag = null;
-    this._preview = null;
-    if (drag.longPressed) return;
-    // Source identity from `drag.origin`, not from a render-time closure
-    // capture of the live transition prop — a subscription echo could
-    // re-render the chart mid-drag and re-bind the closure to a new
-    // object, leaving the tap/update referencing the wrong `at`.
-    if (!drag.moved) {
-      this._fire('transition-edit', { transition: drag.origin });
-      return;
-    }
-    if (preview) {
-      // Carry focus across the drag: if this handle was focused, the
-      // re-render keys off `_focusedAt`/`_focusedHandle` and the new
-      // transition's `at` is `preview.at`, not `drag.origin.at`.
-      if (this._focusedAt === drag.origin.at) this._focusedAt = preview.at;
-      this._fire('transition-update', {
-        oldAt: drag.origin.at,
-        transition: { at: preview.at, low: preview.low, high: preview.high },
-      });
-    }
-  };
-
-  /** pointercancel: tear down state silently. The browser fires this when
-   *  the OS / scroll gesture takes over the touch — we must NOT interpret
-   *  it as a tap (would open the edit dialog) or as a drag-release (would
-   *  persist a partial-drag position). */
-  private _onHandlePointerCancel = (event: PointerEvent) => {
-    const drag = this._drag;
-    if (!drag || drag.kind !== 'handle') return;
-    const target = event.currentTarget as SVGElement;
-    try {
-      target.releasePointerCapture(event.pointerId);
-    } catch {
-      // jsdom may throw if capture was never set; safe to ignore.
-    }
-    if (drag.longPressTimer !== null) {
-      window.clearTimeout(drag.longPressTimer);
-      drag.longPressTimer = null;
-    }
-    this._drag = null;
-    this._preview = null;
-  };
-
-  private _onBackgroundPointerDown = (event: PointerEvent) => {
-    const svgEl = this._svg();
-    if (!svgEl) return;
-    try {
-      svgEl.setPointerCapture(event.pointerId);
-    } catch {
-      // jsdom doesn't fully implement pointer capture; matches the
-      // releasePointerCapture try/catch elsewhere in this file.
-    }
-    const drag: EmptyDrag = {
-      kind: 'empty',
-      startX: event.clientX,
-      startY: event.clientY,
-      moved: false,
-    };
-    this._drag = drag;
-  };
-
-  private _onBackgroundPointerMove = (event: PointerEvent) => {
-    const drag = this._drag;
-    if (!drag || drag.kind !== 'empty') return;
-    if (drag.moved) return;
-    const dx = event.clientX - drag.startX;
-    const dy = event.clientY - drag.startY;
-    // Plain mutation on the non-@state drag context — moved-ness only gates
-    // the tap/no-tap decision at pointerup, no render needed.
-    if (Math.hypot(dx, dy) >= DRAG_THRESHOLD_PX) drag.moved = true;
-  };
-
-  private _onBackgroundPointerUp = (event: PointerEvent) => {
-    const drag = this._drag;
-    if (!drag || drag.kind !== 'empty') {
-      return;
-    }
-    const svgEl = this._svg();
-    try {
-      svgEl?.releasePointerCapture(event.pointerId);
-    } catch {
-      // jsdom may throw if capture was never set; safe to ignore.
-    }
-    const moved = drag.moved;
-    const cancelled = event.type === 'pointercancel';
-    this._drag = null;
-    if (cancelled || moved || !svgEl) return;
-    const rect = svgEl.getBoundingClientRect();
-    // Clamp before formatting — a tap at the right-most pixel maps to
-    // snapMinutes(1440) which would format as "24:00", an invalid HH:MM
-    // string the backend would reject. MAX_MINUTES (23:45) is the latest
-    // valid slot.
-    const atMins = clamp(this._clientToMinutes(event.clientX, rect), MIN_MINUTES, MAX_MINUTES);
-    // Don't fire if the tap lands on an existing transition's `at` snap-slot.
-    for (const t of this.transitions) if (parseTime(t.at) === atMins) return;
-    const tempCentre = this._clientToTemp(event.clientY, rect);
-    const low = clamp(snapTemp(tempCentre - 1.5), Y_AXIS_MIN, Y_AXIS_MAX - SNAP_TEMP_C);
-    const high = clamp(snapTemp(tempCentre + 1.5), low + SNAP_TEMP_C, Y_AXIS_MAX);
-    this._fire('transition-add', { at: formatTime(atMins), low, high });
-  };
-
-  // ----- keyboard handlers -----
-
-  private _onHandleKeyDown = (event: KeyboardEvent, transition: Transition, handle: BandHandle) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      this._fire('transition-edit', { transition });
-      return;
-    }
-    if (event.key === 'Delete' || event.key === 'Backspace') {
-      event.preventDefault();
-      this._fire('transition-delete', { at: transition.at });
-      return;
-    }
-    let dAt = 0;
-    let dTemp = 0;
-    switch (event.key) {
-      case 'ArrowLeft':
-        dAt = -SNAP_MINUTES;
-        break;
-      case 'ArrowRight':
-        dAt = SNAP_MINUTES;
-        break;
-      case 'ArrowUp':
-        dTemp = SNAP_TEMP_C;
-        break;
-      case 'ArrowDown':
-        dTemp = -SNAP_TEMP_C;
-        break;
-      default:
-        return;
-    }
-    event.preventDefault();
-    const range = this._timeRangeFor(transition.at);
-    const newAtMins = clamp(parseTime(transition.at) + dAt, range.min, range.max);
-    let low = transition.low;
-    let high = transition.high;
-    if (handle === 'low') {
-      low = clamp(transition.low + dTemp, Y_AXIS_MIN, high - SNAP_TEMP_C);
-    } else {
-      high = clamp(transition.high + dTemp, low + SNAP_TEMP_C, Y_AXIS_MAX);
-    }
-    if (
-      newAtMins === parseTime(transition.at) &&
-      low === transition.low &&
-      high === transition.high
-    )
-      return;
-    const newAt = formatTime(newAtMins);
-    // Carry focus across the rename so the .focused class stays applied
-    // after the WS echo re-renders with the new `at`.
-    if (this._focusedAt === transition.at) this._focusedAt = newAt;
-    this._fire('transition-update', {
-      oldAt: transition.at,
-      transition: { at: newAt, low, high },
-    });
-  };
-
-  private _onHandleFocus = (transition: Transition, handle: BandHandle) => {
-    this._focusedAt = transition.at;
-    this._focusedHandle = handle;
-  };
-
-  private _onHandleBlur = () => {
-    this._focusedAt = null;
-    this._focusedHandle = null;
-  };
-
-  // ----- render -----
-
-  private _renderedTransitions(): Transition[] {
-    // Sort numerically (parseTime) to match every other sort in the file, so a
-    // mid-drag preview that swaps `at` values can't desync from the polyline
-    // build order. (The render order would only diverge from lexicographic if
-    // a transition's `at` wasn't zero-padded, but every caller in the card
-    // produces zero-padded strings — defensive consistency.)
-    const sorted = [...this.transitions].sort((a, b) => parseTime(a.at) - parseTime(b.at));
-    if (!this._preview || !this._drag || this._drag.kind !== 'handle') return sorted;
-    const drag = this._drag;
-    // Substituting the preview value in-place keeps the array sorted because
-    // `_timeRangeFor` clamps the preview's `at` to the open interval between
-    // this transition's neighbours — the dragging handle can never jump past
-    // a neighbour into a different slot in the ordering.
-    return sorted.map((t) =>
-      t.at === drag.origin.at
-        ? { at: this._preview!.at, low: this._preview!.low, high: this._preview!.high }
-        : t,
-    );
-  }
-
   /** Collect (x, y) corners of a stepped line over one day. The day wraps:
    *  the value held from 00:00 until the first transition fires is the
    *  same as the value held from the last transition until 24:00.
-   *  Assumes `transitions` is already sorted by `at` ascending — every
-   *  caller goes through `_renderedTransitions()` which sorts. */
+   *  Assumes `transitions` is sorted by `at` ascending — the caller sorts. */
   private _stepPoints(transitions: Transition[], pick: 'low' | 'high'): Array<[number, number]> {
     const wrap = transitions[transitions.length - 1][pick];
     const pts: Array<[number, number]> = [[0, this._tempToY(wrap)]];
@@ -588,10 +167,10 @@ export class ComfortBandScheduleChart extends LitElement {
   }
 
   protected override render() {
-    const rendered = this._renderedTransitions();
-    // Compute step points once per axis; build all three SVG paths from them
-    // (low line, high line, fill polygon) so a 60-Hz drag doesn't recompute
-    // the same step geometry four times.
+    // Sort numerically so a non-zero-padded `at` from any future source still
+    // builds the step paths in the correct order. Defensive — callers always
+    // pre-sort, but the chart's data-in contract shouldn't trust them.
+    const rendered = [...this.transitions].sort((a, b) => parseTime(a.at) - parseTime(b.at));
     const hasTransitions = rendered.length > 0;
     const lowPts = hasTransitions ? this._stepPoints(rendered, 'low') : [];
     const highPts = hasTransitions ? this._stepPoints(rendered, 'high') : [];
@@ -604,14 +183,10 @@ export class ComfortBandScheduleChart extends LitElement {
         <svg
           viewBox="0 0 ${VIEW_W} ${VIEW_H}"
           preserveAspectRatio="none"
-          role="group"
-          aria-label="Schedule chart: drag the circular handles to adjust each transition's time and band."
-          @pointerdown=${this._onBackgroundPointerDown}
-          @pointermove=${this._onBackgroundPointerMove}
-          @pointerup=${this._onBackgroundPointerUp}
-          @pointercancel=${this._onBackgroundPointerUp}
+          role="img"
+          aria-label="Schedule visualization for the active profile"
         >
-          <title>Schedule chart for the active profile</title>
+          <title>Schedule visualization for the active profile</title>
           ${TEMP_TICKS.map(
             (t) =>
               svg`<line class="grid" x1="0" x2=${VIEW_W} y1=${this._tempToY(t)} y2=${this._tempToY(t)}></line>`,
@@ -620,7 +195,7 @@ export class ComfortBandScheduleChart extends LitElement {
             (h) =>
               svg`<line class="grid" y1="0" y2=${VIEW_H} x1=${(h / 24) * VIEW_W} x2=${(h / 24) * VIEW_W}></line>`,
           )}
-          ${rendered.length > 0
+          ${hasTransitions
             ? svg`
                 <path class="fill" d=${fillPath}></path>
                 <path class="line low" d=${lowPath}></path>
@@ -629,55 +204,9 @@ export class ComfortBandScheduleChart extends LitElement {
             : null}
           ${rendered.map((t) => {
             const x = this._timeToX(parseTime(t.at));
-            const lowY = this._tempToY(t.low);
-            const highY = this._tempToY(t.high);
-            const focusedLow = this._focusedAt === t.at && this._focusedHandle === 'low';
-            const focusedHigh = this._focusedAt === t.at && this._focusedHandle === 'high';
-            const dragHandle =
-              this._drag?.kind === 'handle' && this._drag.origin.at === t.at
-                ? this._drag.handle
-                : null;
-            const ariaLow = `Low handle at ${t.at}, ${t.low.toFixed(1)} °C. Arrow keys to nudge, Enter to edit, Delete to remove.`;
-            const ariaHigh = `High handle at ${t.at}, ${t.high.toFixed(1)} °C. Arrow keys to nudge, Enter to edit, Delete to remove.`;
-            const lowCls = `handle low${focusedLow ? ' focused' : ''}${dragHandle === 'low' ? ' dragging' : ''}`;
-            const highCls = `handle high${focusedHigh ? ' focused' : ''}${dragHandle === 'high' ? ' dragging' : ''}`;
             return svg`
-              <circle
-                class=${lowCls}
-                cx=${x}
-                cy=${lowY}
-                r="8"
-                tabindex="0"
-                role="button"
-                aria-label=${ariaLow}
-                data-at=${t.at}
-                data-handle="low"
-                @pointerdown=${(e: PointerEvent) => this._onHandlePointerDown(e, t, 'low')}
-                @pointermove=${this._onHandlePointerMove}
-                @pointerup=${this._onHandlePointerUp}
-                @pointercancel=${this._onHandlePointerCancel}
-                @keydown=${(e: KeyboardEvent) => this._onHandleKeyDown(e, t, 'low')}
-                @focus=${() => this._onHandleFocus(t, 'low')}
-                @blur=${this._onHandleBlur}
-              ></circle>
-              <circle
-                class=${highCls}
-                cx=${x}
-                cy=${highY}
-                r="8"
-                tabindex="0"
-                role="button"
-                aria-label=${ariaHigh}
-                data-at=${t.at}
-                data-handle="high"
-                @pointerdown=${(e: PointerEvent) => this._onHandlePointerDown(e, t, 'high')}
-                @pointermove=${this._onHandlePointerMove}
-                @pointerup=${this._onHandlePointerUp}
-                @pointercancel=${this._onHandlePointerCancel}
-                @keydown=${(e: KeyboardEvent) => this._onHandleKeyDown(e, t, 'high')}
-                @focus=${() => this._onHandleFocus(t, 'high')}
-                @blur=${this._onHandleBlur}
-              ></circle>
+              <circle class="marker low" cx=${x} cy=${this._tempToY(t.low)} r="5"></circle>
+              <circle class="marker high" cx=${x} cy=${this._tempToY(t.high)} r="5"></circle>
             `;
           })}
         </svg>
@@ -699,9 +228,6 @@ export class ComfortBandScheduleChart extends LitElement {
                 : 'axis-label x';
           return html`<div class=${cls} style="left: ${(h / 24) * 100}%">${h}h</div>`;
         })}
-        ${this.transitions.length === 0
-          ? html`<div class="empty-hint">Tap the chart to add a transition.</div>`
-          : null}
       </div>
     `;
   }

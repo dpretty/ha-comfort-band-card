@@ -138,7 +138,7 @@ describe('comfort-band-schedule-tab', () => {
     // Two handles per transition (low + high).
     const handles = el
       .shadowRoot!.querySelector('comfort-band-schedule-chart')!
-      .shadowRoot!.querySelectorAll('.handle');
+      .shadowRoot!.querySelectorAll('.marker');
     expect(handles.length).toBe(4);
   });
 
@@ -150,7 +150,7 @@ describe('comfort-band-schedule-tab', () => {
     expect(
       el
         .shadowRoot!.querySelector('comfort-band-schedule-chart')!
-        .shadowRoot!.querySelectorAll('.handle').length,
+        .shadowRoot!.querySelectorAll('.marker').length,
     ).toBe(0);
     // (After the live update we expect 2 handles for the new 1-transition schedule.)
 
@@ -163,7 +163,7 @@ describe('comfort-band-schedule-tab', () => {
     expect(
       el
         .shadowRoot!.querySelector('comfort-band-schedule-chart')!
-        .shadowRoot!.querySelectorAll('.handle').length,
+        .shadowRoot!.querySelectorAll('.marker').length,
     ).toBe(2);
   });
 
@@ -186,14 +186,16 @@ describe('comfort-band-schedule-tab', () => {
       },
     });
     const el = await tab(hass);
-    const editor = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
-    editor.dispatchEvent(
-      new CustomEvent('transition-delete', {
-        detail: { at: '22:00' },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    // Click Delete on the 22:00 row → inline confirm → Confirm.
+    const rows = el.shadowRoot!.querySelectorAll('li.row');
+    const targetRow = Array.from(rows).find((r) => r.textContent?.includes('22:00'))!;
+    const deleteBtn = targetRow.querySelector<HTMLButtonElement>('button.danger')!;
+    deleteBtn.click();
+    await el.updateComplete;
+    const confirmBtn = el
+      .shadowRoot!.querySelector('li.row.confirm')!
+      .querySelector<HTMLButtonElement>('button.danger')!;
+    confirmBtn.click();
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
     expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'set_schedule', {
@@ -204,7 +206,7 @@ describe('comfort-band-schedule-tab', () => {
     expect(hass.callWS).not.toHaveBeenCalled();
   });
 
-  it('persists a drag-update via comfort_band.set_schedule', async () => {
+  it('persists an edit via the dialog', async () => {
     const { hass } = makeHass({
       initialSchedule: {
         baseline: [
@@ -215,13 +217,17 @@ describe('comfort-band-schedule-tab', () => {
       },
     });
     const el = await tab(hass);
-    const chartEl = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
-    chartEl.dispatchEvent(
-      new CustomEvent('transition-update', {
-        detail: {
-          oldAt: '06:00',
-          transition: { at: '06:15', low: 20.5, high: 23 },
-        },
+    const row = Array.from(el.shadowRoot!.querySelectorAll('li.row')).find((r) =>
+      r.textContent?.includes('06:00'),
+    )!;
+    const editBtn = row.querySelector<HTMLButtonElement>('button.secondary')!;
+    editBtn.click();
+    await el.updateComplete;
+
+    const dlg = el.shadowRoot!.querySelector('transition-edit-dialog')!;
+    dlg.dispatchEvent(
+      new CustomEvent('dialog-save', {
+        detail: { transition: { at: '06:15', low: 20.5, high: 23 } },
         bubbles: true,
         composed: true,
       }),
@@ -238,11 +244,10 @@ describe('comfort-band-schedule-tab', () => {
     });
   });
 
-  // The chart's own clamp prevents a drag from ever firing this exact event
-  // (it would clamp `at` to a non-collision slot), but the schedule-tab's
-  // collision drop has to be tolerant in case a YAML automation or future
-  // call path bypasses the chart. Test the tab's logic via a synthetic event.
-  it('drops a collision when a drag-update lands on another transition at', async () => {
+  // A YAML automation or future call path could submit a save that lands on
+  // another transition's `at`. The dialog's validator catches user input, but
+  // the save handler must also drop the colliding entry defensively.
+  it('drops a collision when an edit lands on another transitions at', async () => {
     const { hass } = makeHass({
       initialSchedule: {
         baseline: [
@@ -253,13 +258,15 @@ describe('comfort-band-schedule-tab', () => {
       },
     });
     const el = await tab(hass);
-    const chartEl = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
-    chartEl.dispatchEvent(
-      new CustomEvent('transition-update', {
-        detail: {
-          oldAt: '06:00',
-          transition: { at: '08:00', low: 21, high: 24 },
-        },
+    const row = Array.from(el.shadowRoot!.querySelectorAll('li.row')).find((r) =>
+      r.textContent?.includes('06:00'),
+    )!;
+    row.querySelector<HTMLButtonElement>('button.secondary')!.click();
+    await el.updateComplete;
+    const dlg = el.shadowRoot!.querySelector('transition-edit-dialog')!;
+    dlg.dispatchEvent(
+      new CustomEvent('dialog-save', {
+        detail: { transition: { at: '08:00', low: 21, high: 24 } },
         bubbles: true,
         composed: true,
       }),
@@ -273,7 +280,7 @@ describe('comfort-band-schedule-tab', () => {
     });
   });
 
-  it('opens the dialog on transition-edit then persists the new values on save', async () => {
+  it('opens the dialog when a row is clicked then persists the new values on save', async () => {
     const { hass } = makeHass({
       initialSchedule: {
         baseline: [{ at: '06:00', low: 20, high: 23 }],
@@ -281,15 +288,8 @@ describe('comfort-band-schedule-tab', () => {
       },
     });
     const el = await tab(hass);
-
-    const editor = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
-    editor.dispatchEvent(
-      new CustomEvent('transition-edit', {
-        detail: { transition: { at: '06:00', low: 20, high: 23 } },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    const row = el.shadowRoot!.querySelector<HTMLElement>('li.row')!;
+    row.click();
     await el.updateComplete;
     const dlg = el.shadowRoot!.querySelector('transition-edit-dialog');
     expect(dlg).not.toBeNull();
@@ -310,23 +310,18 @@ describe('comfort-band-schedule-tab', () => {
     });
   });
 
-  it('opens the add dialog on transition-add and persists the new transition on save', async () => {
+  it('clicking Add opens the dialog and persists the new transition on save', async () => {
     const { hass } = makeHass({ initialSchedule: null });
     const el = await tab(hass);
 
-    const editor1 = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
-    editor1.dispatchEvent(
-      new CustomEvent('transition-add', {
-        detail: { at: '07:00' },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    const addBtn = el.shadowRoot!.querySelector<HTMLButtonElement>('.list-toolbar button.primary')!;
+    expect(addBtn).not.toBeNull();
+    addBtn.click();
     await el.updateComplete;
-    const dlg1 = el.shadowRoot!.querySelector('transition-edit-dialog');
-    expect(dlg1).not.toBeNull();
+    const dlg = el.shadowRoot!.querySelector('transition-edit-dialog');
+    expect(dlg).not.toBeNull();
 
-    dlg1!.dispatchEvent(
+    dlg!.dispatchEvent(
       new CustomEvent('dialog-save', {
         detail: { transition: { at: '07:00', low: 19, high: 22 } },
         bubbles: true,
@@ -342,46 +337,251 @@ describe('comfort-band-schedule-tab', () => {
     });
   });
 
-  it('transition-add with seeded low/high pre-fills the dialog', async () => {
-    // The new chart's tap-on-empty path emits low/high based on the tap
-    // position; schedule-tab should pass those through as dialog defaults
-    // rather than always falling back to defaultLow/defaultHigh.
-    const { hass } = makeHass({ initialSchedule: null });
-    const el = await tab(hass);
-
-    const chartEl = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
-    chartEl.dispatchEvent(
-      new CustomEvent('transition-add', {
-        detail: { at: '07:00', low: 17.5, high: 20.5 },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await el.updateComplete;
-    const dlg = el.shadowRoot!.querySelector('transition-edit-dialog') as HTMLElement & {
+  it('Add seeds the dialog with a sensible default time and last-rows low/high', async () => {
+    // Empty schedule → default to 06:00 with 19/22.
+    const { hass: hassEmpty } = makeHass({ initialSchedule: null });
+    const elEmpty = await tab(hassEmpty);
+    elEmpty.shadowRoot!.querySelector<HTMLButtonElement>('.list-toolbar button.primary')!.click();
+    await elEmpty.updateComplete;
+    const dlgEmpty = elEmpty.shadowRoot!.querySelector('transition-edit-dialog') as HTMLElement & {
       transition: { at: string; low: number; high: number } | null;
     };
-    expect(dlg).not.toBeNull();
-    expect(dlg.transition).toEqual({ at: '07:00', low: 17.5, high: 20.5 });
+    expect(dlgEmpty.transition).toEqual({ at: '06:00', low: 19, high: 22 });
+
+    // Non-empty schedule → default to the next free 15-min slot after the
+    // latest entry; low/high copy the latest entry.
+    const { hass: hassFull } = makeHass({
+      initialSchedule: {
+        baseline: [{ at: '22:00', low: 17, high: 21 }],
+        current: [],
+      },
+    });
+    const elFull = await tab(hassFull);
+    elFull.shadowRoot!.querySelector<HTMLButtonElement>('.list-toolbar button.primary')!.click();
+    await elFull.updateComplete;
+    const dlgFull = elFull.shadowRoot!.querySelector('transition-edit-dialog') as HTMLElement & {
+      transition: { at: string; low: number; high: number } | null;
+    };
+    expect(dlgFull.transition).toEqual({ at: '22:15', low: 17, high: 21 });
   });
 
   it('cancel returns to the list mode without writing', async () => {
     const { hass } = makeHass({ initialSchedule: null });
     const el = await tab(hass);
-    const editor2 = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
-    editor2.dispatchEvent(
-      new CustomEvent('transition-add', {
-        detail: { at: '08:00' },
+    el.shadowRoot!.querySelector<HTMLButtonElement>('.list-toolbar button.primary')!.click();
+    await el.updateComplete;
+    const dlg = el.shadowRoot!.querySelector('transition-edit-dialog')!;
+    dlg.dispatchEvent(new CustomEvent('dialog-cancel', { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('transition-edit-dialog')).toBeNull();
+    expect(hass.callService).not.toHaveBeenCalled();
+  });
+
+  // ----- v0.9.0: list-first editor -----
+
+  it('shows an inline confirm row when Delete is clicked; Cancel restores the row', async () => {
+    const { hass } = makeHass({
+      initialSchedule: {
+        baseline: [{ at: '06:00', low: 20, high: 23 }],
+        current: [],
+      },
+    });
+    const el = await tab(hass);
+    const row = el.shadowRoot!.querySelector('li.row')!;
+    const deleteBtn = row.querySelector<HTMLButtonElement>('button.danger')!;
+    deleteBtn.click();
+    await el.updateComplete;
+
+    const confirm = el.shadowRoot!.querySelector('li.row.confirm');
+    expect(confirm).not.toBeNull();
+    expect(confirm!.textContent).toContain('Delete transition at 06:00?');
+    expect(confirm!.getAttribute('role')).toBe('alertdialog');
+
+    // Cancel restores the regular row; no write happened.
+    confirm!.querySelector<HTMLButtonElement>('button.secondary')!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('li.row.confirm')).toBeNull();
+    expect(el.shadowRoot!.querySelector('li.row')).not.toBeNull();
+    expect(hass.callService).not.toHaveBeenCalled();
+  });
+
+  it('Enter on a focused row opens the edit dialog', async () => {
+    const { hass } = makeHass({
+      initialSchedule: {
+        baseline: [{ at: '06:00', low: 20, high: 23 }],
+        current: [],
+      },
+    });
+    const el = await tab(hass);
+    const row = el.shadowRoot!.querySelector<HTMLElement>('li.row')!;
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('transition-edit-dialog')).not.toBeNull();
+  });
+
+  it('Delete key on a focused row opens the inline confirm', async () => {
+    const { hass } = makeHass({
+      initialSchedule: {
+        baseline: [{ at: '06:00', low: 20, high: 23 }],
+        current: [],
+      },
+    });
+    const el = await tab(hass);
+    const row = el.shadowRoot!.querySelector<HTMLElement>('li.row')!;
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('li.row.confirm')).not.toBeNull();
+  });
+
+  it('auto-clears the inline confirm if a remote write removes the targeted row', async () => {
+    const { hass, pushUpdate } = makeHass({
+      initialSchedule: {
+        baseline: [
+          { at: '06:00', low: 20, high: 23 },
+          { at: '22:00', low: 18, high: 21 },
+        ],
+        current: [],
+      },
+    });
+    const el = await tab(hass);
+    // Open confirm on 06:00.
+    const row = Array.from(el.shadowRoot!.querySelectorAll('li.row')).find((r) =>
+      r.textContent?.includes('06:00'),
+    )!;
+    row.querySelector<HTMLButtonElement>('button.danger')!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('li.row.confirm')).not.toBeNull();
+
+    // Remote write removes 06:00 out from under the open confirm.
+    pushUpdate({
+      baseline: [{ at: '22:00', low: 18, high: 21 }],
+      current: [],
+    });
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('li.row.confirm')).toBeNull();
+    // No write side-effect from the stale confirm.
+    expect(hass.callService).not.toHaveBeenCalled();
+  });
+
+  it('shows an empty-state message when there are no transitions', async () => {
+    const { hass } = makeHass({ initialSchedule: null });
+    const el = await tab(hass);
+    const empty = el.shadowRoot!.querySelector('.empty');
+    expect(empty).not.toBeNull();
+    expect(empty!.textContent).toContain('Add transition');
+    // The Add button stays visible regardless.
+    expect(el.shadowRoot!.querySelector('.list-toolbar button.primary')).not.toBeNull();
+  });
+
+  it('Enter on an in-row button does not bubble to open the edit dialog', async () => {
+    // Regression guard for the v0.9.0-R3 finding: pressing Enter on the
+    // focused Delete button used to bubble to the row's keydown handler,
+    // which `preventDefault()`'d the synthetic click — so Delete-key
+    // accidentally opened the Edit dialog. Fix: row keydown handler
+    // ignores events whose target isn't the row itself.
+    const { hass } = makeHass({
+      initialSchedule: {
+        baseline: [{ at: '06:00', low: 20, high: 23 }],
+        current: [],
+      },
+    });
+    const el = await tab(hass);
+    const deleteBtn = el
+      .shadowRoot!.querySelector('li.row')!
+      .querySelector<HTMLButtonElement>('button.danger')!;
+    // Dispatch a keydown sourced from the button (target === deleteBtn);
+    // the row-level handler must be a no-op so the native click flow
+    // owns the Enter→click synthesis.
+    deleteBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await el.updateComplete;
+    // The Edit dialog must NOT have opened from the row keydown handler.
+    expect(el.shadowRoot!.querySelector('transition-edit-dialog')).toBeNull();
+  });
+
+  it('Escape on the confirm row dismisses it without writing', async () => {
+    const { hass } = makeHass({
+      initialSchedule: {
+        baseline: [{ at: '06:00', low: 20, high: 23 }],
+        current: [],
+      },
+    });
+    const el = await tab(hass);
+    el.shadowRoot!.querySelector('li.row')!
+      .querySelector<HTMLButtonElement>('button.danger')!
+      .click();
+    await el.updateComplete;
+    const confirm = el.shadowRoot!.querySelector('li.row.confirm')!;
+    confirm.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('li.row.confirm')).toBeNull();
+    expect(hass.callService).not.toHaveBeenCalled();
+  });
+
+  it('restores focus to the originating row after Cancel on the confirm', async () => {
+    const { hass } = makeHass({
+      initialSchedule: {
+        baseline: [{ at: '06:00', low: 20, high: 23 }],
+        current: [],
+      },
+    });
+    const el = await tab(hass);
+    // Open confirm via the Delete button on the row.
+    el.shadowRoot!.querySelector('li.row')!
+      .querySelector<HTMLButtonElement>('button.danger')!
+      .click();
+    await el.updateComplete;
+    // Cancel via the confirm row.
+    el.shadowRoot!.querySelector('li.row.confirm')!
+      .querySelector<HTMLButtonElement>('button.secondary')!
+      .click();
+    // Two passes: first re-render swaps confirm → row; second microtask
+    // runs the deferred `_restoreFocus()` once the new row is mounted.
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    // Focus lands on the row's Delete button (the original trigger).
+    const restored = el.shadowRoot!.activeElement;
+    expect(restored).not.toBeNull();
+    const row = el.shadowRoot!.querySelector<HTMLElement>('li.row[data-at="06:00"]');
+    expect(restored).toBe(row!.querySelector('button.danger'));
+  });
+
+  it('restores focus to the Add button after dialog cancel from Add flow', async () => {
+    const { hass } = makeHass({ initialSchedule: null });
+    const el = await tab(hass);
+    const addBtn = el.shadowRoot!.querySelector<HTMLButtonElement>('.list-toolbar button.primary')!;
+    addBtn.click();
+    await el.updateComplete;
+    const dlg = el.shadowRoot!.querySelector('transition-edit-dialog')!;
+    dlg.dispatchEvent(new CustomEvent('dialog-cancel', { bubbles: true, composed: true }));
+    await el.updateComplete;
+    // _exitDialogMode defers focus restore one microtask to wait for the
+    // dialog DOM to be torn down. Advance the queue so the deferred
+    // updateComplete-chain resolves and we can observe activeElement.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(el.shadowRoot!.activeElement).toBe(
+      el.shadowRoot!.querySelector('.list-toolbar button.primary'),
+    );
+  });
+
+  it('does not subscribe to chart events (negative: chart is read-only)', async () => {
+    const { hass } = makeHass({
+      initialSchedule: {
+        baseline: [{ at: '06:00', low: 20, high: 23 }],
+        current: [],
+      },
+    });
+    const el = await tab(hass);
+    const chartEl = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
+    // Dispatch a synthetic edit event — schedule-tab should NOT respond.
+    chartEl.dispatchEvent(
+      new CustomEvent('transition-edit', {
+        detail: { transition: { at: '06:00', low: 20, high: 23 } },
         bubbles: true,
         composed: true,
       }),
     );
     await el.updateComplete;
-    const dlg2 = el.shadowRoot!.querySelector('transition-edit-dialog')!;
-    dlg2.dispatchEvent(new CustomEvent('dialog-cancel', { bubbles: true, composed: true }));
-    await el.updateComplete;
     expect(el.shadowRoot!.querySelector('transition-edit-dialog')).toBeNull();
-    expect(hass.callService).not.toHaveBeenCalled();
   });
 
   it('resubscribes when the active profile flips', async () => {
@@ -532,11 +732,11 @@ describe('comfort-band-schedule-tab', () => {
     const el = await mount('comfort-band-schedule-tab', { hass, zone: 'gym' });
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
-    // First subscribe delivered one transition → two handles (low + high).
+    // First subscribe delivered one transition → two markers (low + high).
     expect(
       el
         .shadowRoot!.querySelector('comfort-band-schedule-chart')!
-        .shadowRoot!.querySelectorAll('.handle').length,
+        .shadowRoot!.querySelectorAll('.marker').length,
     ).toBe(2);
 
     // Flip the profile so the second (failing) subscribe runs.
@@ -618,14 +818,13 @@ describe('comfort-band-schedule-tab', () => {
     );
     const el = await tab(fake.hass);
 
-    const editor = el.shadowRoot!.querySelector('comfort-band-schedule-chart')!;
-    editor.dispatchEvent(
-      new CustomEvent('transition-delete', {
-        detail: { at: '06:00' },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    // Drive the delete via the list UI (click Delete → click Confirm).
+    const row = el.shadowRoot!.querySelector('li.row')!;
+    row.querySelector<HTMLButtonElement>('button.danger')!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector('li.row.confirm')!
+      .querySelector<HTMLButtonElement>('button.danger')!
+      .click();
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
 
