@@ -530,4 +530,31 @@ describe('comfort-band-history-chart', () => {
     const el = await chart({ hass: makeHass(stubConnection()), roomEntity: '' });
     expect(el.shadowRoot!.textContent).toContain('No room temperature');
   });
+
+  // ----- v0.8.4: linear band paths -----
+
+  it('renders the Low / High band series as linear (no stepped paths)', async () => {
+    // v0.8.4 dropped `paths: STEPPED_PATHS` on the band series so the
+    // backend's v0.10.0 ramp smoothing displays as a smooth curve
+    // instead of a fine staircase. This test pins that decision so a
+    // future "let's bring back stepped for X" change doesn't silently
+    // revert the v0.10.0 visual.
+    const sub = captureSubscription();
+    const el = await chart({ hass: makeHass(sub.connection), ...FULL_PROPS_WITH_OVERLAYS });
+    await new Promise((r) => setTimeout(r, 0));
+    (el as unknown as { _loading: boolean })._loading = false;
+    await el.updateComplete;
+
+    const opts = (
+      el as unknown as {
+        _buildOpts: (w: number) => { series: { label?: string; paths?: unknown }[] };
+      }
+    )._buildOpts(400);
+    const lowSeries = opts.series.find((s) => s.label === 'Low band');
+    const highSeries = opts.series.find((s) => s.label === 'High band');
+    expect(lowSeries).toBeDefined();
+    expect(highSeries).toBeDefined();
+    expect(lowSeries!.paths).toBeUndefined();
+    expect(highSeries!.paths).toBeUndefined();
+  });
 });

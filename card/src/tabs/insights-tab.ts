@@ -2,7 +2,10 @@
  * `<comfort-band-insights-tab>` — Insights tab content.
  *
  * Renders the unified `<comfort-band-history-chart>`: room temperature,
- * effective low/high band edges (stepped), heating/cooling shading,
+ * effective low/high band edges (linear, so v0.10.0 backend band-ramp
+ * smoothing displays as the smooth curve it actually is — for non-ramp
+ * zones the values are constant between transitions so the rendering
+ * is visually equivalent to stepped), heating/cooling shading,
  * plus an optional apparent-temperature overlay AND optional humidity
  * overlay on a right-side y2 axis. v0.8.2 folded the separate
  * `<comfort-band-apparent-chart>` into the unified chart — stacking
