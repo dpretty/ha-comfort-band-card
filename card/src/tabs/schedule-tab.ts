@@ -1,13 +1,20 @@
 /**
  * `<comfort-band-schedule-tab>` — Schedule tab content.
  *
+ * **v0.9.0**: list-first editor. The chart (`<comfort-band-schedule-chart>`)
+ * is now a read-only visualization. The list below it is the primary
+ * editor: each row has explicit Edit + Delete buttons, plus an "Add
+ * transition" button in the toolbar above the list. Delete asks for
+ * inline confirmation (no more long-press surprise from v0.8.x).
+ *
  * Workflow:
  *   1. On mount, open a `comfort_band/subscribe_schedule` subscription for
  *      the active (zone, profile). The backend sends the current state
  *      immediately, then one event per future change — from any source.
- *   2. Render the timeline editor + the transitions.
- *   3. User taps empty timeline → add dialog (inline). User taps a
- *      transition → edit dialog. Long-press → delete event.
+ *   2. Render the read-only chart visualization + the editable list.
+ *   3. User clicks Add → dialog (inline) seeded with sensible defaults.
+ *      User clicks Edit or taps a row → dialog seeded with that row.
+ *      User clicks Delete → inline confirm row replaces the normal row.
  *   4. All edits persist via `comfort_band.set_schedule` (full schedule
  *      replacement — atomic and simpler than per-transition mutations).
  *      The subscription delivers the echo, so two cards on different
@@ -32,6 +39,34 @@ function compareTransitions(a: Transition, b: Transition): number {
   return parseTime(a.at) - parseTime(b.at);
 }
 
+const SLOT_MINUTES = 15;
+const DAY_MINUTES = 24 * 60;
+
+/** Pick the first unoccupied 15-min slot after the latest existing transition,
+ *  wrapping past midnight if needed; falls back to 06:00 for an empty schedule.
+ *  Ensures the Add dialog never opens with a default `at` that collides with
+ *  an existing transition (the save handler would otherwise reject it). */
+function nextDefaultTime(transitions: Transition[]): string {
+  if (transitions.length === 0) return '06:00';
+  const taken = new Set(transitions.map((t) => parseTime(t.at)));
+  const latest = Math.max(...taken);
+  // Try slots starting one step after the latest, wrapping at midnight.
+  // 96 slots in a day → bounded loop, guaranteed termination.
+  for (let i = 1; i <= DAY_MINUTES / SLOT_MINUTES; i++) {
+    const mins = (latest + i * SLOT_MINUTES) % DAY_MINUTES;
+    if (!taken.has(mins)) return formatHHMM(mins);
+  }
+  // Schedule is full of every 15-min slot (96 entries). Vanishingly unlikely
+  // but degrade gracefully — the dialog's validator will reject the duplicate.
+  return formatHHMM((latest + SLOT_MINUTES) % DAY_MINUTES);
+}
+
+function formatHHMM(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
 type Mode = 'list' | 'add' | 'edit';
 
 @customElement('comfort-band-schedule-tab')
@@ -46,13 +81,26 @@ export class ComfortBandScheduleTab extends LitElement {
   @state() private _mode: Mode = 'list';
   @state() private _editing: Transition | null = null;
   @state() private _newAt = '06:00';
+  /** `at` of the row currently showing the inline delete-confirm UI. Cleared
+   *  by Cancel, by Confirm (after the write succeeds), or automatically in
+   *  `willUpdate` when a remote write echoes back without the targeted row. */
+  @state() private _confirmingDeleteAt: string | null = null;
   // Plain fields — `_mode` is the @state that drives re-renders; these are
   // read once when the dialog opens. Marking them @state would re-render on
   // every assignment. **Contract:** any handler that sets these MUST set
   // them BEFORE flipping `_mode = 'add'`, otherwise the dialog renders with
-  // stale defaults. `_onAdd` and the dialog-close handlers honour this.
+  // stale defaults.
   private _newLow: number | undefined;
   private _newHigh: number | undefined;
+  /** Re-query-by-key trigger descriptor — restored on dismiss so keyboard
+   *  users don't get yanked to body. Storing a *descriptor* (rather than a
+   *  DOM reference) survives the row's DOM being recreated by the
+   *  list re-render after a save / cancel — a DOM ref would be disconnected
+   *  by then and `focus()` would silently no-op. */
+  private _focusTrigger:
+    | { kind: 'add' }
+    | { kind: 'row'; at: string; button?: 'edit' | 'delete' }
+    | null = null;
   private _unsub?: UnsubscribeFunc;
   // Incremented on every (re)subscribe and unsubscribe so stale callbacks
   // and slow `subscribeMessage` round-trips from a superseded attempt can
@@ -94,28 +142,98 @@ export class ComfortBandScheduleTab extends LitElement {
       .error {
         color: var(--error-color, #b71c1c);
       }
+      .list-toolbar {
+        display: flex;
+        justify-content: flex-end;
+        margin: var(--cb-gap-md) 0 var(--cb-gap-sm);
+      }
       .list {
         list-style: none;
         padding: 0;
-        margin: var(--cb-gap-md) 0 0;
+        margin: 0;
         display: flex;
         flex-direction: column;
         gap: 4px;
       }
-      .list li {
+      .row {
         display: flex;
-        justify-content: space-between;
+        align-items: center;
+        gap: var(--cb-gap-sm);
         font-size: 13px;
-        padding: 6px 8px;
+        padding: 8px 8px;
         border-radius: 6px;
-      }
-      .list li:hover {
-        background: var(--cb-track-bg);
+        /* Explicit color — without this, .list li inherits the host's
+           ambient color which in HA dark theme can resolve dark-on-dark.
+           The v0.8.x bug. */
+        color: var(--cb-text-primary);
         cursor: pointer;
       }
-      .list .at {
+      .row:hover,
+      .row:focus-visible {
+        background: var(--cb-track-bg);
+        outline: none;
+      }
+      .row:focus-visible {
+        outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
+        outline-offset: 1px;
+      }
+      .row .at {
         font-variant-numeric: tabular-nums;
         font-weight: 500;
+        color: var(--cb-text-primary);
+        min-width: 48px;
+      }
+      .row .band {
+        color: var(--cb-text-secondary);
+        flex: 1;
+      }
+      .row .actions {
+        display: flex;
+        gap: 4px;
+      }
+      .row.confirm {
+        background: var(--cb-track-bg);
+        cursor: default;
+      }
+      .row.confirm .confirm-text {
+        flex: 1;
+        color: var(--cb-text-primary);
+      }
+      /* Buttons — copied from transition-edit-dialog.ts conventions so the
+         list buttons match the dialog buttons visually. */
+      .button {
+        font: inherit;
+        font-size: 13px;
+        padding: 6px 12px;
+        /* WCAG 2.5.5: 44×44 minimum touch target on action buttons. */
+        min-height: 44px;
+        border-radius: var(--cb-radius-pill);
+        border: 1px solid transparent;
+        cursor: pointer;
+      }
+      .button:focus-visible {
+        outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
+        outline-offset: 1px;
+      }
+      .button.primary {
+        background: var(--primary-color, #03a9f4);
+        color: var(--text-primary-color, #ffffff);
+      }
+      .button.secondary {
+        background: transparent;
+        border-color: var(--divider-color, #cccccc);
+        color: var(--cb-text-primary);
+      }
+      .button.danger {
+        background: transparent;
+        color: var(--error-color, #b71c1c);
+        border-color: var(--divider-color, #cccccc);
+      }
+      .empty {
+        text-align: center;
+        padding: var(--cb-gap-lg);
+        color: var(--cb-text-secondary);
+        font-size: 13px;
       }
     `,
   ];
@@ -124,6 +242,22 @@ export class ComfortBandScheduleTab extends LitElement {
     if (changed.has('hass') && this.hass && this._profile === '') {
       this._profile = readActiveProfile(this.hass) ?? 'home';
       void this._subscribe();
+    }
+    // Auto-clear the inline delete-confirm if a remote write removed the
+    // targeted row out from under us. Without this guard, Confirm would
+    // attempt to write `next = _transitions.filter(...)` against a list that
+    // already excluded the target → no-op write (mostly harmless) but the
+    // confirm UI stays visible against a row that no longer exists.
+    //
+    // `changed.has(...)` is cast against `keyof this` because Lit's
+    // PropertyValues<this> doesn't include private `_`-prefixed fields in
+    // the public `keyof` set; the cast is the documented escape hatch.
+    if (
+      (changed as Map<PropertyKey, unknown>).has('_transitions') &&
+      this._confirmingDeleteAt !== null &&
+      !this._transitions.some((t) => t.at === this._confirmingDeleteAt)
+    ) {
+      this._confirmingDeleteAt = null;
     }
   }
 
@@ -134,6 +268,18 @@ export class ComfortBandScheduleTab extends LitElement {
         this._profile = next;
         void this._resubscribe();
       }
+    }
+    // When the inline confirm appears, focus the Cancel button (safe
+    // default per WCAG / HIG conventions for destructive actions). Doing
+    // this in `updated()` ensures the new DOM is attached before we focus.
+    if (
+      (changed as Map<PropertyKey, unknown>).has('_confirmingDeleteAt') &&
+      this._confirmingDeleteAt !== null
+    ) {
+      const cancel = this.shadowRoot?.querySelector<HTMLButtonElement>(
+        'li.row.confirm .button.secondary',
+      );
+      cancel?.focus();
     }
   }
 
@@ -214,38 +360,91 @@ export class ComfortBandScheduleTab extends LitElement {
     return this._subscribe();
   }
 
-  private _onAdd = (event: CustomEvent<{ at: string; low?: number; high?: number }>) => {
-    this._newAt = event.detail.at;
-    this._newLow = event.detail.low;
-    this._newHigh = event.detail.high;
+  // ----- list interaction handlers -----
+
+  private _onAddClicked = () => {
+    this._focusTrigger = { kind: 'add' };
+    this._newAt = nextDefaultTime(this._transitions);
+    this._newLow = defaultLow(this._transitions);
+    this._newHigh = defaultHigh(this._transitions);
     this._editing = null;
     this._mode = 'add';
   };
 
-  private _onEdit = (event: CustomEvent<{ transition: Transition }>) => {
-    this._editing = event.detail.transition;
+  private _openEdit(transition: Transition, source: 'row' | 'edit'): void {
+    this._focusTrigger = {
+      kind: 'row',
+      at: transition.at,
+      button: source === 'edit' ? 'edit' : undefined,
+    };
+    this._editing = transition;
     this._mode = 'edit';
+  }
+
+  private _onRowClicked = (transition: Transition) => (_event: Event) => {
+    // Buttons inside the row stop propagation themselves; this fires only
+    // when the row body (the span columns) is clicked.
+    this._openEdit(transition, 'row');
   };
 
-  private _onDelete = async (event: CustomEvent<{ at: string }>) => {
-    if (!this.hass) return;
-    const next = this._transitions.filter((t) => t.at !== event.detail.at);
-    await this._writeSchedule(next);
+  private _onRowKeydown = (transition: Transition) => (event: KeyboardEvent) => {
+    // Only handle keydown events that originated on the row itself — not on
+    // an in-row button. Without this guard, pressing Enter on the focused
+    // Delete button would bubble to the row's keydown listener, fire
+    // `preventDefault()` first, and suppress the button's synthetic click
+    // (so Delete would open the Edit dialog instead of the confirm).
+    if (event.target !== event.currentTarget) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this._openEdit(transition, 'row');
+      return;
+    }
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      event.preventDefault();
+      this._focusTrigger = { kind: 'row', at: transition.at };
+      this._confirmingDeleteAt = transition.at;
+    }
   };
 
-  private _onUpdate = async (
-    event: CustomEvent<{ oldAt: string; transition: Transition }>,
-  ): Promise<void> => {
-    if (!this.hass) return;
-    const { oldAt, transition } = event.detail;
-    // Drop the original entry by its old `at`, drop any collision at the new
-    // `at`, then insert and sort. Same shape as `_onDialogSave`.
-    const next = this._transitions
-      .filter((t) => t.at !== oldAt && t.at !== transition.at)
-      .concat(transition)
-      .sort(compareTransitions);
-    await this._writeSchedule(next);
+  private _onEditClicked = (transition: Transition) => (event: Event) => {
+    event.stopPropagation();
+    this._openEdit(transition, 'edit');
   };
+
+  private _onDeleteClicked = (transition: Transition) => (event: Event) => {
+    event.stopPropagation();
+    this._focusTrigger = { kind: 'row', at: transition.at, button: 'delete' };
+    this._confirmingDeleteAt = transition.at;
+  };
+
+  private _onCancelDelete = (event: Event) => {
+    event.stopPropagation();
+    this._confirmingDeleteAt = null;
+    // Defer focus restore until the re-render replaces the confirm row
+    // with the regular row (which carries the `data-at` attribute we
+    // query in `_restoreFocus`).
+    this.updateComplete.then(() => this._restoreFocus());
+  };
+
+  private _onConfirmDelete = async (event: Event): Promise<void> => {
+    event.stopPropagation();
+    const at = this._confirmingDeleteAt;
+    if (!at || !this.hass) return;
+    this._confirmingDeleteAt = null;
+    const next = this._transitions.filter((t) => t.at !== at);
+    await this._writeSchedule(next);
+    this.updateComplete.then(() => this._restoreFocus());
+  };
+
+  private _onConfirmKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this._confirmingDeleteAt = null;
+      this.updateComplete.then(() => this._restoreFocus());
+    }
+  };
+
+  // ----- dialog handlers -----
 
   private _onDialogSave = async (event: CustomEvent<{ transition: Transition }>): Promise<void> => {
     const incoming = event.detail.transition;
@@ -268,36 +467,65 @@ export class ComfortBandScheduleTab extends LitElement {
     }
     next.sort(compareTransitions);
     await this._writeSchedule(next);
-    this._mode = 'list';
-    this._editing = null;
-    this._newLow = undefined;
-    this._newHigh = undefined;
+    this._exitDialogMode();
   };
 
   private _onDialogDelete = async (event: CustomEvent<{ at: string }>): Promise<void> => {
     const next = this._transitions.filter((t) => t.at !== event.detail.at);
     await this._writeSchedule(next);
-    this._mode = 'list';
-    this._editing = null;
-    this._newLow = undefined;
-    this._newHigh = undefined;
+    this._exitDialogMode();
   };
 
   private _onDialogCancel = () => {
+    this._exitDialogMode();
+  };
+
+  private _exitDialogMode(): void {
     this._mode = 'list';
     this._editing = null;
     this._newLow = undefined;
     this._newHigh = undefined;
-  };
+    // Defer focus restore so the dialog's DOM is gone before we try to focus
+    // the trigger — focusing a not-yet-attached element silently no-ops.
+    this.updateComplete.then(() => this._restoreFocus());
+  }
+
+  private _restoreFocus(): void {
+    const trigger = this._focusTrigger;
+    this._focusTrigger = null;
+    if (!trigger) return;
+    const root = this.shadowRoot;
+    if (!root) return;
+    let target: HTMLElement | null = null;
+    if (trigger.kind === 'add') {
+      target = root.querySelector<HTMLElement>('.list-toolbar button.primary');
+    } else {
+      // `:` inside a quoted attribute-selector value is a literal; no escape
+      // needed. `HH:MM` strings contain only digits and `:`, both of which
+      // are safe in this context.
+      const row = root.querySelector<HTMLElement>(`li.row[data-at="${trigger.at}"]`);
+      if (row && trigger.button === 'edit') {
+        target = row.querySelector<HTMLElement>('button.secondary');
+      } else if (row && trigger.button === 'delete') {
+        target = row.querySelector<HTMLElement>('button.danger');
+      } else {
+        target = row;
+      }
+    }
+    // Fall back to the Add button when the originating row was deleted —
+    // keeps focus visible somewhere sensible rather than dropping to body.
+    target = target ?? root.querySelector<HTMLElement>('.list-toolbar button.primary');
+    target?.focus();
+  }
 
   private async _writeSchedule(transitions: Transition[]): Promise<void> {
     if (!this.hass) return;
     // Apply the optimistic update BEFORE the await so a rapidly-fired
-    // second call (e.g. holding ArrowRight on a chart handle) reads the
-    // post-write state rather than the stale pre-write snapshot. The
-    // subscription will echo the persisted (and normalised) state right
-    // after; on failure the catch restores via `_error` and the next echo
-    // will overwrite `_transitions` back to the server's authoritative copy.
+    // second call reads the post-write state rather than the stale
+    // pre-write snapshot. The subscription will echo the persisted (and
+    // normalised) state right after; on failure the catch restores via
+    // `_error` and the next echo will overwrite `_transitions` back to
+    // the server's authoritative copy.
     const previous = this._transitions;
     this._transitions = transitions;
     try {
@@ -347,44 +575,82 @@ export class ComfortBandScheduleTab extends LitElement {
           : html`
               <comfort-band-schedule-chart
                 .transitions=${this._transitions}
-                @transition-add=${this._onAdd}
-                @transition-edit=${this._onEdit}
-                @transition-delete=${this._onDelete}
-                @transition-update=${this._onUpdate}
               ></comfort-band-schedule-chart>
+              <div class="list-toolbar">
+                <button class="button primary" @click=${this._onAddClicked}>
+                  + Add transition
+                </button>
+              </div>
               ${this._renderList()}
             `}
     `;
   }
 
   private _renderList() {
-    if (this._transitions.length === 0) return nothing;
+    if (this._transitions.length === 0) {
+      return html`<div class="empty">
+        No transitions yet. Use “Add transition” to create one.
+      </div>`;
+    }
     return html`
-      <ul class="list">
-        ${this._transitions.map((t) => {
-          const open = () =>
-            this._onEdit(new CustomEvent('transition-edit', { detail: { transition: t } }));
-          return html`
-            <li
-              role="button"
-              tabindex="0"
-              aria-label="Edit transition at ${t.at}, ${t.low.toFixed(1)} to ${t.high.toFixed(
-                1,
-              )} degrees"
-              @click=${open}
-              @keydown=${(e: KeyboardEvent) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  open();
-                }
-              }}
-            >
-              <span class="at">${t.at}</span>
-              <span>${t.low.toFixed(1)}° – ${t.high.toFixed(1)}°</span>
-            </li>
-          `;
-        })}
+      <ul class="list" role="list">
+        ${this._transitions.map((t) =>
+          this._confirmingDeleteAt === t.at ? this._renderConfirmRow(t) : this._renderRow(t),
+        )}
       </ul>
+    `;
+  }
+
+  private _renderRow(t: Transition) {
+    const ariaLabel = `Edit transition at ${t.at}, ${t.low.toFixed(1)} to ${t.high.toFixed(
+      1,
+    )} degrees`;
+    return html`
+      <li
+        class="row"
+        role="listitem"
+        tabindex="0"
+        data-at=${t.at}
+        aria-label=${ariaLabel}
+        @click=${this._onRowClicked(t)}
+        @keydown=${this._onRowKeydown(t)}
+      >
+        <span class="at">${t.at}</span>
+        <span class="band">${t.low.toFixed(1)}° – ${t.high.toFixed(1)}°</span>
+        <span class="actions">
+          <button
+            class="button secondary"
+            aria-label="Edit transition at ${t.at}"
+            @click=${this._onEditClicked(t)}
+          >
+            Edit
+          </button>
+          <button
+            class="button danger"
+            aria-label="Delete transition at ${t.at}"
+            @click=${this._onDeleteClicked(t)}
+          >
+            Delete
+          </button>
+        </span>
+      </li>
+    `;
+  }
+
+  private _renderConfirmRow(t: Transition) {
+    return html`
+      <li
+        class="row confirm"
+        role="alertdialog"
+        aria-label="Delete transition at ${t.at}?"
+        @keydown=${this._onConfirmKeydown}
+      >
+        <span class="confirm-text">Delete transition at ${t.at}?</span>
+        <span class="actions">
+          <button class="button secondary" @click=${this._onCancelDelete}>Cancel</button>
+          <button class="button danger" @click=${this._onConfirmDelete}>Delete</button>
+        </span>
+      </li>
     `;
   }
 }
