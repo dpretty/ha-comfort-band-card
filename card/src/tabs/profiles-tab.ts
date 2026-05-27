@@ -259,7 +259,7 @@ export class ComfortBandProfilesTab extends LitElement {
         min-width: 140px;
         padding: 4px;
         background: var(--card-background-color, var(--primary-background-color, #ffffff));
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: var(--cb-radius-card);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -275,7 +275,7 @@ export class ComfortBandProfilesTab extends LitElement {
         padding: 8px 12px;
         border-radius: 4px;
         cursor: pointer;
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       .menu button:hover:not([disabled]) {
         background: var(--cb-track-bg);
@@ -295,7 +295,7 @@ export class ComfortBandProfilesTab extends LitElement {
       .confirm-delete {
         padding: var(--cb-gap-md);
         background: var(--card-background-color, var(--primary-background-color, #ffffff));
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
         border-radius: var(--cb-radius-card);
       }
       .confirm-delete h3 {
@@ -325,7 +325,7 @@ export class ComfortBandProfilesTab extends LitElement {
       .button.secondary {
         background: transparent;
         border-color: var(--divider-color, #cccccc);
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       .button.danger {
         background: transparent;

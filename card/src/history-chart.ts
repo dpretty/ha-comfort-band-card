@@ -397,6 +397,12 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     // uPlot's default black (invisible on HA's dark theme). Resolve
     // once here and reuse for the axis stroke AND the humidity series
     // stroke (both intentionally share the secondary-text token).
+    // `_resolveColor` uses `getComputedStyle().getPropertyValue()` which
+    // returns the var's substituted string verbatim. Reading from the
+    // cb-* tokens would produce the literal "light-dark(...)" text when
+    // HA's tokens are unset — canvas can't parse that. Read from the
+    // raw HA tokens (which resolve to plain color strings) and supply
+    // a hex fallback for the unset case.
     const secondaryText = this._resolveColor('--secondary-text-color', '#727272');
     const gridStroke = this._resolveColor('--divider-color', '#e0e0e0');
 
@@ -590,7 +596,7 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       ${this._hasHumidity
         ? this._toggleItem(
             'Humidity',
-            html`<span class="swatch" style="background:var(--secondary-text-color)"></span>`,
+            html`<span class="swatch" style="background:var(--cb-text-secondary)"></span>`,
             'Humidity (%, right axis)',
           )
         : nothing}

@@ -58,7 +58,7 @@ export class ComfortBandCardEditor extends LitElement {
         padding: 8px 32px 8px 8px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 6px;
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
         background-color: var(
           --mdc-text-field-fill-color,
           var(--secondary-background-color, var(--card-background-color, #ffffff))
@@ -86,7 +86,7 @@ export class ComfortBandCardEditor extends LitElement {
          theme-aware defaults so most cases are readable in dark mode. */
       option {
         background-color: var(--card-background-color, #ffffff);
-        color: var(--primary-text-color, #212121);
+        color: var(--cb-text-primary);
       }
       .checkbox-row {
         display: flex;
