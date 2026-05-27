@@ -314,9 +314,7 @@ describe('comfort-band-schedule-tab', () => {
     const { hass } = makeHass({ initialSchedule: null });
     const el = await tab(hass);
 
-    const addBtn = el.shadowRoot!.querySelector<HTMLButtonElement>(
-      '.list-toolbar button.primary',
-    )!;
+    const addBtn = el.shadowRoot!.querySelector<HTMLButtonElement>('.list-toolbar button.primary')!;
     expect(addBtn).not.toBeNull();
     addBtn.click();
     await el.updateComplete;
@@ -343,9 +341,7 @@ describe('comfort-band-schedule-tab', () => {
     // Empty schedule → default to 06:00 with 19/22.
     const { hass: hassEmpty } = makeHass({ initialSchedule: null });
     const elEmpty = await tab(hassEmpty);
-    elEmpty
-      .shadowRoot!.querySelector<HTMLButtonElement>('.list-toolbar button.primary')!
-      .click();
+    elEmpty.shadowRoot!.querySelector<HTMLButtonElement>('.list-toolbar button.primary')!.click();
     await elEmpty.updateComplete;
     const dlgEmpty = elEmpty.shadowRoot!.querySelector('transition-edit-dialog') as HTMLElement & {
       transition: { at: string; low: number; high: number } | null;
@@ -361,9 +357,7 @@ describe('comfort-band-schedule-tab', () => {
       },
     });
     const elFull = await tab(hassFull);
-    elFull
-      .shadowRoot!.querySelector<HTMLButtonElement>('.list-toolbar button.primary')!
-      .click();
+    elFull.shadowRoot!.querySelector<HTMLButtonElement>('.list-toolbar button.primary')!.click();
     await elFull.updateComplete;
     const dlgFull = elFull.shadowRoot!.querySelector('transition-edit-dialog') as HTMLElement & {
       transition: { at: string; low: number; high: number } | null;
@@ -476,9 +470,7 @@ describe('comfort-band-schedule-tab', () => {
     expect(empty).not.toBeNull();
     expect(empty!.textContent).toContain('Add transition');
     // The Add button stays visible regardless.
-    expect(
-      el.shadowRoot!.querySelector('.list-toolbar button.primary'),
-    ).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('.list-toolbar button.primary')).not.toBeNull();
   });
 
   it('Enter on an in-row button does not bubble to open the edit dialog', async () => {
@@ -494,8 +486,8 @@ describe('comfort-band-schedule-tab', () => {
       },
     });
     const el = await tab(hass);
-    const deleteBtn = el.shadowRoot!
-      .querySelector('li.row')!
+    const deleteBtn = el
+      .shadowRoot!.querySelector('li.row')!
       .querySelector<HTMLButtonElement>('button.danger')!;
     // Dispatch a keydown sourced from the button (target === deleteBtn);
     // the row-level handler must be a no-op so the native click flow
@@ -514,8 +506,7 @@ describe('comfort-band-schedule-tab', () => {
       },
     });
     const el = await tab(hass);
-    el.shadowRoot!
-      .querySelector('li.row')!
+    el.shadowRoot!.querySelector('li.row')!
       .querySelector<HTMLButtonElement>('button.danger')!
       .click();
     await el.updateComplete;
@@ -535,14 +526,12 @@ describe('comfort-band-schedule-tab', () => {
     });
     const el = await tab(hass);
     // Open confirm via the Delete button on the row.
-    el.shadowRoot!
-      .querySelector('li.row')!
+    el.shadowRoot!.querySelector('li.row')!
       .querySelector<HTMLButtonElement>('button.danger')!
       .click();
     await el.updateComplete;
     // Cancel via the confirm row.
-    el.shadowRoot!
-      .querySelector('li.row.confirm')!
+    el.shadowRoot!.querySelector('li.row.confirm')!
       .querySelector<HTMLButtonElement>('button.secondary')!
       .click();
     // Two passes: first re-render swaps confirm → row; second microtask
@@ -559,9 +548,7 @@ describe('comfort-band-schedule-tab', () => {
   it('restores focus to the Add button after dialog cancel from Add flow', async () => {
     const { hass } = makeHass({ initialSchedule: null });
     const el = await tab(hass);
-    const addBtn = el.shadowRoot!.querySelector<HTMLButtonElement>(
-      '.list-toolbar button.primary',
-    )!;
+    const addBtn = el.shadowRoot!.querySelector<HTMLButtonElement>('.list-toolbar button.primary')!;
     addBtn.click();
     await el.updateComplete;
     const dlg = el.shadowRoot!.querySelector('transition-edit-dialog')!;
@@ -835,8 +822,7 @@ describe('comfort-band-schedule-tab', () => {
     const row = el.shadowRoot!.querySelector('li.row')!;
     row.querySelector<HTMLButtonElement>('button.danger')!.click();
     await el.updateComplete;
-    el.shadowRoot!
-      .querySelector('li.row.confirm')!
+    el.shadowRoot!.querySelector('li.row.confirm')!
       .querySelector<HTMLButtonElement>('button.danger')!
       .click();
     await new Promise((r) => setTimeout(r, 0));

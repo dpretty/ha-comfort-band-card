@@ -588,9 +588,7 @@ export class ComfortBandScheduleTab extends LitElement {
 
   private _renderList() {
     if (this._transitions.length === 0) {
-      return html`<div class="empty">
-        No transitions yet. Use “Add transition” to create one.
-      </div>`;
+      return html`<div class="empty">No transitions yet. Use “Add transition” to create one.</div>`;
     }
     return html`
       <ul class="list" role="list">

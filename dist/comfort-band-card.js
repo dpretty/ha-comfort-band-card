@@ -5735,9 +5735,7 @@ let ut = class extends ze {
     `;
   }
   _renderList() {
-    return this._transitions.length === 0 ? x`<div class="empty">
-        No transitions yet. Use “Add transition” to create one.
-      </div>` : x`
+    return this._transitions.length === 0 ? x`<div class="empty">No transitions yet. Use “Add transition” to create one.</div>` : x`
       <ul class="list" role="list">
         ${this._transitions.map(
       (e) => this._confirmingDeleteAt === e.at ? this._renderConfirmRow(e) : this._renderRow(e)
