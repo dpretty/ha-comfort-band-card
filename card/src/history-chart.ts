@@ -2,10 +2,14 @@
  * `<comfort-band-history-chart>` — the single Insights-tab chart.
  *
  * Always renders: room temperature, the effective low + high band edges
- * (as stepped lines — the schedule sets discrete values, so straight
- * line interpolation between sample points would lie about what control
- * is actually doing), and `current_action` as translucent shaded bars
- * behind everything (heating = red, cooling = blue, idle = blank).
+ * (as linear lines so v0.10.0's band-ramp smoothing displays as the
+ * smooth curve it actually is — between transitions the values are
+ * constant so linear and stepped render the same flat line; only at
+ * a v0.9.x-style instant transition does linear show a tiny diagonal
+ * over one sample interval instead of a vertical step, which is a fair
+ * visual trade for accurate ramp rendering on v0.10.0 zones), and
+ * `current_action` as translucent shaded bars behind everything
+ * (heating = red, cooling = blue, idle = blank).
  *
  * Conditionally renders (when the entity props are set):
  *   - apparent temperature (dashed, in the room colour — visual cue
@@ -53,15 +57,6 @@ interface ActionInterval {
  *  the uPlot options, the ResizeObserver setSize call, AND the CSS
  *  `.chart-host` rule (interpolated via `unsafeCSS` below). */
 const CHART_HEIGHT = 260;
-
-/** Stepped-path renderer for the discrete band series. Hoisted to
- *  module scope so the same closure is reused across every re-render
- *  instead of being constructed inside each `_buildOpts` call.
- *  `align: 1` (right-aligned) means the new value takes effect AT the
- *  sample's timestamp, matching HA's "this is the value at and after
- *  `last_updated`" semantics. The optional-chaining guard handles
- *  older uPlot bundles that pre-date `uPlot.paths.stepped` (v1.6+). */
-const STEPPED_PATHS = uPlot.paths.stepped?.({ align: 1 });
 
 /** Count of always-present series: room, low, high. Named so
  *  `expectedSeriesCount` reads intentionally; if a future series is
@@ -432,7 +427,6 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
         width: 1.5,
         dash: [6, 3],
         spanGaps: true,
-        paths: STEPPED_PATHS,
         show: !this._hiddenLabels.has('Low band'),
       },
       {
@@ -441,7 +435,6 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
         width: 1.5,
         dash: [6, 3],
         spanGaps: true,
-        paths: STEPPED_PATHS,
         show: !this._hiddenLabels.has('High band'),
       },
     ];
