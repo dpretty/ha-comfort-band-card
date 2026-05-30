@@ -4,6 +4,9 @@
  * Reads live state for the zone (room, low, high, action, override) and
  * shows:
  *   - Big band gauge at the top.
+ *   - "How does it feel?" comfort-feedback pills below the gauge — each
+ *     calls `comfort_band.record_feedback` (v0.11.0+) and briefly
+ *     highlights to confirm.
  *   - Current action chip (heating / cooling / idle).
  *   - Dual-handle slider for manual_low/manual_high — any change starts
  *     an override via `comfort_band.start_override` (the slider's
@@ -20,10 +23,21 @@ import '../dual-handle-slider.js';
 import type { DualHandleSlider } from '../dual-handle-slider.js';
 import type { ZoneEntities } from '../helpers.js';
 import type { HomeAssistant } from '../types.js';
-import { cancelOverride, startOverride } from '../services.js';
+import { cancelOverride, recordFeedback, startOverride } from '../services.js';
+import type { FeedbackLabel } from '../services.js';
 import { tokens, actionColorVar, asAction, actionLabel } from '../styles.js';
 
 const HOUR_PRESETS = [1, 3, 6] as const;
+
+/** Feedback pills: service label → button text. Order = display order. */
+const FEEDBACK_PILLS: ReadonlyArray<{ label: FeedbackLabel; text: string }> = [
+  { label: 'too_cold', text: 'Too cool' },
+  { label: 'just_right', text: 'Just right' },
+  { label: 'too_hot', text: 'Too warm' },
+];
+
+/** How long the tapped pill stays highlighted after a successful record. */
+const FEEDBACK_CONFIRM_MS = 1500;
 
 @customElement('comfort-band-now-tab')
 export class ComfortBandNowTab extends LitElement {
@@ -33,6 +47,16 @@ export class ComfortBandNowTab extends LitElement {
 
   @state() private _pendingLow: number | null = null;
   @state() private _pendingHigh: number | null = null;
+  /** The pill briefly highlighted after a successful `record_feedback`. */
+  @state() private _feedbackConfirmed: FeedbackLabel | null = null;
+  /** Timer that clears `_feedbackConfirmed`; cancelled on disconnect so it
+   *  never fires `setState` on an unmounted element. */
+  private _feedbackTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Monotonic tap counter. Service calls are concurrent and may resolve
+   *  out of order, so each tap captures its seq and only claims the
+   *  highlight if it's still the latest — the last-tapped pill always wins,
+   *  regardless of which round-trip finishes first. */
+  private _feedbackSeq = 0;
 
   public static override styles = [
     tokens,
@@ -146,8 +170,46 @@ export class ComfortBandNowTab extends LitElement {
         color: #ffffff;
         border-color: transparent;
       }
+      .feedback-row {
+        display: flex;
+        gap: var(--cb-gap-sm);
+      }
+      .feedback-pill {
+        flex: 1;
+        font: inherit;
+        font-size: 13px;
+        /* WCAG 2.5.5: 44px minimum touch target. */
+        min-height: 44px;
+        padding: 6px 12px;
+        border-radius: var(--cb-radius-pill);
+        border: 1px solid var(--divider-color, #cccccc);
+        background: transparent;
+        color: var(--cb-text-primary);
+        cursor: pointer;
+      }
+      .feedback-pill:focus-visible {
+        outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
+        outline-offset: 1px;
+      }
+      .feedback-pill.confirmed {
+        background: var(--success-color, #2e7d32);
+        color: #ffffff;
+        border-color: transparent;
+      }
     `,
   ];
+
+  public override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    // Don't let a pending confirmation reset fire on an unmounted element,
+    // and drop the confirmed state so a detach/reattach (DOM move, tab
+    // switch) can't resurface a stale "Thanks!" with no timer to clear it.
+    if (this._feedbackTimer !== null) {
+      clearTimeout(this._feedbackTimer);
+      this._feedbackTimer = null;
+    }
+    this._feedbackConfirmed = null;
+  }
 
   private get _stateOf() {
     const states = this.hass?.states ?? {};
@@ -180,6 +242,27 @@ export class ComfortBandNowTab extends LitElement {
   private _onCancel = () => {
     if (!this.hass || !this.zone) return;
     void cancelOverride(this.hass, { zone: this.zone });
+  };
+
+  private _onFeedbackTap = async (label: FeedbackLabel): Promise<void> => {
+    if (!this.hass || !this.zone) return;
+    const seq = ++this._feedbackSeq;
+    try {
+      await recordFeedback(this.hass, { zone: this.zone, label });
+    } catch {
+      // Service rejected (e.g. integration older than v0.11.0). Skip the
+      // confirmation rather than show success for a write that didn't land.
+      return;
+    }
+    // A newer tap superseded this one while the service was in flight — let
+    // it own the highlight so the green flash can't land on the wrong pill.
+    if (seq !== this._feedbackSeq) return;
+    this._feedbackConfirmed = label;
+    if (this._feedbackTimer !== null) clearTimeout(this._feedbackTimer);
+    this._feedbackTimer = setTimeout(() => {
+      this._feedbackConfirmed = null;
+      this._feedbackTimer = null;
+    }, FEEDBACK_CONFIRM_MS);
   };
 
   private _onPickHours = (hours: number) => {
@@ -229,6 +312,8 @@ export class ComfortBandNowTab extends LitElement {
         <band-gauge .low=${effLow} .high=${effHigh} .room=${room} .action=${action}></band-gauge>
       </div>
 
+      ${this._renderFeedbackSection()}
+
       <section>
         <h3>Manual band</h3>
         <dual-handle-slider
@@ -243,6 +328,28 @@ export class ComfortBandNowTab extends LitElement {
       </section>
 
       ${this._renderOverrideSection(overrideActive)} ${this._renderHoursSection(overrideHours)}
+    `;
+  }
+
+  private _renderFeedbackSection() {
+    return html`
+      <section>
+        <h3>How does it feel?</h3>
+        <div class="feedback-row">
+          ${FEEDBACK_PILLS.map(
+            (pill) => html`
+              <button
+                class="feedback-pill ${this._feedbackConfirmed === pill.label ? 'confirmed' : ''}"
+                data-feedback=${pill.label}
+                aria-label="Feedback: ${pill.text}"
+                @click=${() => void this._onFeedbackTap(pill.label)}
+              >
+                ${this._feedbackConfirmed === pill.label ? 'Thanks!' : pill.text}
+              </button>
+            `,
+          )}
+        </div>
+      </section>
     `;
   }
 

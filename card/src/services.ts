@@ -1,5 +1,5 @@
 /**
- * Typed wrappers around the eight `comfort_band.*` services.
+ * Typed wrappers around the `comfort_band.*` services.
  *
  * Mirrors `custom_components/comfort_band/services.yaml`. Each call returns
  * the promise from `hass.callService` so callers can `await` for the round-trip.
@@ -94,4 +94,14 @@ export function renameProfile(
 
 export function deleteProfile(hass: HomeAssistant, args: { name: string }): Promise<unknown> {
   return hass.callService(DOMAIN, 'delete_profile', { name: args.name });
+}
+
+/** Comfort-feedback labels accepted by `comfort_band.record_feedback`. */
+export type FeedbackLabel = 'too_hot' | 'just_right' | 'too_cold';
+
+export function recordFeedback(
+  hass: HomeAssistant,
+  args: { zone: string; label: FeedbackLabel },
+): Promise<unknown> {
+  return hass.callService(DOMAIN, 'record_feedback', { zone: args.zone, label: args.label });
 }
