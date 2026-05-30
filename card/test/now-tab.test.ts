@@ -255,4 +255,106 @@ describe('comfort-band-now-tab', () => {
     // Don't render a badge in this state — it'd contradict the warning.
     expect(el.shadowRoot!.querySelector('.feels-like .driving')).toBeNull();
   });
+
+  // ----- v0.10.0: comfort feedback pills -----
+
+  it('renders three comfort-feedback pills below the gauge', async () => {
+    const el = await nowTab(makeHass());
+    const pills = el.shadowRoot!.querySelectorAll('.feedback-pill');
+    expect(pills.length).toBe(3);
+    const labels = Array.from(pills).map((p) => p.getAttribute('data-feedback'));
+    expect(labels).toEqual(['too_cold', 'just_right', 'too_hot']);
+    expect(Array.from(pills).map((p) => p.textContent!.trim())).toEqual([
+      'Too cool',
+      'Just right',
+      'Too warm',
+    ]);
+  });
+
+  it('tapping a pill calls comfort_band.record_feedback with that label', async () => {
+    const hass = makeHass();
+    const el = await nowTab(hass);
+    const warm = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-feedback="too_hot"]')!;
+    warm.click();
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+    expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'record_feedback', {
+      zone: 'gym',
+      label: 'too_hot',
+    });
+  });
+
+  it('highlights the tapped pill, then clears it after the confirm window', async () => {
+    vi.useFakeTimers();
+    try {
+      const hass = makeHass();
+      const el = await nowTab(hass);
+      const pill = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-feedback="just_right"]')!;
+      pill.click();
+      // Flush the awaited callService microtask (not a timer).
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      const confirmed = el.shadowRoot!.querySelector('[data-feedback="just_right"]')!;
+      expect(confirmed.classList.contains('confirmed')).toBe(true);
+      expect(confirmed.textContent!.trim()).toBe('Thanks!');
+
+      await vi.advanceTimersByTimeAsync(1500);
+      await el.updateComplete;
+      const cleared = el.shadowRoot!.querySelector('[data-feedback="just_right"]')!;
+      expect(cleared.classList.contains('confirmed')).toBe(false);
+      expect(cleared.textContent!.trim()).toBe('Just right');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not highlight when record_feedback rejects (e.g. integration too old)', async () => {
+    const hass = makeHass();
+    (hass.callService as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('no service'));
+    const el = await nowTab(hass);
+    const pill = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-feedback="too_cold"]')!;
+    pill.click();
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('.feedback-pill.confirmed')).toBeNull();
+  });
+
+  it('clears the pending confirm timer + confirmed state on disconnect', async () => {
+    const el = await nowTab(makeHass());
+    const pill = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-feedback="too_hot"]')!;
+    pill.click();
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+    const internals = el as unknown as { _feedbackTimer: unknown; _feedbackConfirmed: unknown };
+    expect(internals._feedbackTimer).not.toBeNull();
+    expect(internals._feedbackConfirmed).toBe('too_hot');
+    el.remove();
+    // No stale timer (would setState on an unmounted element) and no
+    // residual "Thanks!" that could resurface on reattach.
+    expect(internals._feedbackTimer).toBeNull();
+    expect(internals._feedbackConfirmed).toBeNull();
+  });
+
+  it('cross-pill double-tap: only the last-tapped pill is highlighted', async () => {
+    vi.useFakeTimers();
+    try {
+      const el = await nowTab(makeHass());
+      const cold = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-feedback="too_cold"]')!;
+      const hot = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-feedback="too_hot"]')!;
+      // Two taps within a frame; the seq guard makes the last one own the
+      // highlight regardless of which service round-trip resolves first.
+      cold.click();
+      hot.click();
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector('[data-feedback="too_hot"]')!.classList.contains('confirmed'),
+      ).toBe(true);
+      expect(
+        el.shadowRoot!.querySelector('[data-feedback="too_cold"]')!.classList.contains('confirmed'),
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
