@@ -15,7 +15,7 @@ import './card-editor.js';
 import type { ComfortBandModal } from './modal.js';
 import type { ComfortBandCardConfig, HassEntity, HomeAssistant } from './types.js';
 import type { ZoneEntities } from './helpers.js';
-import { findZoneEntities } from './helpers.js';
+import { findZoneEntities, zoneDisplayName } from './helpers.js';
 import { tokens } from './styles.js';
 
 @customElement('comfort-band-card')
@@ -27,6 +27,9 @@ export class ComfortBandCard extends LitElement {
   public setConfig(config: ComfortBandCardConfig): void {
     if (!config?.zone) {
       throw new Error('comfort-band-card: `zone` is required');
+    }
+    if (config.name !== undefined && typeof config.name !== 'string') {
+      throw new Error('comfort-band-card: `name` must be a string');
     }
     this._config = config;
   }
@@ -135,7 +138,7 @@ export class ComfortBandCard extends LitElement {
     };
 
     return {
-      zoneName: entities.deviceName ?? this._config!.zone,
+      zoneName: zoneDisplayName(hass, this._config!, entities),
       low: numericState(entities.effectiveLow),
       high: numericState(entities.effectiveHigh),
       roomTemp: numericState(entities.roomTemperature),

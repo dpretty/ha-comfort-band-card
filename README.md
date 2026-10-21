@@ -39,11 +39,12 @@ Entity discovery is by device identifier (`(comfort_band, zone:{slug})`), so ren
 ```yaml
 type: custom:comfort-band-card
 zone: gym         # required — the zone slug from your comfort_band setup
+name: Gym         # optional — defaults to the room (area) the zone's device is in
 variant: tile     # optional — `tile` (default) or `mini` (number-only chip)
 compact: false    # optional — set true for a tile that doesn't expand on tap
 ```
 
-The dashboard's visual editor offers a zone dropdown, variant picker, and compact-mode toggle, so you don't need to write YAML by hand.
+The dashboard's visual editor offers a zone dropdown, an optional name, a variant picker, and a compact-mode toggle, so you don't need to write YAML by hand.
 
 ### Mini variant (for floorplans)
 

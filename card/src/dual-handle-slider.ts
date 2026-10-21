@@ -14,6 +14,11 @@ import { customElement, property, query, state } from 'lit/decorators.js';
 import { tokens } from './styles.js';
 import type { BandHandle } from './types.js';
 
+/** Handles closer than this (as % of the track) would have overlapping values. */
+const LABEL_CLEARANCE_PCT = 14;
+/** Within this distance of either end, a value is aligned inwards. */
+const EDGE_PCT = 6;
+
 @customElement('dual-handle-slider')
 export class DualHandleSlider extends LitElement {
   @property({ type: Number }) public min = 16;
@@ -74,9 +79,11 @@ export class DualHandleSlider extends LitElement {
         cursor: grabbing;
         transform: scale(1.15);
       }
+      /* Each value sits under its own handle. Pinned to the track ends, they
+         read as the slider's scale rather than the chosen band. */
       .label-row {
-        display: flex;
-        justify-content: space-between;
+        position: relative;
+        height: 18px;
         font-size: 12px;
         color: var(--cb-text-secondary);
         margin-top: 14px;
@@ -84,6 +91,9 @@ export class DualHandleSlider extends LitElement {
       }
       .value-low,
       .value-high {
+        position: absolute;
+        top: 0;
+        white-space: nowrap;
         font-size: 14px;
         font-weight: 500;
         color: var(--cb-text-primary);
@@ -199,6 +209,12 @@ export class DualHandleSlider extends LitElement {
   protected override render() {
     const lowPct = this._pct(this.low);
     const highPct = this._pct(this.high);
+    // Centre each value under its handle. Near the track's ends, align it
+    // inwards so it isn't cut off; when the handles are close, push the two
+    // values apart (low to the left of its handle, high to the right).
+    const close = highPct - lowPct < LABEL_CLEARANCE_PCT;
+    const lowShift = lowPct < EDGE_PCT ? '0%' : close ? '-100%' : '-50%';
+    const highShift = highPct > 100 - EDGE_PCT ? '-100%' : close ? '0%' : '-50%';
     return html`
       <div class="track" @pointerdown=${this._onTrackPointerDown}>
         <div class="fill" style="left:${lowPct}%; width:${highPct - lowPct}%"></div>
@@ -230,8 +246,12 @@ export class DualHandleSlider extends LitElement {
         ></div>
       </div>
       <div class="label-row">
-        <span class="value-low">${this._fmt(this.low)}</span>
-        <span class="value-high">${this._fmt(this.high)}</span>
+        <span class="value-low" style="left:${lowPct}%; transform:translateX(${lowShift})"
+          >${this._fmt(this.low)}</span
+        >
+        <span class="value-high" style="left:${highPct}%; transform:translateX(${highShift})"
+          >${this._fmt(this.high)}</span
+        >
       </div>
     `;
   }

@@ -8,15 +8,17 @@
  *     calls `comfort_band.record_feedback` (v0.11.0+) and briefly
  *     highlights to confirm.
  *   - Current action chip (heating / cooling / idle).
- *   - Dual-handle slider for manual_low/manual_high — any change starts
- *     an override via `comfort_band.start_override` (the slider's
- *     `change` event, fired on release, drives the service call).
- *   - Override-active state line + Cancel-override button.
+ *   - Dual-handle slider, starting from the band actually in force. Any
+ *     change starts an override via `comfort_band.start_override` (the
+ *     slider's `change` event, fired on release, drives the service call),
+ *     and is followed by an "Adjusted … · Undo" notice.
+ *   - Override-active state line + Cancel-override button, also undoable.
  *   - Override-duration buttons (1h / 3h / 6h) that update the
  *     `number.{zone}_override_hours` entity for future overrides.
  */
 
 import { LitElement, html, css, nothing } from 'lit';
+import type { PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import '../band-gauge.js';
 import '../dual-handle-slider.js';
@@ -39,6 +41,28 @@ const FEEDBACK_PILLS: ReadonlyArray<{ label: FeedbackLabel; text: string }> = [
 /** How long the tapped pill stays highlighted after a successful record. */
 const FEEDBACK_CONFIRM_MS = 1500;
 
+/** The slider's range and step. Its starting values are snapped to these. */
+const SLIDER_MIN = 16;
+const SLIDER_MAX = 26;
+const SLIDER_STEP = 0.5;
+
+/** How long the "Adjusted … · Undo" notice stays up. Long enough to notice a
+ *  mistake and reach the button on a wall panel. */
+const UNDO_WINDOW_MS = 10_000;
+/** How long the short confirmations and error notices stay up. */
+const NOTICE_MS = 4_000;
+/** After a change, the slider keeps showing what was chosen until the new band
+ *  arrives in `hass`, so it doesn't snap back for a moment and look as though
+ *  the change didn't take. This bounds the wait if it never arrives. */
+const SETTLE_MAX_MS = 5_000;
+
+/** A notice under the slider: what just changed, and how to take it back. */
+interface Notice {
+  text: string;
+  error?: boolean;
+  undo?: () => Promise<unknown>;
+}
+
 @customElement('comfort-band-now-tab')
 export class ComfortBandNowTab extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
@@ -52,6 +76,12 @@ export class ComfortBandNowTab extends LitElement {
   /** Timer that clears `_feedbackConfirmed`; cancelled on disconnect so it
    *  never fires `setState` on an unmounted element. */
   private _feedbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+  @state() private _notice: Notice | null = null;
+  private _noticeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** True between a successful change and the new band showing up in `hass`. */
+  private _settling = false;
+  private _settleTimer: ReturnType<typeof setTimeout> | null = null;
   /** Monotonic tap counter. Service calls are concurrent and may resolve
    *  out of order, so each tap captures its seq and only claims the
    *  highlight if it's still the latest — the last-tapped pill always wins,
@@ -126,6 +156,38 @@ export class ComfortBandNowTab extends LitElement {
         color: var(--cb-text-secondary);
         text-transform: uppercase;
         letter-spacing: 0.04em;
+      }
+      .notice {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--cb-gap-sm);
+        margin-top: var(--cb-gap-sm);
+        padding: var(--cb-gap-sm) var(--cb-gap-md);
+        border-radius: var(--cb-radius-card);
+        background: var(--cb-track-bg);
+        font-size: 13px;
+        color: var(--cb-text-primary);
+      }
+      .notice.error {
+        color: var(--error-color, #db4437);
+      }
+      .undo {
+        font: inherit;
+        font-weight: 500;
+        /* WCAG 2.5.5: a comfortable touch target on a wall panel. */
+        min-height: 44px;
+        min-width: 64px;
+        padding: 0 12px;
+        border: none;
+        border-radius: var(--cb-radius-pill);
+        background: transparent;
+        color: var(--cb-accent, var(--primary-color, #03a9f4));
+        cursor: pointer;
+      }
+      .undo:focus-visible {
+        outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
+        outline-offset: 2px;
       }
       .override-row {
         display: flex;
@@ -209,6 +271,24 @@ export class ComfortBandNowTab extends LitElement {
       this._feedbackTimer = null;
     }
     this._feedbackConfirmed = null;
+    this._clearNotice();
+    this._releasePending();
+  }
+
+  protected override willUpdate(changed: PropertyValues<this>): void {
+    // Hold the chosen values only until the integration reports them back.
+    if (changed.has('hass') && this._settling && this.entities) {
+      const effLow = this._numericState(this.entities.effectiveLow);
+      const effHigh = this._numericState(this.entities.effectiveHigh);
+      if (
+        this._pendingLow !== null &&
+        this._pendingHigh !== null &&
+        Math.abs(effLow - this._pendingLow) < 0.01 &&
+        Math.abs(effHigh - this._pendingHigh) < 0.01
+      ) {
+        this._releasePending();
+      }
+    }
   }
 
   private get _stateOf() {
@@ -224,25 +304,115 @@ export class ComfortBandNowTab extends LitElement {
   }
 
   private _onSliderInput = (event: CustomEvent<{ low: number; high: number }>) => {
+    // A new drag supersedes any change still settling.
+    this._settling = false;
+    if (this._settleTimer !== null) clearTimeout(this._settleTimer);
+    this._settleTimer = null;
     this._pendingLow = event.detail.low;
     this._pendingHigh = event.detail.high;
   };
 
-  private _onSliderChange = (event: CustomEvent<{ low: number; high: number }>) => {
+  private _onSliderChange = async (event: CustomEvent<{ low: number; high: number }>) => {
     if (!this.hass || !this.zone) return;
-    this._pendingLow = null;
-    this._pendingHigh = null;
-    void startOverride(this.hass, {
-      zone: this.zone,
-      low: event.detail.low,
-      high: event.detail.high,
-    });
+    const { low, high } = event.detail;
+    const undo = this._undoFor();
+    this._pendingLow = low;
+    this._pendingHigh = high;
+    try {
+      await startOverride(this.hass, { zone: this.zone, low, high });
+    } catch {
+      this._releasePending();
+      this._showNotice({ text: "Couldn't adjust this room. Try again.", error: true });
+      return;
+    }
+    this._settling = true;
+    if (this._settleTimer !== null) clearTimeout(this._settleTimer);
+    this._settleTimer = setTimeout(() => this._releasePending(), SETTLE_MAX_MS);
+    // The service applies the zone's override length when none is passed.
+    const hours = this._numericState(this.entities?.overrideHours ?? null);
+    const until = Number.isFinite(hours)
+      ? ` until ${formatClock(Date.now() + hours * 3_600_000)}`
+      : '';
+    this._showNotice({ text: `Adjusted to ${fmtTemp(low)} – ${fmtTemp(high)}${until}`, undo });
   };
 
-  private _onCancel = () => {
+  private _onCancel = async () => {
     if (!this.hass || !this.zone) return;
-    void cancelOverride(this.hass, { zone: this.zone });
+    const undo = this._undoFor();
+    try {
+      await cancelOverride(this.hass, { zone: this.zone });
+    } catch {
+      this._showNotice({ text: "Couldn't go back to the schedule. Try again.", error: true });
+      return;
+    }
+    this._showNotice({ text: 'Back to the schedule', undo });
   };
+
+  private _onUndo = async () => {
+    const undo = this._notice?.undo;
+    if (!undo) return;
+    this._clearNotice();
+    this._releasePending();
+    try {
+      await undo();
+    } catch {
+      this._showNotice({ text: "Couldn't undo that. Try again.", error: true });
+      return;
+    }
+    this._showNotice({ text: 'Undone' });
+  };
+
+  /**
+   * Captures the zone's override state *before* a change, as a function that
+   * puts it back. With no override, that means cancelling. With one, it means
+   * re-starting it with the same band for the time it had left — rounded up to
+   * the quarter-hour steps `start_override` accepts. An override's band is
+   * `manual_low`/`manual_high` (the integration stores it there), so those are
+   * exact. Returns undefined when the prior state can't be read, rather than
+   * offering an undo that would restore something else.
+   */
+  private _undoFor(): (() => Promise<unknown>) | undefined {
+    const hass = this.hass;
+    const entities = this.entities;
+    const zone = this.zone;
+    if (!hass || !entities || !zone) return undefined;
+    if (this._stateOf(entities.overrideActive)?.state !== 'on') {
+      return () => cancelOverride(hass, { zone });
+    }
+    const low = this._numericState(entities.manualLow);
+    const high = this._numericState(entities.manualHigh);
+    const ends = Date.parse(this._stateOf(entities.overrideEnds)?.state ?? '');
+    if (!Number.isFinite(low) || !Number.isFinite(high) || Number.isNaN(ends)) return undefined;
+    return () => {
+      const left = (ends - Date.now()) / 3_600_000;
+      if (left <= 0) return cancelOverride(hass, { zone });
+      const hours = Math.min(24, Math.max(0.25, Math.ceil(left * 4) / 4));
+      return startOverride(hass, { zone, low, high, hours });
+    };
+  }
+
+  private _showNotice(notice: Notice): void {
+    this._clearNotice();
+    this._notice = notice;
+    this._noticeTimer = setTimeout(
+      () => this._clearNotice(),
+      notice.undo ? UNDO_WINDOW_MS : NOTICE_MS,
+    );
+  }
+
+  private _clearNotice(): void {
+    if (this._noticeTimer !== null) clearTimeout(this._noticeTimer);
+    this._noticeTimer = null;
+    this._notice = null;
+  }
+
+  private _releasePending(): void {
+    if (this._settleTimer !== null) clearTimeout(this._settleTimer);
+    this._settleTimer = null;
+    this._settling = false;
+    this._pendingLow = null;
+    this._pendingHigh = null;
+  }
 
   private _onFeedbackTap = async (label: FeedbackLabel): Promise<void> => {
     if (!this.hass || !this.zone) return;
@@ -292,8 +462,11 @@ export class ComfortBandNowTab extends LitElement {
     const showFeelsLike =
       Number.isFinite(room) && Number.isFinite(apparent) && Math.abs(apparent - room) >= 0.1;
 
-    const sliderLow = this._pendingLow ?? (Number.isFinite(lowState) ? lowState : 19);
-    const sliderHigh = this._pendingHigh ?? (Number.isFinite(highState) ? highState : 22);
+    // Start from the band actually in force. The manual values are only the
+    // last override's, which can be far from the schedule's current band.
+    const start = sliderStart(effLow, effHigh, lowState, highState);
+    const sliderLow = this._pendingLow ?? start.low;
+    const sliderHigh = this._pendingHigh ?? start.high;
 
     const actionTyped = asAction(action);
     const showChip = actionTyped !== 'idle' && actionTyped !== 'unknown';
@@ -317,18 +490,34 @@ export class ComfortBandNowTab extends LitElement {
       <section>
         <h3>Manual band</h3>
         <dual-handle-slider
-          .min=${16}
-          .max=${26}
-          .step=${0.5}
+          .min=${SLIDER_MIN}
+          .max=${SLIDER_MAX}
+          .step=${SLIDER_STEP}
           .low=${sliderLow}
           .high=${sliderHigh}
           @input=${this._onSliderInput}
           @change=${this._onSliderChange}
         ></dual-handle-slider>
+        ${this._renderNotice()}
       </section>
 
       ${this._renderOverrideSection(overrideActive)} ${this._renderHoursSection(overrideHours)}
     `;
+  }
+
+  private _renderNotice() {
+    // The live region is always present so screen readers announce changes.
+    const n = this._notice;
+    return html`<div class="notice-region" role="status" aria-live="polite">
+      ${n
+        ? html`<div class="notice ${n.error ? 'error' : ''}">
+            <span>${n.text}</span>
+            ${n.undo
+              ? html`<button class="undo" @click=${() => void this._onUndo()}>Undo</button>`
+              : nothing}
+          </div>`
+        : nothing}
+    </div>`;
   }
 
   private _renderFeedbackSection() {
@@ -425,6 +614,50 @@ export class ComfortBandNowTab extends LitElement {
       </section>
     `;
   }
+}
+
+/** Snaps to the slider's step and range. */
+function snap(value: number): number {
+  const stepped = Math.round(value / SLIDER_STEP) * SLIDER_STEP;
+  return Math.min(SLIDER_MAX, Math.max(SLIDER_MIN, stepped));
+}
+
+/**
+ * Where the slider starts: the effective band (what is in force now), snapped
+ * to the slider's step, since a band mid-ramp can be fractional. Falls back to
+ * the manual values, then to a neutral default, when the band is unavailable.
+ * Keeps the two values at least one step apart, as the slider requires.
+ */
+export function sliderStart(
+  effLow: number,
+  effHigh: number,
+  manualLow: number,
+  manualHigh: number,
+): { low: number; high: number } {
+  let low = 19;
+  let high = 22;
+  if (Number.isFinite(effLow) && Number.isFinite(effHigh)) {
+    low = effLow;
+    high = effHigh;
+  } else if (Number.isFinite(manualLow) && Number.isFinite(manualHigh)) {
+    low = manualLow;
+    high = manualHigh;
+  }
+  low = snap(low);
+  high = snap(high);
+  if (high - low < SLIDER_STEP) {
+    high = Math.min(SLIDER_MAX, low + SLIDER_STEP);
+    low = high - SLIDER_STEP;
+  }
+  return { low, high };
+}
+
+function fmtTemp(value: number): string {
+  return `${value.toFixed(1)}°`;
+}
+
+function formatClock(ms: number): string {
+  return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
 function formatRemaining(iso: string | null): string {

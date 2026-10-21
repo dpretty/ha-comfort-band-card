@@ -49,6 +49,12 @@ export interface DeviceRegistryEntry {
   area_id: string | null;
 }
 
+/** Subset of HA's area-registry entry exposed via `hass.areas`. */
+export interface AreaRegistryEntry {
+  area_id: string;
+  name: string;
+}
+
 export type UnsubscribeFunc = () => void;
 
 export interface HassConnection {
@@ -62,6 +68,8 @@ export interface HomeAssistant {
   states: Record<string, HassEntity>;
   entities: Record<string, EntityRegistryEntry>;
   devices: Record<string, DeviceRegistryEntry>;
+  /** Optional: older frontends (and minimal test fixtures) omit it. */
+  areas?: Record<string, AreaRegistryEntry>;
   connection: HassConnection;
   callService(
     domain: string,
@@ -119,6 +127,9 @@ export type ComfortBandCardVariant = 'tile' | 'mini';
 export interface ComfortBandCardConfig {
   type: string;
   zone: string;
+  /** Display name for the room. Defaults to the zone device's area, then
+   *  the device's own name. */
+  name?: string;
   /** Compact mode locks the tile (no expand-on-tap). */
   compact?: boolean;
   /** Visual variant. Defaults to `tile`. */

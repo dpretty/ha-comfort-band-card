@@ -137,4 +137,42 @@ describe('comfort-band-card-editor', () => {
       zone: 'gym',
     });
   });
+
+  it('commits a trimmed name on change, and removes it when cleared', async () => {
+    const el = await editor(makeHass(['gym']), { type: 'custom:comfort-band-card', zone: 'gym' });
+    const fire = vi.fn();
+    el.addEventListener('config-changed', (e) => fire((e as CustomEvent).detail.config));
+    const input = el.shadowRoot!.querySelector('input[type="text"]') as HTMLInputElement;
+
+    input.value = '  Weights room ';
+    input.dispatchEvent(new Event('change'));
+    expect(fire).toHaveBeenLastCalledWith({
+      type: 'custom:comfort-band-card',
+      zone: 'gym',
+      name: 'Weights room',
+    });
+
+    input.value = '';
+    input.dispatchEvent(new Event('change'));
+    expect(fire).toHaveBeenLastCalledWith({ type: 'custom:comfort-band-card', zone: 'gym' });
+  });
+
+  it('shows the default name as the placeholder', async () => {
+    const hass = makeHass(['gym']);
+    hass.devices['dev-0']!.area_id = 'area-1';
+    hass.areas = { 'area-1': { area_id: 'area-1', name: 'Home Gym' } };
+    const el = await editor(hass, { type: 'custom:comfort-band-card', zone: 'gym' });
+    const input = el.shadowRoot!.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(input.placeholder).toBe('Home Gym');
+  });
+
+  it('keeps an existing name when the config is loaded', async () => {
+    const el = await editor(makeHass(['gym']), {
+      type: 'custom:comfort-band-card',
+      zone: 'gym',
+      name: 'Weights room',
+    });
+    const input = el.shadowRoot!.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(input.value).toBe('Weights room');
+  });
 });

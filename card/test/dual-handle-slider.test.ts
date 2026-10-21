@@ -98,4 +98,37 @@ describe('dual-handle-slider', () => {
     await el.updateComplete;
     expect(el.low % 0.5).toBe(0);
   });
+
+  describe('value labels', () => {
+    function labels(el: HTMLElement) {
+      const [lo, hi] = Array.from(
+        el.shadowRoot!.querySelectorAll('.label-row span'),
+      ) as HTMLElement[];
+      return { lo: lo!.style, hi: hi!.style };
+    }
+
+    it('sits each value under its own handle, not at the ends of the track', async () => {
+      // 18 and 23 on a 16–26 track are 20 % and 70 % along.
+      const el = await mount('dual-handle-slider', { min: 16, max: 26, low: 18, high: 23 });
+      const { lo, hi } = labels(el);
+      expect(lo.left).toBe('20%');
+      expect(hi.left).toBe('70%');
+      expect(lo.transform).toBe('translateX(-50%)');
+      expect(hi.transform).toBe('translateX(-50%)');
+    });
+
+    it('pushes the two values apart when the handles are close', async () => {
+      const el = await mount('dual-handle-slider', { min: 16, max: 26, low: 20, high: 21 });
+      const { lo, hi } = labels(el);
+      expect(lo.transform).toBe('translateX(-100%)');
+      expect(hi.transform).toBe('translateX(0%)');
+    });
+
+    it('aligns a value inwards at either end of the track', async () => {
+      const el = await mount('dual-handle-slider', { min: 16, max: 26, low: 16, high: 26 });
+      const { lo, hi } = labels(el);
+      expect(lo.transform).toBe('translateX(0%)');
+      expect(hi.transform).toBe('translateX(-100%)');
+    });
+  });
 });
