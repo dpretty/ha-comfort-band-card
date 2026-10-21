@@ -231,4 +231,22 @@ describe('comfort-band-settings-tab', () => {
     expect(el.shadowRoot!.querySelector('button[role="switch"]')).toBeNull();
     expect(el.shadowRoot!.querySelector('.upgrade-hint')!.textContent).toContain('v0.4.0');
   });
+
+  // The integration gates the predictor (and MPC) on `learning_enabled`. The
+  // description once said the switch had no effect, which invited people to
+  // turn predictive control off without knowing it.
+  it('describes learning as controlling anticipation, not as having no effect', async () => {
+    const el = await settingsTab(makeHass());
+    const rows = Array.from(el.shadowRoot!.querySelectorAll('.row'));
+    const row = rows.find((r) => r.textContent!.includes('Learning enabled'))!;
+    const desc = row.querySelector('.desc')!.textContent!.replace(/\s+/g, ' ');
+    expect(desc).not.toMatch(/no effect|reserved for upcoming/i);
+    // What the predictor does: anticipatory start and stop, and passive drift.
+    expect(desc).toMatch(
+      /starting early .* stopping early .* holding off while it's already heading back/,
+    );
+    expect(desc).toMatch(/the “MPC enabled” switch\) needs this on too/);
+    // Samples are recorded whatever the switch says.
+    expect(desc).toMatch(/While it's off, the room keeps recording readings/);
+  });
 });

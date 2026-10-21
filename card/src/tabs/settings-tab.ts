@@ -204,8 +204,14 @@ export class ComfortBandSettingsTab extends LitElement {
       ${this._renderToggle({
         entityId: learning,
         title: 'Learning enabled',
-        desc: html`Reserved for upcoming features (suggested-schedule nudges, predictive control).
-        Has no effect today.`,
+        // Mirrors the integration's control gate: on, the learned predictor
+        // decides (and MPC, when its own switch is on and it is ready); off,
+        // plain on/off at the deadband edges. Samples are recorded either way.
+        desc: html`Uses what this room has learned about how quickly it warms and cools to time
+        heating and cooling: starting early rather than waiting for the room to get too cold or
+        warm, stopping early so it doesn't overshoot, and holding off while it's already heading
+        back on its own. Predictive control (the “MPC enabled” switch) needs this on too. While it's
+        off, the room keeps recording readings; it just doesn't act on what it has learned.`,
       })}
       <div class="row">
         <div class="row-label">

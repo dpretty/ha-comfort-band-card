@@ -33,13 +33,6 @@ describe('dual-handle-slider', () => {
     expect(high.getAttribute('aria-valuemin')).toBe('19.5');
   });
 
-  it('shows formatted values in the label row', async () => {
-    const el = await slider({ low: 19.5, high: 22.5, unit: '°' });
-    const labels = el.shadowRoot!.querySelectorAll('.label-row span');
-    expect(labels[0].textContent).toContain('19.5°');
-    expect(labels[1].textContent).toContain('22.5°');
-  });
-
   it('arrow keys step the focused thumb and fire a change event', async () => {
     const el = await slider({ low: 19, high: 22, step: 0.5 });
     const { low } = getThumbs(el);
@@ -97,5 +90,32 @@ describe('dual-handle-slider', () => {
     low.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     await el.updateComplete;
     expect(el.low % 0.5).toBe(0);
+  });
+
+  describe('readout', () => {
+    const readout = (el: HTMLElement) =>
+      el.shadowRoot!.querySelector('.readout')!.textContent!.replace(/\s+/g, ' ').trim();
+
+    // At the track's ends the two values read as its scale; under the handles
+    // they collide on a phone when the handles are close.
+    it('shows the chosen band as one range, not as values at the ends of the track', async () => {
+      const el = await slider({ low: 19.5, high: 22.5, unit: '°' });
+      expect(readout(el)).toBe('19.5° – 22.5°');
+      expect(el.shadowRoot!.querySelector('.label-row')).toBeNull();
+    });
+
+    it('follows the handles', async () => {
+      const el = await slider({ low: 18, high: 23 });
+      el.low = 20.5;
+      el.high = 21;
+      await el.updateComplete;
+      expect(readout(el)).toBe('20.5° – 21.0°');
+    });
+
+    // Each handle already announces its own value.
+    it('is hidden from screen readers', async () => {
+      const el = await slider();
+      expect(el.shadowRoot!.querySelector('.readout')!.getAttribute('aria-hidden')).toBe('true');
+    });
   });
 });

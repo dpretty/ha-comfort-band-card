@@ -56,6 +56,12 @@ export class ComfortBandModal extends LitElement {
       dialog {
         width: min(90vw, var(--cb-modal-max-width));
         max-height: min(90vh, 720px);
+        /* Anchored to the top rather than centred. A modal <dialog> is centred
+           on its own height by default, and every tab is a different height,
+           so switching tabs moved the whole dialog -- tab bar included -- out
+           from under the finger that had just tapped it. With the top fixed,
+           only the bottom edge moves. */
+        margin-block: max(16px, 5vh) auto;
         padding: 0;
         border: none;
         border-radius: var(--cb-radius-card);
@@ -77,6 +83,11 @@ export class ComfortBandModal extends LitElement {
         max-height: inherit;
       }
       header {
+        /* Header and tab bar keep their height; only the panel scrolls. As
+           flex items they would otherwise shrink when a tall panel hits the
+           dialog's max-height, and the nav's overflow-x then clipped the tab
+           labels in half. */
+        flex-shrink: 0;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -100,6 +111,7 @@ export class ComfortBandModal extends LitElement {
         padding: 4px 8px;
       }
       nav {
+        flex-shrink: 0;
         display: flex;
         gap: 0;
         border-bottom: 1px solid var(--divider-color, #e0e0e0);

@@ -76,6 +76,126 @@ async function card(zone: string, hass: HomeAssistant): Promise<ComfortBandCard>
   return el;
 }
 
+type TileProbe = HTMLElement & { zoneName: string };
+
+async function cardWith(
+  config: { zone: string; name?: unknown },
+  hass: HomeAssistant,
+): Promise<ComfortBandCard> {
+  const el = await mount('comfort-band-card');
+  el.setConfig({ type: 'custom:comfort-band-card', ...config } as never);
+  el.hass = hass;
+  await el.updateComplete;
+  return el;
+}
+
+/** Puts the zone's device in an area, as HA does when a device is assigned a room. */
+function withArea(hass: HomeAssistant, zone: string, areaName: string): HomeAssistant {
+  const device = hass.devices[`dev-${zone}`]!;
+  return {
+    ...hass,
+    devices: { [device.id]: { ...device, area_id: 'area-1' } },
+    areas: { 'area-1': { area_id: 'area-1', name: areaName } },
+  };
+}
+
+function shownNames(el: ComfortBandCard): { tile: string; modal: string | null } {
+  const tile = el.shadowRoot!.querySelector('comfort-band-tile') as TileProbe;
+  const modal = el.shadowRoot!.querySelector('comfort-band-modal');
+  return { tile: tile.zoneName, modal: modal?.getAttribute('zoneName') ?? null };
+}
+
+describe('comfort-band-card room name', () => {
+  it("defaults to the area the zone's device is in, not the device's own name", async () => {
+    const hass = withArea(makeHass('gym'), 'gym', 'Home Gym');
+    const el = await cardWith({ zone: 'gym' }, hass);
+    // The device is called "Gym" in this fixture; the area name must win.
+    expect(shownNames(el)).toEqual({ tile: 'Home Gym', modal: 'Home Gym' });
+  });
+
+  it('uses a configured name over the area, trimmed', async () => {
+    const hass = withArea(makeHass('gym'), 'gym', 'Home Gym');
+    const el = await cardWith({ zone: 'gym', name: '  Weights room ' }, hass);
+    expect(shownNames(el)).toEqual({ tile: 'Weights room', modal: 'Weights room' });
+  });
+
+  it('treats a blank name as unset', async () => {
+    const hass = withArea(makeHass('gym'), 'gym', 'Home Gym');
+    const el = await cardWith({ zone: 'gym', name: '   ' }, hass);
+    expect(shownNames(el).tile).toBe('Home Gym');
+  });
+
+  it('falls back to the device name when the device has no area', async () => {
+    const el = await cardWith({ zone: 'gym' }, makeHass('gym'));
+    expect(shownNames(el).tile).toBe('Gym');
+  });
+
+  it('falls back to the device name when the area is not in the registry', async () => {
+    const base = makeHass('gym');
+    const device = base.devices['dev-gym']!;
+    const hass = { ...base, devices: { [device.id]: { ...device, area_id: 'gone' } }, areas: {} };
+    const el = await cardWith({ zone: 'gym' }, hass);
+    expect(shownNames(el).tile).toBe('Gym');
+  });
+
+  it('falls back to the device name when the area registry is not loaded', async () => {
+    const base = makeHass('gym');
+    const device = base.devices['dev-gym']!;
+    const hass = { ...base, devices: { [device.id]: { ...device, area_id: 'area-1' } } };
+    delete hass.areas;
+    const el = await cardWith({ zone: 'gym' }, hass);
+    expect(shownNames(el).tile).toBe('Gym');
+  });
+
+  it('trims the area name', async () => {
+    const hass = withArea(makeHass('gym'), 'gym', '  Home Gym ');
+    const el = await cardWith({ zone: 'gym' }, hass);
+    expect(shownNames(el).tile).toBe('Home Gym');
+  });
+
+  // The fixture's other tests have one device, which an implementation that
+  // took the first device in the registry would also pass.
+  it("uses this zone's own device's area when there are others", async () => {
+    const gym = makeHass('gym');
+    const office = makeHass('office');
+    const hass: HomeAssistant = {
+      ...gym,
+      states: { ...office.states, ...gym.states },
+      entities: { ...office.entities, ...gym.entities },
+      devices: {
+        'dev-office': { ...office.devices['dev-office']!, area_id: 'area-office' },
+        'dev-gym': { ...gym.devices['dev-gym']!, area_id: 'area-gym' },
+      },
+      areas: {
+        'area-office': { area_id: 'area-office', name: 'Study' },
+        'area-gym': { area_id: 'area-gym', name: 'Home Gym' },
+      },
+    };
+    const el = await cardWith({ zone: 'gym' }, hass);
+    expect(shownNames(el).tile).toBe('Home Gym');
+  });
+
+  it('rejects a name that is not text', async () => {
+    const el = await mount('comfort-band-card');
+    expect(() =>
+      el.setConfig({ type: 'custom:comfort-band-card', zone: 'gym', name: ['Gym'] } as never),
+    ).toThrow(/name/);
+  });
+
+  // `name: 101` unquoted in YAML.
+  it('takes a number as a name', async () => {
+    const el = await cardWith({ zone: 'gym', name: 101 }, makeHass('gym'));
+    expect(shownNames(el).tile).toBe('101');
+  });
+
+  // `name:` with nothing after it in YAML.
+  it('treats an empty name in YAML as unset', async () => {
+    const hass = withArea(makeHass('gym'), 'gym', 'Home Gym');
+    const el = await cardWith({ zone: 'gym', name: null }, hass);
+    expect(shownNames(el).tile).toBe('Home Gym');
+  });
+});
+
 describe('comfort-band-card', () => {
   it('rejects setConfig without a zone', async () => {
     const el = await mount('comfort-band-card');

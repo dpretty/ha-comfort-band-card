@@ -18,7 +18,12 @@
  * and is the matching field that works here.
  */
 
-import type { DeviceRegistryEntry, EntityRegistryEntry, HomeAssistant } from './types.js';
+import type {
+  ComfortBandCardConfig,
+  DeviceRegistryEntry,
+  EntityRegistryEntry,
+  HomeAssistant,
+} from './types.js';
 
 const DOMAIN = 'comfort_band';
 
@@ -174,4 +179,24 @@ export function readHumiditySensor(
   if (!hass || !roomEntityId) return null;
   const attr = hass.states[roomEntityId]?.attributes.humidity_sensor as string | null | undefined;
   return attr ?? null;
+}
+
+/**
+ * The name to show for a zone, in order: the card's own `name`, the area the
+ * zone's device is in, the device's name, the zone slug.
+ *
+ * The area comes first because it names the room, which is how people think
+ * about the house; the device name is usually the equipment ("Bedroom HVAC").
+ */
+export function zoneDisplayName(
+  hass: HomeAssistant,
+  config: Pick<ComfortBandCardConfig, 'zone' | 'name'>,
+  entities: Pick<ZoneEntities, 'deviceId' | 'deviceName'>,
+): string {
+  const configured = config.name?.trim();
+  if (configured) return configured;
+  const areaId = entities.deviceId !== null ? hass.devices[entities.deviceId]?.area_id : null;
+  const area = areaId ? hass.areas?.[areaId]?.name?.trim() : undefined;
+  if (area) return area;
+  return entities.deviceName ?? config.zone;
 }

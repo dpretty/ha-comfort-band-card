@@ -65,6 +65,22 @@ function makeHass(overrides: Partial<Record<string, string>> = {}): HomeAssistan
   };
 }
 
+type SliderProbe = HTMLElement & { low: number; high: number; min: number; max: number };
+function slider(el: ComfortBandNowTab): SliderProbe {
+  return el.shadowRoot!.querySelector('dual-handle-slider') as SliderProbe;
+}
+
+async function release(el: ComfortBandNowTab, low: number, high: number): Promise<void> {
+  slider(el).dispatchEvent(new CustomEvent('change', { detail: { low, high }, bubbles: true }));
+  await flush(el);
+}
+
+/** Lets the awaited service call resolve and Lit re-render. */
+async function flush(el: ComfortBandNowTab): Promise<void> {
+  for (let i = 0; i < 50; i++) await Promise.resolve();
+  await el.updateComplete;
+}
+
 async function nowTab(
   hass: HomeAssistant,
   entities = makeEntities(),
@@ -89,16 +105,140 @@ describe('comfort-band-now-tab', () => {
     expect(el.shadowRoot!.querySelector('.action-chip')!.textContent).toContain('Heating');
   });
 
-  it('initialises slider from manual_low / manual_high entity states', async () => {
+  // The manual values are the *last* override's; the slider used to start from
+  // them, so nudging one handle silently replaced the other limit with a stale
+  // value. It must start from the band actually in force.
+  it('starts the slider from the band in force, not the last override', async () => {
     const el = await nowTab(
-      makeHass({ 'number.gym_manual_low': '20', 'number.gym_manual_high': '23' }),
+      makeHass({
+        'sensor.gym_effective_low': '18.0',
+        'sensor.gym_effective_high': '23.0',
+        'number.gym_manual_low': '19.5',
+        'number.gym_manual_high': '22.5',
+      }),
     );
-    const slider = el.shadowRoot!.querySelector('dual-handle-slider') as HTMLElement & {
-      low: number;
-      high: number;
-    };
-    expect(slider.low).toBe(20);
-    expect(slider.high).toBe(23);
+    const s = slider(el);
+    expect([s.low, s.high]).toEqual([18, 23]);
+  });
+
+  // Rounded to what the readout shows, not to the slider's steps: snapping would
+  // change the limit the user doesn't move when they nudge the other.
+  it('starts from a mid-ramp band to the tenth of a degree the values show', async () => {
+    const el = await nowTab(
+      makeHass({ 'sensor.gym_effective_low': '18.37', 'sensor.gym_effective_high': '22.83' }),
+    );
+    const s = slider(el);
+    expect([s.low, s.high]).toEqual([18.4, 22.8]);
+  });
+
+  it('falls back to 19–22 when neither band can be read', async () => {
+    for (const manualLow of ['unavailable', '20']) {
+      const el = await nowTab(
+        makeHass({
+          'sensor.gym_effective_low': 'unavailable',
+          'sensor.gym_effective_high': 'unavailable',
+          'number.gym_manual_low': manualLow,
+          'number.gym_manual_high': 'unavailable',
+        }),
+      );
+      expect([slider(el).low, slider(el).high]).toEqual([19, 22]);
+      el.remove();
+    }
+  });
+
+  it('falls back to the manual values when only one side of the band is unavailable', async () => {
+    for (const [low, high] of [
+      ['unavailable', '23'],
+      ['18', 'unavailable'],
+    ]) {
+      const el = await nowTab(
+        makeHass({
+          'sensor.gym_effective_low': low,
+          'sensor.gym_effective_high': high,
+          'number.gym_manual_low': '20',
+          'number.gym_manual_high': '23.5',
+        }),
+      );
+      expect([slider(el).low, slider(el).high]).toEqual([20, 23.5]);
+      el.remove();
+    }
+  });
+
+  it('widens a band narrower than one step, which the slider cannot hold', async () => {
+    const el = await nowTab(
+      makeHass({ 'sensor.gym_effective_low': '21', 'sensor.gym_effective_high': '21.2' }),
+    );
+    expect([slider(el).low, slider(el).high]).toEqual([21, 21.5]);
+  });
+
+  it('keeps its usual 16–26 track for a band inside it', async () => {
+    const el = await nowTab(makeHass());
+    expect([slider(el).min, slider(el).max]).toEqual([16, 26]);
+  });
+
+  // On a 16–26 track, a band of 15–28 had both handles drawn off the track, the
+  // low handle's first press took it to 16, and End on the high one sent 26.
+  it('takes in a band outside its track, so each handle moves only itself', async () => {
+    const hass = makeHass({ 'sensor.gym_effective_low': '15', 'sensor.gym_effective_high': '28' });
+    const el = await nowTab(hass);
+    const s = slider(el);
+    expect([s.min, s.max, s.low, s.high]).toEqual([15, 28, 15, 28]);
+
+    const lowThumb = s.shadowRoot!.querySelector('.thumb') as HTMLElement;
+    lowThumb.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await flush(el);
+    expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'start_override', {
+      zone: 'gym',
+      low: 15.5,
+      high: 28,
+    });
+
+    // End on the high handle, already at the top: nothing to send.
+    const highThumb = s.shadowRoot!.querySelectorAll('.thumb')[1] as HTMLElement;
+    highThumb.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+    await flush(el);
+    expect(hass.callService).toHaveBeenCalledTimes(1);
+  });
+
+  it('widens the track to whole degrees around a fractional band outside it', async () => {
+    // Rounding would give 16 and 27, leaving the band off the track.
+    const el = await nowTab(
+      makeHass({ 'sensor.gym_effective_low': '15.6', 'sensor.gym_effective_high': '27.3' }),
+    );
+    expect([slider(el).min, slider(el).max]).toEqual([15, 28]);
+  });
+
+  it('keeps the track during a drag, though the band in force moves', async () => {
+    const el = await nowTab(
+      makeHass({ 'sensor.gym_effective_low': '15', 'sensor.gym_effective_high': '28' }),
+    );
+    slider(el).dispatchEvent(
+      new CustomEvent('input', { detail: { low: 17, high: 25 }, bubbles: true }),
+    );
+    await el.updateComplete;
+    expect([slider(el).min, slider(el).max]).toEqual([15, 28]);
+    // A ramp moves the band in force mid-drag.
+    el.hass = makeHass({ 'sensor.gym_effective_low': '16.5', 'sensor.gym_effective_high': '25' });
+    await el.updateComplete;
+    expect([slider(el).min, slider(el).max]).toEqual([15, 28]);
+    // Once the slider follows the band in force again, the track does too.
+    await release(el, 17, 25);
+    el.hass = makeHass({ 'sensor.gym_effective_low': '17', 'sensor.gym_effective_high': '25' });
+    await el.updateComplete;
+    expect([slider(el).min, slider(el).max]).toEqual([16, 26]);
+  });
+
+  it('falls back to the manual values when the band is unavailable', async () => {
+    const el = await nowTab(
+      makeHass({
+        'sensor.gym_effective_low': 'unavailable',
+        'sensor.gym_effective_high': 'unavailable',
+        'number.gym_manual_low': '20',
+        'number.gym_manual_high': '23',
+      }),
+    );
+    const s = slider(el);
+    expect([s.low, s.high]).toEqual([20, 23]);
   });
 
   it('slider change calls comfort_band.start_override with the new band', async () => {
@@ -108,7 +248,7 @@ describe('comfort-band-now-tab', () => {
     slider.dispatchEvent(
       new CustomEvent('change', { detail: { low: 20.5, high: 23.5 }, bubbles: true }),
     );
-    await el.updateComplete;
+    await flush(el);
     expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'start_override', {
       zone: 'gym',
       low: 20.5,
@@ -141,7 +281,7 @@ describe('comfort-band-now-tab', () => {
     const el = await nowTab(hass);
     const cancel = el.shadowRoot!.querySelector('.button.secondary') as HTMLButtonElement;
     cancel.click();
-    await el.updateComplete;
+    await flush(el);
     expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'cancel_override', {
       zone: 'gym',
     });
@@ -356,5 +496,22 @@ describe('comfort-band-now-tab', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // As on main: the slider shows the dragged values while dragging, and follows
+  // the band in force once the drag is released.
+  it('lets go of the dragged values on release', async () => {
+    const el = await nowTab(makeHass());
+    slider(el).dispatchEvent(
+      new CustomEvent('input', { detail: { low: 20.5, high: 23.5 }, bubbles: true }),
+    );
+    await el.updateComplete;
+    expect([slider(el).low, slider(el).high]).toEqual([20.5, 23.5]);
+    await release(el, 20.5, 23.5);
+    el.hass = makeHass({ 'sensor.gym_effective_low': '20.5', 'sensor.gym_effective_high': '23.5' });
+    await el.updateComplete;
+    el.hass = makeHass({ 'sensor.gym_effective_low': '18', 'sensor.gym_effective_high': '23' });
+    await el.updateComplete;
+    expect([slider(el).low, slider(el).high]).toEqual([18, 23]);
   });
 });

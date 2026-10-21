@@ -3,7 +3,8 @@
  *
  * Registered globally; HA picks it up via `static getConfigElement()` on
  * the card class. Renders a zone dropdown (populated from `comfort_band`
- * device identifiers) plus a "Compact mode" toggle.
+ * device identifiers), an optional name (its placeholder shows the name the
+ * card would use by default), a variant picker and a "Compact mode" toggle.
  *
  * Fires HA's standard `config-changed` event with the merged config so the
  * dashboard preview re-renders live as the user picks a zone.
@@ -12,6 +13,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { ComfortBandCardConfig, HomeAssistant } from './types.js';
+import { findZoneEntities, zoneDisplayName } from './helpers.js';
 import { tokens } from './styles.js';
 
 @customElement('comfort-band-card-editor')
@@ -26,6 +28,7 @@ export class ComfortBandCardEditor extends LitElement {
     this.config = {
       type: config.type ?? 'custom:comfort-band-card',
       zone: config.zone ?? '',
+      ...(config.name != null ? { name: config.name } : {}),
       ...(config.compact !== undefined ? { compact: config.compact } : {}),
       ...(config.variant !== undefined ? { variant: config.variant } : {}),
     };
@@ -47,8 +50,24 @@ export class ComfortBandCardEditor extends LitElement {
         color: var(--cb-text-secondary);
       }
       select,
+      input[type='text'],
       input[type='checkbox'] {
         font: inherit;
+      }
+      input[type='text'] {
+        font-size: 14px;
+        padding: 8px;
+        border: 1px solid var(--divider-color, #cccccc);
+        border-radius: 6px;
+        color: var(--cb-text-primary);
+        background-color: var(
+          --mdc-text-field-fill-color,
+          var(--secondary-background-color, var(--card-background-color, #ffffff))
+        );
+      }
+      input[type='text']:focus-visible {
+        outline: 2px solid var(--primary-color, #03a9f4);
+        outline-offset: 1px;
       }
       /* Native <select> picks up OS chrome in many browsers, which
          bypasses theme variables. appearance:none strips the chrome
@@ -120,6 +139,26 @@ export class ComfortBandCardEditor extends LitElement {
     this._fireConfig({ ...this.config, zone });
   };
 
+  /** Committed on `change` (blur/Enter) rather than every keystroke, so the
+   *  dashboard preview isn't re-rendered mid-word. Blank removes the key. */
+  private _onNameChange = (event: Event) => {
+    const input = event.target as HTMLInputElement;
+    const name = input.value.trim();
+    // Show what was saved: a name of only spaces is no name.
+    input.value = name;
+    const next = { ...this.config };
+    if (name) next.name = name;
+    else delete next.name;
+    this._fireConfig(next);
+  };
+
+  /** The name the card shows when `name` is unset, used as the placeholder. */
+  private _defaultName(): string {
+    if (!this.hass || !this.config.zone) return '';
+    const entities = findZoneEntities(this.hass, this.config.zone);
+    return zoneDisplayName(this.hass, { zone: this.config.zone }, entities);
+  }
+
   private _onCompactChange = (event: Event) => {
     const compact = (event.target as HTMLInputElement).checked;
     const next = { ...this.config };
@@ -167,6 +206,15 @@ export class ComfortBandCardEditor extends LitElement {
             (z) => html` <option value=${z} ?selected=${z === this.config.zone}>${z}</option> `,
           )}
         </select>
+      </label>
+      <label>
+        Name (optional)
+        <input
+          type="text"
+          .value=${this.config.name ?? ''}
+          placeholder=${this._defaultName()}
+          @change=${this._onNameChange}
+        />
       </label>
       <label>
         Variant

@@ -9,10 +9,10 @@ Compact tile + expanded modal with **Now / Schedule / Profiles / Insights** tabs
 ## What you get
 
 - **Compact tile** — zone display name, prominent room temperature, inline `[low … room … high]` band gauge coloured by `current_action` (red=heating, blue=cooling, neutral=idle), override pill while an override is active.
-- **Now tab** — large band gauge + dual-handle slider for manual low/high (drag = `start_override`), Cancel-override button, 1h/3h/6h duration presets. When a humidity sensor is configured (≥ v0.4.0), a "Feels like" line shows apparent temperature; a "Driving decisions" badge appears when the Settings-tab toggle is on.
+- **Now tab** — large band gauge + dual-handle slider for manual low/high, starting from the band in force (drag = `start_override`), Cancel-override button, 1h/3h/6h duration presets. When a humidity sensor is configured (≥ v0.4.0), a "Feels like" line shows apparent temperature; a "Driving decisions" badge appears when the Settings-tab toggle is on.
 - **Schedule tab** — 2D chart of the active profile's transitions: time on X, temperature on Y (14–28 °C), with the band area filled. Drag a handle horizontally to change its time (snap 15 min), vertically to retarget low or high (snap 0.5 °C). Tap a handle for the precise-edit dialog. Long-press to delete. Tap empty space to add a transition at the snapped time, with the band centred on the tap temperature. Keyboard: arrows nudge, Enter edits, Delete removes. Persists via `comfort_band.set_schedule`; the live-update WS subscription keeps other open card instances in sync.
 - **Profiles tab** — list + switch active profile, plus full CRUD: tap **+ New profile** to create one, or use the per-row overflow menu (`⋮`) to Clone, Rename, or Delete. The active-fallback (`home` by default; tracks renames) is protected from deletion. Requires integration ≥ **v0.3.0**.
-- **Settings tab** — per-zone toggles for **Use apparent temperature** (feed humidity-adjusted "feels like" into heat/cool decisions; falls back to raw temp if the humidity sensor goes offline) and **Learning enabled** (gate for future auto-learning features). Shows the configured humidity sensor read-only — change it via HA's Configure dialog. Requires integration ≥ **v0.4.0**.
+- **Settings tab** — per-zone toggles for **Use apparent temperature** (feed humidity-adjusted "feels like" into heat/cool decisions; falls back to raw temp if the humidity sensor goes offline) and **Learning enabled** (times heating and cooling from what the room has learned about how quickly it warms and cools: starting and stopping early, and holding off while it drifts back on its own; predictive control needs it on too). Shows the configured humidity sensor read-only — change it via HA's Configure dialog. Requires integration ≥ **v0.4.0**.
 - **Insights tab** — two stacked 24 h charts: (1) room temperature with effective band edges and heating/cooling shading; (2) room vs apparent ("feels like") temperature with humidity overlaid on a secondary axis. The second chart requires the integration at **≥ v0.4.0** AND a humidity sensor configured for the zone — on older integrations a hint nudges you to upgrade, with the sensor still missing it points at the Settings tab.
 
 Entity discovery is by device identifier (`(comfort_band, zone:{slug})`), so renamed entity_ids still work.
@@ -39,11 +39,12 @@ Entity discovery is by device identifier (`(comfort_band, zone:{slug})`), so ren
 ```yaml
 type: custom:comfort-band-card
 zone: gym         # required — the zone slug from your comfort_band setup
+name: Gym         # optional — defaults to the room (area) the zone's device is in
 variant: tile     # optional — `tile` (default) or `mini` (number-only chip)
 compact: false    # optional — set true for a tile that doesn't expand on tap
 ```
 
-The dashboard's visual editor offers a zone dropdown, variant picker, and compact-mode toggle, so you don't need to write YAML by hand.
+The dashboard's visual editor offers a zone dropdown, an optional name, a variant picker, and a compact-mode toggle, so you don't need to write YAML by hand.
 
 ### Mini variant (for floorplans)
 

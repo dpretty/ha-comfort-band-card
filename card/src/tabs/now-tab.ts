@@ -8,9 +8,9 @@
  *     calls `comfort_band.record_feedback` (v0.11.0+) and briefly
  *     highlights to confirm.
  *   - Current action chip (heating / cooling / idle).
- *   - Dual-handle slider for manual_low/manual_high — any change starts
- *     an override via `comfort_band.start_override` (the slider's
- *     `change` event, fired on release, drives the service call).
+ *   - Dual-handle slider, starting from the band actually in force. Any
+ *     change starts an override via `comfort_band.start_override` (the
+ *     slider's `change` event, fired on release, drives the service call).
  *   - Override-active state line + Cancel-override button.
  *   - Override-duration buttons (1h / 3h / 6h) that update the
  *     `number.{zone}_override_hours` entity for future overrides.
@@ -39,6 +39,11 @@ const FEEDBACK_PILLS: ReadonlyArray<{ label: FeedbackLabel; text: string }> = [
 /** How long the tapped pill stays highlighted after a successful record. */
 const FEEDBACK_CONFIRM_MS = 1500;
 
+/** The slider's usual range, widened to take in a band outside it, and its step. */
+const SLIDER_MIN = 16;
+const SLIDER_MAX = 26;
+const SLIDER_STEP = 0.5;
+
 @customElement('comfort-band-now-tab')
 export class ComfortBandNowTab extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
@@ -52,6 +57,10 @@ export class ComfortBandNowTab extends LitElement {
   /** Timer that clears `_feedbackConfirmed`; cancelled on disconnect so it
    *  never fires `setState` on an unmounted element. */
   private _feedbackTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The track's range as last shown, kept from a drag's first move until its
+   *  release, so the track doesn't rescale under the finger if the band in
+   *  force changes meanwhile. */
+  private _heldRange: { min: number; max: number } | null = null;
   /** Monotonic tap counter. Service calls are concurrent and may resolve
    *  out of order, so each tap captures its seq and only claims the
    *  highlight if it's still the latest — the last-tapped pill always wins,
@@ -292,8 +301,22 @@ export class ComfortBandNowTab extends LitElement {
     const showFeelsLike =
       Number.isFinite(room) && Number.isFinite(apparent) && Math.abs(apparent - room) >= 0.1;
 
-    const sliderLow = this._pendingLow ?? (Number.isFinite(lowState) ? lowState : 19);
-    const sliderHigh = this._pendingHigh ?? (Number.isFinite(highState) ? highState : 22);
+    // Start from the band actually in force. The manual values are only the
+    // last override's, which can be far from the schedule's current band.
+    const start = sliderStart(effLow, effHigh, lowState, highState);
+    const sliderLow = this._pendingLow ?? start.low;
+    const sliderHigh = this._pendingHigh ?? start.high;
+    // Widen the track to take in a band outside it, so both handles sit on it
+    // and Home/End can't move a limit the wrong way (on a 16-26 track, End
+    // on a high of 28 sent 26).
+    const range =
+      this._pendingLow !== null && this._heldRange
+        ? this._heldRange
+        : {
+            min: Math.min(SLIDER_MIN, Math.floor(start.low)),
+            max: Math.max(SLIDER_MAX, Math.ceil(start.high)),
+          };
+    this._heldRange = range;
 
     const actionTyped = asAction(action);
     const showChip = actionTyped !== 'idle' && actionTyped !== 'unknown';
@@ -317,9 +340,9 @@ export class ComfortBandNowTab extends LitElement {
       <section>
         <h3>Manual band</h3>
         <dual-handle-slider
-          .min=${16}
-          .max=${26}
-          .step=${0.5}
+          .min=${range.min}
+          .max=${range.max}
+          .step=${SLIDER_STEP}
           .low=${sliderLow}
           .high=${sliderHigh}
           @input=${this._onSliderInput}
@@ -425,6 +448,35 @@ export class ComfortBandNowTab extends LitElement {
       </section>
     `;
   }
+}
+
+/**
+ * Where the slider starts: the effective band (what is in force now), falling
+ * back to the manual values, then to a neutral default, when the band is
+ * unavailable. Rounded to the 0.1° the readout shows, so what is sent is what was
+ * shown, but not snapped to the slider's steps or its range: nudging one
+ * handle must send the other limit back as it is. Only a band narrower than
+ * one step, which the slider can't hold, is widened.
+ */
+function sliderStart(
+  effLow: number,
+  effHigh: number,
+  manualLow: number,
+  manualHigh: number,
+): { low: number; high: number } {
+  let low = 19;
+  let high = 22;
+  if (Number.isFinite(effLow) && Number.isFinite(effHigh)) {
+    low = effLow;
+    high = effHigh;
+  } else if (Number.isFinite(manualLow) && Number.isFinite(manualHigh)) {
+    low = manualLow;
+    high = manualHigh;
+  }
+  low = Math.round(low * 10) / 10;
+  high = Math.round(high * 10) / 10;
+  if (high - low < SLIDER_STEP) high = low + SLIDER_STEP;
+  return { low, high };
 }
 
 function formatRemaining(iso: string | null): string {

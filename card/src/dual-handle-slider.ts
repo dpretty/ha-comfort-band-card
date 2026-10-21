@@ -74,19 +74,17 @@ export class DualHandleSlider extends LitElement {
         cursor: grabbing;
         transform: scale(1.15);
       }
-      .label-row {
-        display: flex;
-        justify-content: space-between;
-        font-size: 12px;
-        color: var(--cb-text-secondary);
+      /* The chosen band, read as one range under the middle of the track.
+         Pinned to the track's ends, the two values read as the slider's
+         scale; under each handle, they collide on a phone when the handles
+         are close, as their width doesn't scale with the track. */
+      .readout {
         margin-top: 14px;
-        font-variant-numeric: tabular-nums;
-      }
-      .value-low,
-      .value-high {
+        text-align: center;
         font-size: 14px;
         font-weight: 500;
         color: var(--cb-text-primary);
+        font-variant-numeric: tabular-nums;
       }
     `,
   ];
@@ -229,10 +227,7 @@ export class DualHandleSlider extends LitElement {
           @keydown=${(e: KeyboardEvent) => this._onKeyDown(e, 'high')}
         ></div>
       </div>
-      <div class="label-row">
-        <span class="value-low">${this._fmt(this.low)}</span>
-        <span class="value-high">${this._fmt(this.high)}</span>
-      </div>
+      <div class="readout" aria-hidden="true">${this._fmt(this.low)} – ${this._fmt(this.high)}</div>
     `;
   }
 }
