@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { findActiveProfileEntity, findZoneEntities, readHumiditySensor } from '../src/helpers.js';
+import {
+  findActiveProfileEntity,
+  findZoneEntities,
+  readHumiditySensor,
+  zoneDisplayName,
+} from '../src/helpers.js';
 import type { DeviceRegistryEntry, EntityRegistryEntry, HomeAssistant } from '../src/types.js';
 import { stubConnection } from './_fixture.js';
 
@@ -262,5 +267,15 @@ describe('readHumiditySensor', () => {
       },
     });
     expect(readHumiditySensor(hass, 'sensor.gym_room_temperature')).toBe('sensor.gym_humidity');
+  });
+});
+
+// The card itself shows its not-found state for a zone with no device, but the
+// editor's placeholder still asks for a name.
+describe('zoneDisplayName', () => {
+  it('falls back to the zone slug when the zone has no device', () => {
+    const hass = { states: {}, entities: {}, devices: {} } as unknown as HomeAssistant;
+    const name = zoneDisplayName(hass, { zone: 'gym' }, { deviceId: null, deviceName: null });
+    expect(name).toBe('gym');
   });
 });

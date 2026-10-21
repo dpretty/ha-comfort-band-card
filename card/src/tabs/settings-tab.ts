@@ -206,11 +206,12 @@ export class ComfortBandSettingsTab extends LitElement {
         title: 'Learning enabled',
         // Mirrors the integration's control gate: on, the learned predictor
         // decides (and MPC, when its own switch is on and it is ready); off,
-        // plain on/off at the band edges. Samples are recorded either way.
-        desc: html`Uses what this room has learned about how quickly it warms and cools to start and
-        stop ahead of time, instead of waiting for the temperature to reach the edge of the
-        comfortable range. Predictive control (the “MPC enabled” switch) needs this on too. While
-        it's off, the room keeps recording readings; it just doesn't act on what it has learned.`,
+        // plain on/off at the deadband edges. Samples are recorded either way.
+        desc: html`Uses what this room has learned about how quickly it warms and cools to time
+        heating and cooling: starting early rather than waiting for the room to get too cold or
+        warm, stopping early so it doesn't overshoot, and holding off while it's already heading
+        back on its own. Predictive control (the “MPC enabled” switch) needs this on too. While it's
+        off, the room keeps recording readings; it just doesn't act on what it has learned.`,
       })}
       <div class="row">
         <div class="row-label">

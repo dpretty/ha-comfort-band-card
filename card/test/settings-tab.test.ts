@@ -241,7 +241,10 @@ describe('comfort-band-settings-tab', () => {
     const row = rows.find((r) => r.textContent!.includes('Learning enabled'))!;
     const desc = row.querySelector('.desc')!.textContent!.replace(/\s+/g, ' ');
     expect(desc).not.toMatch(/no effect|reserved for upcoming/i);
-    expect(desc).toMatch(/ahead of time/);
+    // What the predictor does: anticipatory start and stop, and passive drift.
+    expect(desc).toMatch(
+      /starting early .* stopping early .* holding off while it's already heading back/,
+    );
     expect(desc).toMatch(/the “MPC enabled” switch\) needs this on too/);
     // Samples are recorded whatever the switch says.
     expect(desc).toMatch(/While it's off, the room keeps recording readings/);
