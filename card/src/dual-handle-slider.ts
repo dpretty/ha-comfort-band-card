@@ -14,11 +14,6 @@ import { customElement, property, query, state } from 'lit/decorators.js';
 import { tokens } from './styles.js';
 import type { BandHandle } from './types.js';
 
-/** Handles closer than this (as % of the track) would have overlapping values. */
-const LABEL_CLEARANCE_PCT = 14;
-/** Within this distance of either end, a value is aligned inwards. */
-const EDGE_PCT = 6;
-
 @customElement('dual-handle-slider')
 export class DualHandleSlider extends LitElement {
   @property({ type: Number }) public min = 16;
@@ -79,32 +74,17 @@ export class DualHandleSlider extends LitElement {
         cursor: grabbing;
         transform: scale(1.15);
       }
-      /* Each value sits under its own handle. Pinned to the track ends, they
-         read as the slider's scale rather than the chosen band. */
-      .label-row {
-        position: relative;
-        height: 18px;
-        font-size: 12px;
-        color: var(--cb-text-secondary);
+      /* The chosen band, read as one range under the middle of the track.
+         Pinned to the track's ends, the two values read as the slider's
+         scale; under each handle, they collide on a phone when the handles
+         are close, as their width doesn't scale with the track. */
+      .readout {
         margin-top: 14px;
-        font-variant-numeric: tabular-nums;
-      }
-      .value-low,
-      .value-high,
-      .value-pair {
-        position: absolute;
-        top: 0;
-        white-space: nowrap;
+        text-align: center;
         font-size: 14px;
         font-weight: 500;
         color: var(--cb-text-primary);
-      }
-      .value-pair {
-        display: flex;
-        gap: 12px;
-      }
-      .value-pair > span {
-        position: static;
+        font-variant-numeric: tabular-nums;
       }
     `,
   ];
@@ -247,32 +227,8 @@ export class DualHandleSlider extends LitElement {
           @keydown=${(e: KeyboardEvent) => this._onKeyDown(e, 'high')}
         ></div>
       </div>
-      <div class="label-row">${this._renderValues(lowPct, highPct)}</div>
+      <div class="readout" aria-hidden="true">${this._fmt(this.low)} – ${this._fmt(this.high)}</div>
     `;
-  }
-
-  private _renderValues(lowPct: number, highPct: number) {
-    // Handles this close would have overlapping values, so the two sit side
-    // by side as a pair, running from whichever handle leaves more room
-    // towards the middle of the track: it never reaches past either end.
-    if (highPct - lowPct < LABEL_CLEARANCE_PCT) {
-      const fromLow = lowPct + highPct < 100;
-      const at = fromLow ? lowPct : highPct;
-      const shift = fromLow ? '0%' : '-100%';
-      return html`<span class="value-pair" style="left:${at}%; transform:translateX(${shift})"
-        ><span class="value-low">${this._fmt(this.low)}</span
-        ><span class="value-high">${this._fmt(this.high)}</span></span
-      >`;
-    }
-    // Otherwise each is centred under its handle, or aligned inwards near the
-    // ends of the track so it isn't cut off.
-    const lowShift = lowPct < EDGE_PCT ? '0%' : '-50%';
-    const highShift = highPct > 100 - EDGE_PCT ? '-100%' : '-50%';
-    return html`<span class="value-low" style="left:${lowPct}%; transform:translateX(${lowShift})"
-        >${this._fmt(this.low)}</span
-      ><span class="value-high" style="left:${highPct}%; transform:translateX(${highShift})"
-        >${this._fmt(this.high)}</span
-      >`;
   }
 }
 

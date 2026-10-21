@@ -28,9 +28,12 @@ export class ComfortBandCard extends LitElement {
     if (!config?.zone) {
       throw new Error('comfort-band-card: `zone` is required');
     }
-    // `name:` left empty in YAML is null; treat it as unset.
-    if (config.name != null && typeof config.name !== 'string') {
-      throw new Error('comfort-band-card: `name` must be a string');
+    // `name:` left empty in YAML is null; treat it as unset. An unquoted
+    // number (`name: 101`) is a room name too.
+    const name: unknown = config.name;
+    if (typeof name === 'number') config = { ...config, name: String(name) };
+    else if (name != null && typeof name !== 'string') {
+      throw new Error('comfort-band-card: `name` must be text');
     }
     this._config = config;
   }

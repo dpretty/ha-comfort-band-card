@@ -193,6 +193,21 @@ describe('comfort-band-card-editor', () => {
     expect(input.placeholder).toBe('Home Gym');
   });
 
+  // `name:` with nothing after it in YAML.
+  it('drops an empty name from the config it writes back', async () => {
+    const el = await editor(makeHass(['gym', 'office']), {
+      type: 'custom:comfort-band-card',
+      zone: 'gym',
+      name: null,
+    } as never);
+    const fire = vi.fn();
+    el.addEventListener('config-changed', (e) => fire((e as CustomEvent).detail.config));
+    const zoneSelect = el.shadowRoot!.querySelectorAll('select')[0] as HTMLSelectElement;
+    zoneSelect.value = 'office';
+    zoneSelect.dispatchEvent(new Event('change'));
+    expect(fire).toHaveBeenLastCalledWith({ type: 'custom:comfort-band-card', zone: 'office' });
+  });
+
   it('keeps an existing name when the config is loaded', async () => {
     const el = await editor(makeHass(['gym']), {
       type: 'custom:comfort-band-card',

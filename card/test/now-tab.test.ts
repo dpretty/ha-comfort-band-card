@@ -255,15 +255,30 @@ describe('comfort-band-now-tab', () => {
   });
 
   it('falls back to 19–22 when neither band can be read', async () => {
+    for (const manualLow of ['unavailable', '20']) {
+      const el = await nowTab(
+        makeHass({
+          'sensor.gym_effective_low': 'unavailable',
+          'sensor.gym_effective_high': 'unavailable',
+          'number.gym_manual_low': manualLow,
+          'number.gym_manual_high': 'unavailable',
+        }),
+      );
+      expect([slider(el).low, slider(el).high]).toEqual([19, 22]);
+      el.remove();
+    }
+  });
+
+  it('falls back to the manual values when only one side of the band is unavailable', async () => {
     const el = await nowTab(
       makeHass({
         'sensor.gym_effective_low': 'unavailable',
-        'sensor.gym_effective_high': 'unavailable',
-        'number.gym_manual_low': 'unavailable',
-        'number.gym_manual_high': 'unavailable',
+        'sensor.gym_effective_high': '23',
+        'number.gym_manual_low': '20',
+        'number.gym_manual_high': '23.5',
       }),
     );
-    expect([slider(el).low, slider(el).high]).toEqual([19, 22]);
+    expect([slider(el).low, slider(el).high]).toEqual([20, 23.5]);
   });
 
   it('widens a band narrower than one step, which the slider cannot hold', async () => {
@@ -296,7 +311,15 @@ describe('comfort-band-now-tab', () => {
     });
   });
 
-  it('keeps the widened track while a handle is dragged back inside it', async () => {
+  it('widens the track to whole degrees around a fractional band outside it', async () => {
+    // Rounding would give 16 and 27, leaving the band off the track.
+    const el = await nowTab(
+      makeHass({ 'sensor.gym_effective_low': '15.6', 'sensor.gym_effective_high': '27.3' }),
+    );
+    expect([slider(el).min, slider(el).max]).toEqual([15, 28]);
+  });
+
+  it('keeps the track while the chosen values are on it, though the band in force moves', async () => {
     const el = await nowTab(
       makeHass({ 'sensor.gym_effective_low': '15', 'sensor.gym_effective_high': '28' }),
     );
@@ -305,6 +328,15 @@ describe('comfort-band-now-tab', () => {
     );
     await el.updateComplete;
     expect([slider(el).min, slider(el).max]).toEqual([15, 28]);
+    // A ramp moves the band in force mid-drag.
+    el.hass = makeHass({ 'sensor.gym_effective_low': '16.5', 'sensor.gym_effective_high': '25' });
+    await el.updateComplete;
+    expect([slider(el).min, slider(el).max]).toEqual([15, 28]);
+    // Once the slider follows the band in force again, the track does too.
+    await release(el, 17, 25);
+    el.hass = makeHass({ 'sensor.gym_effective_low': '17', 'sensor.gym_effective_high': '25' });
+    await el.updateComplete;
+    expect([slider(el).min, slider(el).max]).toEqual([16, 26]);
   });
 
   it('falls back to the manual values when the band is unavailable', async () => {
@@ -708,6 +740,46 @@ describe('comfort-band-now-tab', () => {
       });
     });
 
+    it('keeps a run going while a Cancel in it is still going through', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 18, 24);
+      vi.advanceTimersByTime(9_000);
+      const open = fake.hold();
+      await cancel(el);
+      // The notice goes while the Cancel is still going through; Cancel holds
+      // no slider values, so only the call keeps the run, for a change made
+      // before it finishes.
+      vi.advanceTimersByTime(1_000);
+      await release(el, 18, 25);
+      open();
+      await flush(el);
+      await undo(el);
+      expect(state(fake.zone, fake.inForce())).toEqual({
+        inForce: [18, 23],
+        manual: [19, 22],
+        override: false,
+      });
+    });
+
+    it('keeps a run going through a drag under way when its notice goes', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 18, 24);
+      vi.advanceTimersByTime(9_000);
+      slider(el).dispatchEvent(
+        new CustomEvent('input', { detail: { low: 18, high: 24.5 }, bubbles: true }),
+      );
+      vi.advanceTimersByTime(1_000);
+      await el.updateComplete;
+      expect(notice(el)).toBeNull();
+      await release(el, 18, 25);
+      await undo(el);
+      expect(fake.inForce()).toEqual([18, 23]);
+    });
+
     it('starts a new run once a rejected change has had its notice', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
       const fake = integration();
@@ -767,7 +839,10 @@ describe('comfort-band-now-tab', () => {
 
     for (const overrideState of ['unavailable', 'unknown', undefined]) {
       it(`offers no undo when the override's state is ${overrideState ?? 'missing'}`, async () => {
-        const hass = makeHass();
+        // With a readable end, so only the override's state is in question.
+        const hass = makeHass({
+          'sensor.gym_override_ends': new Date(Date.now() + 3_600_000).toISOString(),
+        });
         if (overrideState) hass.states['binary_sensor.gym_override_active']!.state = overrideState;
         else delete hass.states['binary_sensor.gym_override_active'];
         const el = await nowTab(hass);
@@ -787,10 +862,76 @@ describe('comfort-band-now-tab', () => {
       expect(notice(el)!.undo).toBeNull();
     });
 
-    it('offers no undo when the manual band cannot be read', async () => {
-      const el = await nowTab(makeHass({ 'number.gym_manual_high': 'unavailable' }));
-      await release(el, 21, 24);
-      expect(notice(el)!.undo).toBeNull();
+    for (const side of ['low', 'high']) {
+      it(`offers no undo when the manual ${side} limit cannot be read`, async () => {
+        const el = await nowTab(makeHass({ [`number.gym_manual_${side}`]: 'unavailable' }));
+        await release(el, 21, 24);
+        expect(notice(el)!.text).toMatch(/^Adjusted to/);
+        expect(notice(el)!.undo).toBeNull();
+      });
+    }
+
+    // The modal makes a new Now tab whenever it opens or changes tab.
+    it('queues calls for the zone across Now tabs, and offers no undo while one is going through', async () => {
+      const fake = integration();
+      const first = await fake.mount();
+      const open = fake.hold();
+      await release(first, 20, 24);
+      first.remove();
+      const second = await fake.mount();
+      await release(second, 20, 25);
+      expect(fake.callService).toHaveBeenCalledTimes(1);
+      open();
+      await flush(second);
+      expect(fake.callService.mock.calls.map((c) => c[2])).toEqual([
+        { zone: 'gym', low: 20, high: 24 },
+        { zone: 'gym', low: 20, high: 25 },
+      ]);
+      expect(notice(second)).toEqual({ text: 'Adjusted to 20.0° – 25.0°', undo: null });
+    });
+
+    it('keeps a run going through a drag that supersedes its last change', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 18, 24);
+      vi.advanceTimersByTime(9_000);
+      const open = fake.hold();
+      await release(el, 18, 24.5);
+      vi.advanceTimersByTime(1_000);
+      // A drag starts before that change goes through, so its notice never shows.
+      slider(el).dispatchEvent(
+        new CustomEvent('input', { detail: { low: 18, high: 25 }, bubbles: true }),
+      );
+      open();
+      await flush(el);
+      expect(notice(el)).toBeNull();
+
+      await release(el, 18, 25);
+      await undo(el);
+      // The drag continued the same adjustment, so all three go.
+      expect(fake.inForce()).toEqual([18, 23]);
+    });
+
+    it('ends a run that outlived its first notice once the last one has gone', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 18, 24);
+      vi.advanceTimersByTime(9_000);
+      const open = fake.hold();
+      await release(el, 18, 24.5);
+      // The first notice goes while the second change is still going through;
+      // that change then puts the notice back up, and it goes in turn.
+      vi.advanceTimersByTime(1_000);
+      open();
+      await flush(el);
+      vi.advanceTimersByTime(10_000);
+      await el.updateComplete;
+      expect(notice(el)).toBeNull();
+      await release(el, 18, 25);
+      await undo(el);
+      expect(fake.inForce()).toEqual([18, 24.5]);
     });
 
     // hass may not show the undo's result yet, so the state to go back to
@@ -821,16 +962,24 @@ describe('comfort-band-now-tab', () => {
       expect(notice(el)).toEqual({ text: 'Undone', undo: null });
     });
 
-    it('says when the adjustment ends, from the zone override length', async () => {
-      vi.useFakeTimers({ toFake: ['Date'] });
-      vi.setSystemTime(new Date('2026-10-21T10:00:00Z'));
+    // In a zone with no schedule the band stays when the override ends, so an
+    // end time would be false there, and the card can't tell the zones apart.
+    it('says what the band was set to, without promising when it ends', async () => {
       const el = await nowTab(makeHass({ 'number.gym_override_hours': '3' }));
       await release(el, 20.5, 23.5);
-      const until = new Date('2026-10-21T13:00:00Z').toLocaleTimeString([], {
-        hour: 'numeric',
-        minute: '2-digit',
-      });
-      expect(notice(el)!.text).toBe(`Adjusted to 20.5° – 23.5° until ${until}`);
+      expect(notice(el)!.text).toBe('Adjusted to 20.5° – 23.5°');
+    });
+
+    it('keeps the full undo window for a change made while an earlier notice is up', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const el = await nowTab(makeHass());
+      await release(el, 20.5, 23.5);
+      vi.advanceTimersByTime(5_000);
+      await release(el, 21, 23.5);
+      // The first notice's timer would have ended at 10 s.
+      vi.advanceTimersByTime(9_999);
+      await el.updateComplete;
+      expect(notice(el)!.undo).not.toBeNull();
     });
 
     // The region exists before anything is said in it, so screen readers
@@ -905,6 +1054,38 @@ describe('comfort-band-now-tab', () => {
       expect([slider(el).low, slider(el).high]).toEqual([19.5, 22.5]);
     });
 
+    it('keeps the Undo for a change superseded by a drag when the next one is rejected', async () => {
+      const fake = integration();
+      const el = await fake.mount();
+      const open = fake.hold();
+      await release(el, 20, 24);
+      slider(el).dispatchEvent(
+        new CustomEvent('input', { detail: { low: 20, high: 24.5 }, bubbles: true }),
+      );
+      open();
+      await flush(el);
+      fake.rejectNext();
+      await release(el, 20, 24.5);
+      expect(notice(el)!.text).toBe("Couldn't adjust this room. Try again.");
+      await undo(el);
+      expect(fake.inForce()).toEqual([18, 23]);
+    });
+
+    it('says nothing about a rejected change a drag has superseded, and leaves the drag alone', async () => {
+      const fake = integration();
+      const el = await fake.mount();
+      const open = fake.hold();
+      fake.rejectNext();
+      await release(el, 20, 24);
+      slider(el).dispatchEvent(
+        new CustomEvent('input', { detail: { low: 20.5, high: 24 }, bubbles: true }),
+      );
+      open();
+      await flush(el);
+      expect(notice(el)).toBeNull();
+      expect([slider(el).low, slider(el).high]).toEqual([20.5, 24]);
+    });
+
     it('keeps the Undo for earlier changes in the run when a later one is rejected', async () => {
       const fake = integration();
       const el = await fake.mount();
@@ -934,6 +1115,52 @@ describe('comfort-band-now-tab', () => {
       expect(fake.inForce()).toEqual([20, 24]);
       await undo(el);
       expect(fake.inForce()).toEqual([18, 23]);
+    });
+
+    it('keeps the run after a rejected undo, so a further change joins it', async () => {
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 20, 24);
+      fake.rejectNext();
+      await undo(el);
+      await release(el, 20, 25);
+      await undo(el);
+      expect(fake.inForce()).toEqual([18, 23]);
+    });
+
+    it('says nothing about an undo a drag has superseded', async () => {
+      for (const reject of [false, true]) {
+        const fake = integration();
+        const el = await fake.mount();
+        await release(el, 20, 24);
+        const open = fake.hold();
+        if (reject) fake.rejectNext();
+        notice(el)!.undo!.click();
+        await flush(el);
+        slider(el).dispatchEvent(
+          new CustomEvent('input', { detail: { low: 20.5, high: 23 }, bubbles: true }),
+        );
+        open();
+        await flush(el);
+        expect(notice(el)).toBeNull();
+        el.remove();
+      }
+    });
+
+    it('leaves a detached tab alone when an undo finishes after', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 20, 24);
+      const open = fake.hold();
+      notice(el)!.undo!.click();
+      await flush(el);
+      el.remove();
+      open();
+      await flush(el);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(notice(el)).toBeNull();
+      vi.useRealTimers();
     });
   });
 
@@ -1041,10 +1268,40 @@ describe('comfort-band-now-tab', () => {
       );
       open();
       await flush(el);
+      // Neither a settle timer nor a notice: the drag superseded the change.
+      expect(vi.getTimerCount()).toBe(0);
       vi.advanceTimersByTime(5_000);
       await el.updateComplete;
       expect([slider(el).low, slider(el).high]).toEqual([21, 23.5]);
-      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    // HA usually sends the new state before the call's result.
+    it('follows the band in force once the integration reports the change, even first', async () => {
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 20, 24);
+      // Someone else then cancels the override, at the wall.
+      fake.zone.overrideUntil = null;
+      el.hass = makeHass({ 'sensor.gym_effective_low': '18', 'sensor.gym_effective_high': '23' });
+      await el.updateComplete;
+      expect([slider(el).low, slider(el).high]).toEqual([18, 23]);
+    });
+
+    it('stops waiting when the change is rejected', async () => {
+      const fake = integration();
+      const el = await fake.mount();
+      fake.rejectNext();
+      await release(el, 20, 24);
+      expect([slider(el).low, slider(el).high]).toEqual([18, 23]);
+    });
+
+    it('lets go of the chosen band as soon as Undo is tapped', async () => {
+      const el = await nowTab(makeHass());
+      await release(el, 20.5, 23.5);
+      expect([slider(el).low, slider(el).high]).toEqual([20.5, 23.5]);
+      notice(el)!.undo!.click();
+      await el.updateComplete;
+      expect([slider(el).low, slider(el).high]).toEqual([19.5, 22.5]);
     });
 
     it('shows the band in force as soon as Cancel is tapped', async () => {

@@ -175,11 +175,17 @@ describe('comfort-band-card room name', () => {
     expect(shownNames(el).tile).toBe('Home Gym');
   });
 
-  it('rejects a name that is not a string', async () => {
+  it('rejects a name that is not text', async () => {
     const el = await mount('comfort-band-card');
     expect(() =>
-      el.setConfig({ type: 'custom:comfort-band-card', zone: 'gym', name: 7 } as never),
+      el.setConfig({ type: 'custom:comfort-band-card', zone: 'gym', name: ['Gym'] } as never),
     ).toThrow(/name/);
+  });
+
+  // `name: 101` unquoted in YAML.
+  it('takes a number as a name', async () => {
+    const el = await cardWith({ zone: 'gym', name: 101 }, makeHass('gym'));
+    expect(shownNames(el).tile).toBe('101');
   });
 
   // `name:` with nothing after it in YAML.

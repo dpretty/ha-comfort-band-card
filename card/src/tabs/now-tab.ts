@@ -57,6 +57,28 @@ const NOTICE_MS = 4_000;
  *  the change didn't take. This bounds the wait if it never arrives. */
 const SETTLE_MAX_MS = 5_000;
 
+/**
+ * Calls are sent one at a time per zone, in the order they were made: HA runs
+ * service calls concurrently, so two sent together could land in either order
+ * and leave the earlier one in force. Shared by every Now tab for the zone,
+ * since the modal makes a new one each time it opens or changes tab, and the
+ * count tells a new tab that a call is still going through.
+ */
+interface ZoneQueue {
+  tail: Promise<unknown>;
+  inFlight: number;
+}
+const zoneQueues = new Map<string, ZoneQueue>();
+
+function queueFor(zone: string): ZoneQueue {
+  let queue = zoneQueues.get(zone);
+  if (!queue) {
+    queue = { tail: Promise.resolve(), inFlight: 0 };
+    zoneQueues.set(zone, queue);
+  }
+  return queue;
+}
+
 /** What Undo puts back: the zone's manual band, and when the override that
  *  was running would have ended (null when none was). */
 interface UndoPoint {
@@ -65,10 +87,11 @@ interface UndoPoint {
   endsAt: number | null;
 }
 
-/** Changes made while an Undo notice is up form one run, and Undo takes the
- *  whole run back, to before its first change. Undoing only the last step
- *  would leave a band the user was passing through on the way, with a
- *  keyboard nudge or a second drag. */
+/** Changes made while an Undo notice is up, a call is still going through,
+ *  or the user is still dragging form one run, and Undo takes the whole run
+ *  back, to before its first change. Undoing only the last step would leave a
+ *  band the user was passing through on the way, with a keyboard nudge or a
+ *  second drag. */
 interface Run {
   /** Undefined when the state before the run couldn't be read back. */
   point: UndoPoint | undefined;
@@ -104,11 +127,9 @@ export class ComfortBandNowTab extends LitElement {
   /** Bumped by every change, Undo, drag and detach. A call that finishes after
    *  something newer has started leaves the notice and the slider alone. */
   private _seq = 0;
-  /** Calls are sent one at a time, in the order they were made: HA runs
-   *  service calls concurrently, so two sent together could land in either
-   *  order and leave the earlier one in force. */
-  private _queue: Promise<unknown> = Promise.resolve();
-  private _inFlight = 0;
+  /** The track's range as last shown, kept while the user's values are on it,
+   *  so it doesn't rescale under a drag when the band in force changes. */
+  private _heldRange: { min: number; max: number } | null = null;
   /** True between a successful change and the new band showing up in `hass`. */
   private _settling = false;
   private _settleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -350,7 +371,9 @@ export class ComfortBandNowTab extends LitElement {
     this._pendingHigh = high;
     void this._change({
       call: (hass, zone) => startOverride(hass, { zone, low, high }),
-      done: () => `Adjusted to ${fmtTemp(low)} – ${fmtTemp(high)}${this._until()}`,
+      // No "until": in a zone with no schedule the band stays when the
+      // override ends, and the card can't tell which kind of zone this is.
+      done: () => `Adjusted to ${fmtTemp(low)} – ${fmtTemp(high)}`,
       failed: "Couldn't adjust this room. Try again.",
       settle: true,
     });
@@ -379,8 +402,10 @@ export class ComfortBandNowTab extends LitElement {
     const seq = ++this._seq;
     // Read the state the run would go back to before this change is sent.
     const run = (this._run ??= { point: this._undoPoint(), changed: false });
+    // From now, not from the result: HA usually sends the new state first.
+    if (opts.settle) this._startSettling();
     try {
-      await this._send(() => opts.call(hass, zone));
+      await this._send(zone, () => opts.call(hass, zone));
     } catch {
       if (seq !== this._seq) return;
       if (opts.settle) this._releasePending();
@@ -390,7 +415,6 @@ export class ComfortBandNowTab extends LitElement {
     }
     run.changed = true;
     if (seq !== this._seq) return;
-    if (opts.settle) this._startSettling();
     this._run = run;
     this._showNotice({ text: opts.done(), run });
   }
@@ -406,7 +430,7 @@ export class ComfortBandNowTab extends LitElement {
     this._clearNotice();
     this._releasePending();
     try {
-      await this._send(() => restore(hass, zone, point));
+      await this._send(zone, () => restore(hass, zone, point));
     } catch {
       if (seq !== this._seq) return;
       // Still undoable: the button stays, to try again.
@@ -426,7 +450,7 @@ export class ComfortBandNowTab extends LitElement {
    */
   private _undoPoint(): UndoPoint | undefined {
     const entities = this.entities;
-    if (!entities || this._inFlight > 0) return undefined;
+    if (!entities || queueFor(this.zone).inFlight > 0) return undefined;
     const low = this._numericState(entities.manualLow);
     const high = this._numericState(entities.manualHigh);
     if (!Number.isFinite(low) || !Number.isFinite(high)) return undefined;
@@ -437,18 +461,12 @@ export class ComfortBandNowTab extends LitElement {
     return Number.isNaN(endsAt) ? undefined : { low, high, endsAt };
   }
 
-  private _send(call: () => Promise<unknown>): Promise<unknown> {
-    this._inFlight++;
-    const sent = this._queue.then(call).finally(() => this._inFlight--);
-    this._queue = sent.catch(() => undefined);
+  private _send(zone: string, call: () => Promise<unknown>): Promise<unknown> {
+    const queue = queueFor(zone);
+    queue.inFlight++;
+    const sent = queue.tail.then(call).finally(() => queue.inFlight--);
+    queue.tail = sent.catch(() => undefined);
     return sent;
-  }
-
-  /** " until 14:30", from the zone's override length, which the service uses
-   *  when none is passed. */
-  private _until(): string {
-    const hours = this._numericState(this.entities?.overrideHours ?? null);
-    return Number.isFinite(hours) ? ` until ${formatClock(Date.now() + hours * 3_600_000)}` : '';
   }
 
   private _showNotice(notice: Notice): void {
@@ -457,9 +475,11 @@ export class ComfortBandNowTab extends LitElement {
     this._noticeTimer = setTimeout(
       () => {
         this._clearNotice();
-        // The run ends with its notice, unless a change in it is still going
-        // through; that change puts the notice back up when it finishes.
-        if (this._inFlight === 0) this._run = null;
+        // The run ends with its notice, unless a call is still going through
+        // or the slider still holds the user's values (mid-drag, or a change
+        // just sent). A change then follows that puts the notice back up: a
+        // drag continues the same adjustment, and its release joins the run.
+        if (this._pendingLow === null && queueFor(this.zone).inFlight === 0) this._run = null;
       },
       undoable(notice) ? UNDO_WINDOW_MS : NOTICE_MS,
     );
@@ -543,10 +563,15 @@ export class ComfortBandNowTab extends LitElement {
     const sliderLow = this._pendingLow ?? start.low;
     const sliderHigh = this._pendingHigh ?? start.high;
     // Widen the track to take in a band outside it. Clamped to the track, the
-    // limit the user didn't move would be sent back changed. Includes the
-    // band in force, so the track doesn't rescale under a drag.
-    const sliderMin = Math.min(SLIDER_MIN, Math.floor(Math.min(start.low, sliderLow)));
-    const sliderMax = Math.max(SLIDER_MAX, Math.ceil(Math.max(start.high, sliderHigh)));
+    // limit the user didn't move would be sent back changed.
+    const range =
+      this._pendingLow !== null && this._heldRange
+        ? this._heldRange
+        : {
+            min: Math.min(SLIDER_MIN, Math.floor(start.low)),
+            max: Math.max(SLIDER_MAX, Math.ceil(start.high)),
+          };
+    this._heldRange = range;
 
     const actionTyped = asAction(action);
     const showChip = actionTyped !== 'idle' && actionTyped !== 'unknown';
@@ -570,8 +595,8 @@ export class ComfortBandNowTab extends LitElement {
       <section>
         <h3>Manual band</h3>
         <dual-handle-slider
-          .min=${sliderMin}
-          .max=${sliderMax}
+          .min=${range.min}
+          .max=${range.max}
           .step=${SLIDER_STEP}
           .low=${sliderLow}
           .high=${sliderHigh}
@@ -745,10 +770,6 @@ function restore(hass: HomeAssistant, zone: string, point: UndoPoint): Promise<u
 
 function fmtTemp(value: number): string {
   return `${value.toFixed(1)}°`;
-}
-
-function formatClock(ms: number): string {
-  return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
 function formatRemaining(iso: string | null): string {
