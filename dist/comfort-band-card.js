@@ -1213,27 +1213,24 @@ let Bt = class extends ze {
   async _change(e) {
     const t = this.hass, i = this.zone;
     if (!t || !i) return;
-    const n = ++this._seq, r = this._run ??= {
-      point: this._undoPoint(),
-      changed: !1,
-      calls: 0,
-      expired: !1
-    };
+    const n = ++this._seq, r = this._run ??= { point: this._undoPoint(), changed: !1, calls: 0 };
     e.settle && this._startSettling();
     let s = !0;
     r.calls++;
     try {
-      await this._send(i, () => (e.settle && n === this._seq && this._capSettling(), e.call(t, i)));
+      await this._send(i, () => e.call(t, i));
     } catch {
       s = !1;
     } finally {
       r.calls--;
     }
-    if (s && (r.changed = !0), n !== this._seq) {
-      r.expired && r.calls === 0 && this._run === r && (this._run = null);
-      return;
+    if (s && (r.changed = !0), n === this._seq) {
+      if (!s) {
+        e.settle && this._releasePending(), this._showNotice({ text: e.failed, error: !0, run: r });
+        return;
+      }
+      e.settle && this._capSettling(), this._showNotice({ text: e.done(), run: r });
     }
-    !s && e.settle && this._releasePending(), this._run = r, this._showNotice(s ? { text: e.done(), run: r } : { text: e.failed, error: !0, run: r });
   }
   /**
    * Reads the state a run would go back to: the manual band, and whether an
@@ -1260,11 +1257,11 @@ let Bt = class extends ze {
     }), n;
   }
   _showNotice(e) {
-    this._clearNotice(), this._notice = e, e.run && (e.run.expired = !1), this._noticeTimer = setTimeout(
+    this._clearNotice(), this._notice = e, this._noticeTimer = setTimeout(
       () => {
         this._clearNotice();
-        const t = this._run;
-        t && (t.expired = !0, t.calls === 0 && (this._run = null));
+        const t = e.run;
+        t && t.calls === 0 && (this._run = null);
       },
       Bs(e) ? lu : au
     );

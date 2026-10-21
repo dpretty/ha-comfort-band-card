@@ -90,9 +90,10 @@ interface UndoPoint {
 /** Changes made while an Undo notice is up form one run, and Undo takes the
  *  whole run back, to before its first change. Undoing only the last step
  *  would leave a band the user was passing through on the way, with a
- *  keyboard nudge or a second drag. A run ends when its notice goes, or, if
- *  one of its calls is still going through then, when the last one finishes
- *  without putting the notice back up. */
+ *  keyboard nudge or a second drag. A run ends when its own notice goes with
+ *  none of its calls still going through. Otherwise a later change joins it
+ *  and puts its notice back up: the call when it finishes, or, if a drag or
+ *  another change has superseded it, that drag's release or that change. */
 interface Run {
   /** Undefined when the state before the run couldn't be read back. */
   point: UndoPoint | undefined;
@@ -100,8 +101,6 @@ interface Run {
   changed: boolean;
   /** The run's calls still going through. */
   calls: number;
-  /** Its notice has gone, so the run ends once `calls` is 0. */
-  expired: boolean;
 }
 
 /** A notice under the slider: what just changed, and the run to take back. */
@@ -407,37 +406,30 @@ export class ComfortBandNowTab extends LitElement {
     if (!hass || !zone) return;
     const seq = ++this._seq;
     // Read the state the run would go back to before this change is sent.
-    const run = (this._run ??= {
-      point: this._undoPoint(),
-      changed: false,
-      calls: 0,
-      expired: false,
-    });
+    const run = (this._run ??= { point: this._undoPoint(), changed: false, calls: 0 });
     // Hold from now, not from the result: HA usually sends the new state first.
     if (opts.settle) this._startSettling();
     let ok = true;
     run.calls++;
     try {
-      await this._send(zone, () => {
-        // The cap counts from when the change is sent, not while it waits
-        // behind another: the values are the user's until then.
-        if (opts.settle && seq === this._seq) this._capSettling();
-        return opts.call(hass, zone);
-      });
+      await this._send(zone, () => opts.call(hass, zone));
     } catch {
       ok = false;
     } finally {
       run.calls--;
     }
     if (ok) run.changed = true;
-    if (seq !== this._seq) {
-      // Something newer has the notice; this run may now be over.
-      if (run.expired && run.calls === 0 && this._run === run) this._run = null;
+    // Something newer has the slider and the notice.
+    if (seq !== this._seq) return;
+    if (!ok) {
+      if (opts.settle) this._releasePending();
+      this._showNotice({ text: opts.failed, error: true, run });
       return;
     }
-    if (!ok && opts.settle) this._releasePending();
-    this._run = run;
-    this._showNotice(ok ? { text: opts.done(), run } : { text: opts.failed, error: true, run });
+    // The values are the user's until the change has gone through; the limit
+    // runs from then, in case the new band never shows up in `hass`.
+    if (opts.settle) this._capSettling();
+    this._showNotice({ text: opts.done(), run });
   }
 
   private _onUndo = async () => {
@@ -493,17 +485,14 @@ export class ComfortBandNowTab extends LitElement {
   private _showNotice(notice: Notice): void {
     this._clearNotice();
     this._notice = notice;
-    if (notice.run) notice.run.expired = false;
     this._noticeTimer = setTimeout(
       () => {
         this._clearNotice();
-        // The run ends with its notice, unless one of its calls is still
-        // going through: that call puts the notice back up when it finishes,
-        // or ends the run if something newer has the notice by then.
-        const run = this._run;
-        if (!run) return;
-        run.expired = true;
-        if (run.calls === 0) this._run = null;
+        // A notice ends only its own run, which is the current one while the
+        // notice is up ("Undone" has none), and not while one of the run's
+        // calls is still going through.
+        const run = notice.run;
+        if (run && run.calls === 0) this._run = null;
       },
       undoable(notice) ? UNDO_WINDOW_MS : NOTICE_MS,
     );

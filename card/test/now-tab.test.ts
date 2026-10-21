@@ -12,7 +12,8 @@ afterEach(teardown);
 const unopened = new Set<() => void>();
 afterEach(async () => {
   for (const open of [...unopened]) open();
-  for (let i = 0; i < 50; i++) await Promise.resolve();
+  // Enough turns for a long queue of held calls to drain.
+  for (let i = 0; i < 1_000; i++) await Promise.resolve();
 });
 
 function makeEntities(zone = 'gym'): ZoneEntities {
@@ -210,7 +211,8 @@ function integration(initial: Partial<ZoneModel> = {}) {
       const gate = { holds, until: new Promise<void>((resolve) => (release = resolve)) };
       gates.push(gate);
       const open = () => {
-        gates.splice(gates.indexOf(gate), 1);
+        const at = gates.indexOf(gate);
+        if (at >= 0) gates.splice(at, 1);
         unopened.delete(open);
         release();
       };
@@ -960,7 +962,7 @@ describe('comfort-band-now-tab', () => {
       await flush(gym);
     });
 
-    it('ends a run whose notice has gone once a drag supersedes its last change', async () => {
+    it('keeps a run whose last change a drag supersedes after its notice has gone', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
       const fake = integration();
       const el = await fake.mount();
@@ -979,8 +981,38 @@ describe('comfort-band-now-tab', () => {
 
       await release(el, 18, 25);
       await undo(el);
-      // The drag's release starts a run of its own, with its own notice.
-      expect(fake.inForce()).toEqual([18, 24.5]);
+      // The change the drag superseded never had a notice of its own, so the
+      // drag's release joins its run: Undo doesn't leave a band that was
+      // never confirmed, and goes as far back whether that change lands
+      // before the release or after.
+      expect(fake.inForce()).toEqual([18, 23]);
+    });
+
+    // An "Undone" notice has no run. Going, it mustn't end the run of a change
+    // made while it was up.
+    it('keeps a run made while "Undone" is up when "Undone" goes', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 20, 24);
+      await undo(el);
+      expect(notice(el)!.text).toBe('Undone');
+      const open = fake.hold();
+      await release(el, 20, 25);
+      slider(el).dispatchEvent(
+        new CustomEvent('input', { detail: { low: 20, high: 25.5 }, bubbles: true }),
+      );
+      open();
+      await flush(el);
+      vi.advanceTimersByTime(4_000);
+      await el.updateComplete;
+      await release(el, 20, 25.5);
+      await undo(el);
+      expect(state(fake.zone, fake.inForce())).toEqual({
+        inForce: [18, 23],
+        manual: [19, 22],
+        override: false,
+      });
     });
 
     it('keeps a run while any of its calls is still going through', async () => {
@@ -1240,6 +1272,7 @@ describe('comfort-band-now-tab', () => {
       (hass.callService as ReturnType<typeof vi.fn>).mockImplementationOnce(
         () => new Promise((_resolve, rej) => (reject = rej)),
       );
+      unopened.add(() => reject(new Error('cleanup')));
       const el = await nowTab(hass);
       await release(el, 20, 24);
       await release(el, 20, 25);
@@ -1260,6 +1293,22 @@ describe('comfort-band-now-tab', () => {
       expect(fake.inForce()).toEqual([20, 24]);
       await undo(el);
       expect(fake.inForce()).toEqual([18, 23]);
+    });
+
+    it('keeps a failed undo up for the undo window, with its button', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 20, 24);
+      fake.rejectNext();
+      await undo(el);
+      vi.advanceTimersByTime(9_999);
+      await el.updateComplete;
+      expect(notice(el)!.text).toBe("Couldn't undo that.");
+      expect(notice(el)!.undo).not.toBeNull();
+      vi.advanceTimersByTime(1);
+      await el.updateComplete;
+      expect(notice(el)).toBeNull();
     });
 
     it('keeps the run after a rejected undo, so a further change joins it', async () => {
@@ -1329,6 +1378,45 @@ describe('comfort-band-now-tab', () => {
       expect(notice(el)!.text).toMatch(/^Adjusted to 20\.0° – 25\.0°/);
     });
 
+    // A hold on the change alone, so the fake's own gate doesn't put the calls
+    // in order: only the queue can.
+    it('sends an Undo only after a change still going through', async () => {
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 20, 24);
+      const open = fake.hold((_service, data) => data.high === 24.5);
+      await release(el, 20, 24.5);
+      notice(el)!.undo!.click();
+      await flush(el);
+      expect(fake.callService).toHaveBeenCalledTimes(2);
+      open();
+      await flush(el);
+      expect(fake.callService.mock.calls.map((c) => c[2])).toEqual([
+        { zone: 'gym', low: 20, high: 24 },
+        { zone: 'gym', low: 20, high: 24.5 },
+        { zone: 'gym', low: 19, high: 22, hours: 0 },
+      ]);
+      expect(fake.inForce()).toEqual([18, 23]);
+    });
+
+    it('sends a Cancel only after a change still going through', async () => {
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 20, 24);
+      const open = fake.hold((_service, data) => data.high === 24.5);
+      await release(el, 20, 24.5);
+      await cancel(el);
+      expect(fake.callService).toHaveBeenCalledTimes(2);
+      open();
+      await flush(el);
+      expect(fake.callService.mock.calls.map((c) => c[1])).toEqual([
+        'start_override',
+        'start_override',
+        'cancel_override',
+      ]);
+      expect(fake.inForce()).toEqual([18, 23]);
+    });
+
     it('waits for Cancel to go through before saying it has', async () => {
       const fake = integration({ overrideUntil: Date.now() + 3_600_000 });
       const el = await fake.mount();
@@ -1390,6 +1478,54 @@ describe('comfort-band-now-tab', () => {
       await el.updateComplete;
       expect([slider(el).low, slider(el).high]).toEqual([18, 25]);
       open();
+      await flush(el);
+    });
+
+    // A change still going through is the user's; the limit runs from its result.
+    it('keeps holding the chosen values while the change is going through, however long', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const hass = makeHass();
+      let resolve!: () => void;
+      (hass.callService as ReturnType<typeof vi.fn>).mockImplementationOnce(
+        () => new Promise<void>((res) => (resolve = res)),
+      );
+      unopened.add(() => resolve());
+      const el = await nowTab(hass);
+      await release(el, 20.5, 23.5);
+      vi.advanceTimersByTime(6_000);
+      el.hass = makeHass();
+      await el.updateComplete;
+      expect([slider(el).low, slider(el).high]).toEqual([20.5, 23.5]);
+      resolve();
+      await flush(el);
+      vi.advanceTimersByTime(4_999);
+      el.hass = makeHass();
+      await el.updateComplete;
+      expect([slider(el).low, slider(el).high]).toEqual([20.5, 23.5]);
+      vi.advanceTimersByTime(1);
+      el.hass = makeHass();
+      await el.updateComplete;
+      expect([slider(el).low, slider(el).high]).toEqual([19.5, 22.5]);
+    });
+
+    it("clears an earlier change's time limit when the next change is made", async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const hass = makeHass();
+      let resolve!: () => void;
+      const el = await nowTab(hass);
+      await release(el, 20.5, 23.5);
+      vi.advanceTimersByTime(2_000);
+      // The next change is slow; the first one's limit would end at 5 s.
+      (hass.callService as ReturnType<typeof vi.fn>).mockImplementationOnce(
+        () => new Promise<void>((res) => (resolve = res)),
+      );
+      unopened.add(() => resolve());
+      await release(el, 21, 23.5);
+      vi.advanceTimersByTime(3_500);
+      el.hass = makeHass();
+      await el.updateComplete;
+      expect([slider(el).low, slider(el).high]).toEqual([21, 23.5]);
+      resolve();
       await flush(el);
     });
 
