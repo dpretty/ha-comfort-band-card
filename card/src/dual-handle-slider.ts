@@ -90,13 +90,21 @@ export class DualHandleSlider extends LitElement {
         font-variant-numeric: tabular-nums;
       }
       .value-low,
-      .value-high {
+      .value-high,
+      .value-pair {
         position: absolute;
         top: 0;
         white-space: nowrap;
         font-size: 14px;
         font-weight: 500;
         color: var(--cb-text-primary);
+      }
+      .value-pair {
+        display: flex;
+        gap: 12px;
+      }
+      .value-pair > span {
+        position: static;
       }
     `,
   ];
@@ -209,12 +217,6 @@ export class DualHandleSlider extends LitElement {
   protected override render() {
     const lowPct = this._pct(this.low);
     const highPct = this._pct(this.high);
-    // Centre each value under its handle. Near the track's ends, align it
-    // inwards so it isn't cut off; when the handles are close, push the two
-    // values apart (low to the left of its handle, high to the right).
-    const close = highPct - lowPct < LABEL_CLEARANCE_PCT;
-    const lowShift = lowPct < EDGE_PCT ? '0%' : close ? '-100%' : '-50%';
-    const highShift = highPct > 100 - EDGE_PCT ? '-100%' : close ? '0%' : '-50%';
     return html`
       <div class="track" @pointerdown=${this._onTrackPointerDown}>
         <div class="fill" style="left:${lowPct}%; width:${highPct - lowPct}%"></div>
@@ -245,15 +247,32 @@ export class DualHandleSlider extends LitElement {
           @keydown=${(e: KeyboardEvent) => this._onKeyDown(e, 'high')}
         ></div>
       </div>
-      <div class="label-row">
-        <span class="value-low" style="left:${lowPct}%; transform:translateX(${lowShift})"
-          >${this._fmt(this.low)}</span
-        >
-        <span class="value-high" style="left:${highPct}%; transform:translateX(${highShift})"
-          >${this._fmt(this.high)}</span
-        >
-      </div>
+      <div class="label-row">${this._renderValues(lowPct, highPct)}</div>
     `;
+  }
+
+  private _renderValues(lowPct: number, highPct: number) {
+    // Handles this close would have overlapping values, so the two sit side
+    // by side as a pair, running from whichever handle leaves more room
+    // towards the middle of the track: it never reaches past either end.
+    if (highPct - lowPct < LABEL_CLEARANCE_PCT) {
+      const fromLow = lowPct + highPct < 100;
+      const at = fromLow ? lowPct : highPct;
+      const shift = fromLow ? '0%' : '-100%';
+      return html`<span class="value-pair" style="left:${at}%; transform:translateX(${shift})"
+        ><span class="value-low">${this._fmt(this.low)}</span
+        ><span class="value-high">${this._fmt(this.high)}</span></span
+      >`;
+    }
+    // Otherwise each is centred under its handle, or aligned inwards near the
+    // ends of the track so it isn't cut off.
+    const lowShift = lowPct < EDGE_PCT ? '0%' : '-50%';
+    const highShift = highPct > 100 - EDGE_PCT ? '-100%' : '-50%';
+    return html`<span class="value-low" style="left:${lowPct}%; transform:translateX(${lowShift})"
+        >${this._fmt(this.low)}</span
+      ><span class="value-high" style="left:${highPct}%; transform:translateX(${highShift})"
+        >${this._fmt(this.high)}</span
+      >`;
   }
 }
 

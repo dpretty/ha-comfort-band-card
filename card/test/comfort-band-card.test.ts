@@ -138,11 +138,55 @@ describe('comfort-band-card room name', () => {
     expect(shownNames(el).tile).toBe('Gym');
   });
 
+  it('falls back to the device name when the area registry is not loaded', async () => {
+    const base = makeHass('gym');
+    const device = base.devices['dev-gym']!;
+    const hass = { ...base, devices: { [device.id]: { ...device, area_id: 'area-1' } } };
+    delete hass.areas;
+    const el = await cardWith({ zone: 'gym' }, hass);
+    expect(shownNames(el).tile).toBe('Gym');
+  });
+
+  it('trims the area name', async () => {
+    const hass = withArea(makeHass('gym'), 'gym', '  Home Gym ');
+    const el = await cardWith({ zone: 'gym' }, hass);
+    expect(shownNames(el).tile).toBe('Home Gym');
+  });
+
+  // The fixture's other tests have one device, which an implementation that
+  // took the first device in the registry would also pass.
+  it("uses this zone's own device's area when there are others", async () => {
+    const gym = makeHass('gym');
+    const office = makeHass('office');
+    const hass: HomeAssistant = {
+      ...gym,
+      states: { ...office.states, ...gym.states },
+      entities: { ...office.entities, ...gym.entities },
+      devices: {
+        'dev-office': { ...office.devices['dev-office']!, area_id: 'area-office' },
+        'dev-gym': { ...gym.devices['dev-gym']!, area_id: 'area-gym' },
+      },
+      areas: {
+        'area-office': { area_id: 'area-office', name: 'Study' },
+        'area-gym': { area_id: 'area-gym', name: 'Home Gym' },
+      },
+    };
+    const el = await cardWith({ zone: 'gym' }, hass);
+    expect(shownNames(el).tile).toBe('Home Gym');
+  });
+
   it('rejects a name that is not a string', async () => {
     const el = await mount('comfort-band-card');
     expect(() =>
       el.setConfig({ type: 'custom:comfort-band-card', zone: 'gym', name: 7 } as never),
     ).toThrow(/name/);
+  });
+
+  // `name:` with nothing after it in YAML.
+  it('treats an empty name in YAML as unset', async () => {
+    const hass = withArea(makeHass('gym'), 'gym', 'Home Gym');
+    const el = await cardWith({ zone: 'gym', name: null }, hass);
+    expect(shownNames(el).tile).toBe('Home Gym');
   });
 });
 

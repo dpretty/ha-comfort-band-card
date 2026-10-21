@@ -13,6 +13,7 @@
  *     slider's `change` event, fired on release, drives the service call),
  *     and is followed by an "Adjusted … · Undo" notice.
  *   - Override-active state line + Cancel-override button, also undoable.
+ *     Undo takes back every change made while its notice is up, together.
  *   - Override-duration buttons (1h / 3h / 6h) that update the
  *     `number.{zone}_override_hours` entity for future overrides.
  */
@@ -41,7 +42,7 @@ const FEEDBACK_PILLS: ReadonlyArray<{ label: FeedbackLabel; text: string }> = [
 /** How long the tapped pill stays highlighted after a successful record. */
 const FEEDBACK_CONFIRM_MS = 1500;
 
-/** The slider's range and step. Its starting values are snapped to these. */
+/** The slider's usual range, widened to take in a band outside it, and its step. */
 const SLIDER_MIN = 16;
 const SLIDER_MAX = 26;
 const SLIDER_STEP = 0.5;
@@ -56,11 +57,30 @@ const NOTICE_MS = 4_000;
  *  the change didn't take. This bounds the wait if it never arrives. */
 const SETTLE_MAX_MS = 5_000;
 
-/** A notice under the slider: what just changed, and how to take it back. */
+/** What Undo puts back: the zone's manual band, and when the override that
+ *  was running would have ended (null when none was). */
+interface UndoPoint {
+  low: number;
+  high: number;
+  endsAt: number | null;
+}
+
+/** Changes made while an Undo notice is up form one run, and Undo takes the
+ *  whole run back, to before its first change. Undoing only the last step
+ *  would leave a band the user was passing through on the way, with a
+ *  keyboard nudge or a second drag. */
+interface Run {
+  /** Undefined when the state before the run couldn't be read back. */
+  point: UndoPoint | undefined;
+  /** Whether any change in the run went through, so there is something to undo. */
+  changed: boolean;
+}
+
+/** A notice under the slider: what just changed, and the run to take back. */
 interface Notice {
   text: string;
   error?: boolean;
-  undo?: () => Promise<unknown>;
+  run?: Run;
 }
 
 @customElement('comfort-band-now-tab')
@@ -79,6 +99,16 @@ export class ComfortBandNowTab extends LitElement {
 
   @state() private _notice: Notice | null = null;
   private _noticeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The run of changes in progress, or null when there is none. */
+  private _run: Run | null = null;
+  /** Bumped by every change, Undo, drag and detach. A call that finishes after
+   *  something newer has started leaves the notice and the slider alone. */
+  private _seq = 0;
+  /** Calls are sent one at a time, in the order they were made: HA runs
+   *  service calls concurrently, so two sent together could land in either
+   *  order and leave the earlier one in force. */
+  private _queue: Promise<unknown> = Promise.resolve();
+  private _inFlight = 0;
   /** True between a successful change and the new band showing up in `hass`. */
   private _settling = false;
   private _settleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -271,6 +301,9 @@ export class ComfortBandNowTab extends LitElement {
       this._feedbackTimer = null;
     }
     this._feedbackConfirmed = null;
+    // Calls already sent still finish, but leave this element alone.
+    this._seq++;
+    this._run = null;
     this._clearNotice();
     this._releasePending();
   }
@@ -304,99 +337,131 @@ export class ComfortBandNowTab extends LitElement {
   }
 
   private _onSliderInput = (event: CustomEvent<{ low: number; high: number }>) => {
-    // A new drag supersedes any change still settling.
-    this._settling = false;
-    if (this._settleTimer !== null) clearTimeout(this._settleTimer);
-    this._settleTimer = null;
+    // A new drag supersedes any change still in flight or settling.
+    this._seq++;
+    this._stopSettling();
     this._pendingLow = event.detail.low;
     this._pendingHigh = event.detail.high;
   };
 
-  private _onSliderChange = async (event: CustomEvent<{ low: number; high: number }>) => {
-    if (!this.hass || !this.zone) return;
+  private _onSliderChange = (event: CustomEvent<{ low: number; high: number }>) => {
     const { low, high } = event.detail;
-    const undo = this._undoFor();
     this._pendingLow = low;
     this._pendingHigh = high;
-    try {
-      await startOverride(this.hass, { zone: this.zone, low, high });
-    } catch {
-      this._releasePending();
-      this._showNotice({ text: "Couldn't adjust this room. Try again.", error: true });
-      return;
-    }
-    this._settling = true;
-    if (this._settleTimer !== null) clearTimeout(this._settleTimer);
-    this._settleTimer = setTimeout(() => this._releasePending(), SETTLE_MAX_MS);
-    // The service applies the zone's override length when none is passed.
-    const hours = this._numericState(this.entities?.overrideHours ?? null);
-    const until = Number.isFinite(hours)
-      ? ` until ${formatClock(Date.now() + hours * 3_600_000)}`
-      : '';
-    this._showNotice({ text: `Adjusted to ${fmtTemp(low)} – ${fmtTemp(high)}${until}`, undo });
+    void this._change({
+      call: (hass, zone) => startOverride(hass, { zone, low, high }),
+      done: () => `Adjusted to ${fmtTemp(low)} – ${fmtTemp(high)}${this._until()}`,
+      failed: "Couldn't adjust this room. Try again.",
+      settle: true,
+    });
   };
 
-  private _onCancel = async () => {
-    if (!this.hass || !this.zone) return;
-    const undo = this._undoFor();
+  private _onCancel = () => {
+    this._releasePending();
+    void this._change({
+      call: (hass, zone) => cancelOverride(hass, { zone }),
+      // Not "back to the schedule": a zone with no schedule keeps the band.
+      done: () => 'Override cancelled',
+      failed: "Couldn't cancel the override. Try again.",
+    });
+  };
+
+  /** Makes one change, as part of the run in progress or as the first of a new one. */
+  private async _change(opts: {
+    call: (hass: HomeAssistant, zone: string) => Promise<unknown>;
+    done: () => string;
+    failed: string;
+    settle?: boolean;
+  }): Promise<void> {
+    const hass = this.hass;
+    const zone = this.zone;
+    if (!hass || !zone) return;
+    const seq = ++this._seq;
+    // Read the state the run would go back to before this change is sent.
+    const run = (this._run ??= { point: this._undoPoint(), changed: false });
     try {
-      await cancelOverride(this.hass, { zone: this.zone });
+      await this._send(() => opts.call(hass, zone));
     } catch {
-      this._showNotice({ text: "Couldn't go back to the schedule. Try again.", error: true });
+      if (seq !== this._seq) return;
+      if (opts.settle) this._releasePending();
+      this._run = run;
+      this._showNotice({ text: opts.failed, error: true, run });
       return;
     }
-    this._showNotice({ text: 'Back to the schedule', undo });
-  };
+    run.changed = true;
+    if (seq !== this._seq) return;
+    if (opts.settle) this._startSettling();
+    this._run = run;
+    this._showNotice({ text: opts.done(), run });
+  }
 
   private _onUndo = async () => {
-    const undo = this._notice?.undo;
-    if (!undo) return;
+    const run = this._notice?.run;
+    const hass = this.hass;
+    const zone = this.zone;
+    if (!run?.point || !run.changed || !hass || !zone) return;
+    const point = run.point;
+    const seq = ++this._seq;
+    this._run = null;
     this._clearNotice();
     this._releasePending();
     try {
-      await undo();
+      await this._send(() => restore(hass, zone, point));
     } catch {
-      this._showNotice({ text: "Couldn't undo that. Try again.", error: true });
+      if (seq !== this._seq) return;
+      // Still undoable: the button stays, to try again.
+      this._run = run;
+      this._showNotice({ text: "Couldn't undo that.", error: true, run });
       return;
     }
+    if (seq !== this._seq) return;
     this._showNotice({ text: 'Undone' });
   };
 
   /**
-   * Captures the zone's override state *before* a change, as a function that
-   * puts it back. With no override, that means cancelling. With one, it means
-   * re-starting it with the same band for the time it had left — rounded up to
-   * the quarter-hour steps `start_override` accepts. An override's band is
-   * `manual_low`/`manual_high` (the integration stores it there), so those are
-   * exact. Returns undefined when the prior state can't be read, rather than
-   * offering an undo that would restore something else.
+   * Reads the state a run would go back to: the manual band, and whether an
+   * override was running and when it ends. Returns undefined, so no Undo is
+   * offered, when any of it can't be read, and while an earlier call is still
+   * going through, since `hass` may not show its result yet.
    */
-  private _undoFor(): (() => Promise<unknown>) | undefined {
-    const hass = this.hass;
+  private _undoPoint(): UndoPoint | undefined {
     const entities = this.entities;
-    const zone = this.zone;
-    if (!hass || !entities || !zone) return undefined;
-    if (this._stateOf(entities.overrideActive)?.state !== 'on') {
-      return () => cancelOverride(hass, { zone });
-    }
+    if (!entities || this._inFlight > 0) return undefined;
     const low = this._numericState(entities.manualLow);
     const high = this._numericState(entities.manualHigh);
-    const ends = Date.parse(this._stateOf(entities.overrideEnds)?.state ?? '');
-    if (!Number.isFinite(low) || !Number.isFinite(high) || Number.isNaN(ends)) return undefined;
-    return () => {
-      const left = (ends - Date.now()) / 3_600_000;
-      if (left <= 0) return cancelOverride(hass, { zone });
-      const hours = Math.min(24, Math.max(0.25, Math.ceil(left * 4) / 4));
-      return startOverride(hass, { zone, low, high, hours });
-    };
+    if (!Number.isFinite(low) || !Number.isFinite(high)) return undefined;
+    const active = this._stateOf(entities.overrideActive)?.state;
+    if (active === 'off') return { low, high, endsAt: null };
+    if (active !== 'on') return undefined;
+    const endsAt = Date.parse(this._stateOf(entities.overrideEnds)?.state ?? '');
+    return Number.isNaN(endsAt) ? undefined : { low, high, endsAt };
+  }
+
+  private _send(call: () => Promise<unknown>): Promise<unknown> {
+    this._inFlight++;
+    const sent = this._queue.then(call).finally(() => this._inFlight--);
+    this._queue = sent.catch(() => undefined);
+    return sent;
+  }
+
+  /** " until 14:30", from the zone's override length, which the service uses
+   *  when none is passed. */
+  private _until(): string {
+    const hours = this._numericState(this.entities?.overrideHours ?? null);
+    return Number.isFinite(hours) ? ` until ${formatClock(Date.now() + hours * 3_600_000)}` : '';
   }
 
   private _showNotice(notice: Notice): void {
     this._clearNotice();
     this._notice = notice;
     this._noticeTimer = setTimeout(
-      () => this._clearNotice(),
-      notice.undo ? UNDO_WINDOW_MS : NOTICE_MS,
+      () => {
+        this._clearNotice();
+        // The run ends with its notice, unless a change in it is still going
+        // through; that change puts the notice back up when it finishes.
+        if (this._inFlight === 0) this._run = null;
+      },
+      undoable(notice) ? UNDO_WINDOW_MS : NOTICE_MS,
     );
   }
 
@@ -406,10 +471,20 @@ export class ComfortBandNowTab extends LitElement {
     this._notice = null;
   }
 
-  private _releasePending(): void {
+  private _startSettling(): void {
+    this._stopSettling();
+    this._settling = true;
+    this._settleTimer = setTimeout(() => this._releasePending(), SETTLE_MAX_MS);
+  }
+
+  private _stopSettling(): void {
     if (this._settleTimer !== null) clearTimeout(this._settleTimer);
     this._settleTimer = null;
     this._settling = false;
+  }
+
+  private _releasePending(): void {
+    this._stopSettling();
     this._pendingLow = null;
     this._pendingHigh = null;
   }
@@ -467,6 +542,11 @@ export class ComfortBandNowTab extends LitElement {
     const start = sliderStart(effLow, effHigh, lowState, highState);
     const sliderLow = this._pendingLow ?? start.low;
     const sliderHigh = this._pendingHigh ?? start.high;
+    // Widen the track to take in a band outside it. Clamped to the track, the
+    // limit the user didn't move would be sent back changed. Includes the
+    // band in force, so the track doesn't rescale under a drag.
+    const sliderMin = Math.min(SLIDER_MIN, Math.floor(Math.min(start.low, sliderLow)));
+    const sliderMax = Math.max(SLIDER_MAX, Math.ceil(Math.max(start.high, sliderHigh)));
 
     const actionTyped = asAction(action);
     const showChip = actionTyped !== 'idle' && actionTyped !== 'unknown';
@@ -490,8 +570,8 @@ export class ComfortBandNowTab extends LitElement {
       <section>
         <h3>Manual band</h3>
         <dual-handle-slider
-          .min=${SLIDER_MIN}
-          .max=${SLIDER_MAX}
+          .min=${sliderMin}
+          .max=${sliderMax}
           .step=${SLIDER_STEP}
           .low=${sliderLow}
           .high=${sliderHigh}
@@ -512,7 +592,7 @@ export class ComfortBandNowTab extends LitElement {
       ${n
         ? html`<div class="notice ${n.error ? 'error' : ''}">
             <span>${n.text}</span>
-            ${n.undo
+            ${undoable(n)
               ? html`<button class="undo" @click=${() => void this._onUndo()}>Undo</button>`
               : nothing}
           </div>`
@@ -616,17 +696,13 @@ export class ComfortBandNowTab extends LitElement {
   }
 }
 
-/** Snaps to the slider's step and range. */
-function snap(value: number): number {
-  const stepped = Math.round(value / SLIDER_STEP) * SLIDER_STEP;
-  return Math.min(SLIDER_MAX, Math.max(SLIDER_MIN, stepped));
-}
-
 /**
- * Where the slider starts: the effective band (what is in force now), snapped
- * to the slider's step, since a band mid-ramp can be fractional. Falls back to
- * the manual values, then to a neutral default, when the band is unavailable.
- * Keeps the two values at least one step apart, as the slider requires.
+ * Where the slider starts: the effective band (what is in force now), falling
+ * back to the manual values, then to a neutral default, when the band is
+ * unavailable. Rounded to the 0.1° the labels show, so what is sent is what was
+ * shown, but not snapped to the slider's steps or its range: nudging one
+ * handle must send the other limit back as it is. Only a band narrower than
+ * one step, which the slider can't hold, is widened.
  */
 export function sliderStart(
   effLow: number,
@@ -643,13 +719,28 @@ export function sliderStart(
     low = manualLow;
     high = manualHigh;
   }
-  low = snap(low);
-  high = snap(high);
-  if (high - low < SLIDER_STEP) {
-    high = Math.min(SLIDER_MAX, low + SLIDER_STEP);
-    low = high - SLIDER_STEP;
-  }
+  low = Math.round(low * 10) / 10;
+  high = Math.round(high * 10) / 10;
+  if (high - low < SLIDER_STEP) high = low + SLIDER_STEP;
   return { low, high };
+}
+
+function undoable(notice: Notice): boolean {
+  return notice.run?.point !== undefined && notice.run.changed;
+}
+
+/**
+ * Puts a zone back as it was before a run, in one call: its manual band, and
+ * its override for the time that was left. With no override to go back to
+ * (none was running, or it has run out since), hours is 0: `start_override`
+ * stores the band, and the refresh it runs straight away finds the override
+ * already over and clears it. The zone then follows its schedule, or, with no
+ * schedule, that band. Cancelling instead would leave the run's band in the
+ * manual values, and in force in a zone with no schedule.
+ */
+function restore(hass: HomeAssistant, zone: string, point: UndoPoint): Promise<unknown> {
+  const left = point.endsAt === null ? 0 : (point.endsAt - Date.now()) / 3_600_000;
+  return startOverride(hass, { zone, low: point.low, high: point.high, hours: Math.max(0, left) });
 }
 
 function fmtTemp(value: number): string {

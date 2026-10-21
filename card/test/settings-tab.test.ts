@@ -242,6 +242,8 @@ describe('comfort-band-settings-tab', () => {
     const desc = row.querySelector('.desc')!.textContent!.replace(/\s+/g, ' ');
     expect(desc).not.toMatch(/no effect|reserved for upcoming/i);
     expect(desc).toMatch(/ahead of time/);
-    expect(desc).toMatch(/MPC/);
+    expect(desc).toMatch(/the MPC switch\) needs this on too/);
+    // Samples are recorded whatever the switch says.
+    expect(desc).toMatch(/While it's off, the room still records how it warms and cools/);
   });
 });

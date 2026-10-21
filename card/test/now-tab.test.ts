@@ -65,7 +65,7 @@ function makeHass(overrides: Partial<Record<string, string>> = {}): HomeAssistan
   };
 }
 
-type SliderProbe = HTMLElement & { low: number; high: number };
+type SliderProbe = HTMLElement & { low: number; high: number; min: number; max: number };
 function slider(el: ComfortBandNowTab): SliderProbe {
   return el.shadowRoot!.querySelector('dual-handle-slider') as SliderProbe;
 }
@@ -75,9 +75,9 @@ async function release(el: ComfortBandNowTab, low: number, high: number): Promis
   await flush(el);
 }
 
-/** Lets the awaited service call resolve and Lit re-render. */
+/** Lets the queued, awaited service call resolve and Lit re-render. */
 async function flush(el: ComfortBandNowTab): Promise<void> {
-  for (let i = 0; i < 3; i++) await Promise.resolve();
+  for (let i = 0; i < 50; i++) await Promise.resolve();
   await el.updateComplete;
 }
 
@@ -96,6 +96,120 @@ async function nowTab(
   zone = 'gym',
 ): Promise<ComfortBandNowTab> {
   return mount('comfort-band-now-tab', { hass, entities, zone });
+}
+
+interface ZoneModel {
+  manualLow: number;
+  manualHigh: number;
+  /** When the override ends, in ms; null when none is running. */
+  overrideUntil: number | null;
+  overrideHours: number;
+  /** The schedule's band right now; null for a zone with no schedule. */
+  schedule: [number, number] | null;
+}
+
+/**
+ * A stand-in for the integration, after coordinator.py. `start_override`
+ * stores any band it is given in the manual values and ends the override
+ * `hours` from now (the zone's override length when none is passed);
+ * `cancel_override` clears only the end time. Each call then refreshes: an
+ * override that has ended is cleared, and the band in force is the manual
+ * band during an override, otherwise the schedule's, or the manual band
+ * when there is no schedule. The new state reaches the tab before the call
+ * resolves, as HA's state events do, so a test sees what the card would.
+ */
+function integration(initial: Partial<ZoneModel> = {}) {
+  const zone: ZoneModel = {
+    manualLow: 19,
+    manualHigh: 22,
+    overrideUntil: null,
+    overrideHours: 3,
+    schedule: [18, 23],
+    ...initial,
+  };
+  let tab: ComfortBandNowTab | null = null;
+  let gate: Promise<void> | null = null;
+  let failNext = false;
+
+  const refresh = () => {
+    if (zone.overrideUntil !== null && !(Date.now() < zone.overrideUntil)) {
+      zone.overrideUntil = null;
+    }
+  };
+  const inForce = (): [number, number] => {
+    refresh();
+    return zone.overrideUntil !== null || !zone.schedule
+      ? [zone.manualLow, zone.manualHigh]
+      : zone.schedule;
+  };
+
+  const callService = vi.fn(
+    async (domain: string, service: string, data: Record<string, unknown> = {}) => {
+      if (gate) await gate;
+      if (failNext) {
+        failNext = false;
+        throw new Error('rejected');
+      }
+      if (domain !== 'comfort_band') return;
+      if (service === 'start_override') {
+        if (data.low !== undefined) zone.manualLow = data.low as number;
+        if (data.high !== undefined) zone.manualHigh = data.high as number;
+        const hours = (data.hours as number | undefined) ?? zone.overrideHours;
+        zone.overrideUntil = Date.now() + hours * 3_600_000;
+      } else if (service === 'cancel_override') {
+        zone.overrideUntil = null;
+      }
+      if (tab) tab.hass = hass();
+    },
+  );
+
+  const hass = (): HomeAssistant => {
+    const [low, high] = inForce();
+    const active = zone.overrideUntil !== null;
+    const h = makeHass({
+      'sensor.gym_effective_low': String(low),
+      'sensor.gym_effective_high': String(high),
+      'binary_sensor.gym_override_active': active ? 'on' : 'off',
+      'sensor.gym_override_ends': active ? new Date(zone.overrideUntil!).toISOString() : 'unknown',
+      'number.gym_manual_low': String(zone.manualLow),
+      'number.gym_manual_high': String(zone.manualHigh),
+      'number.gym_override_hours': String(zone.overrideHours),
+    });
+    h.callService = callService as unknown as HomeAssistant['callService'];
+    return h;
+  };
+
+  return {
+    zone,
+    callService,
+    inForce,
+    async mount(): Promise<ComfortBandNowTab> {
+      tab = await nowTab(hass());
+      return tab;
+    },
+    /** Holds every call until the returned function is called. */
+    hold(): () => void {
+      let open!: () => void;
+      gate = new Promise<void>((resolve) => (open = resolve));
+      return () => {
+        gate = null;
+        open();
+      };
+    },
+    rejectNext(): void {
+      failNext = true;
+    },
+  };
+}
+
+async function undo(el: ComfortBandNowTab): Promise<void> {
+  notice(el)!.undo!.click();
+  await flush(el);
+}
+
+async function cancel(el: ComfortBandNowTab): Promise<void> {
+  (el.shadowRoot!.querySelector('.button.secondary') as HTMLButtonElement).click();
+  await flush(el);
 }
 
 describe('comfort-band-now-tab', () => {
@@ -130,12 +244,67 @@ describe('comfort-band-now-tab', () => {
     expect([s.low, s.high]).toEqual([18, 23]);
   });
 
-  it("snaps a mid-ramp band to the slider's half-degree steps", async () => {
+  // Rounded to what the labels show, not to the slider's steps: snapping would
+  // change the limit the user doesn't move when they nudge the other.
+  it('starts from a mid-ramp band to the tenth of a degree the values show', async () => {
     const el = await nowTab(
       makeHass({ 'sensor.gym_effective_low': '18.37', 'sensor.gym_effective_high': '22.83' }),
     );
     const s = slider(el);
-    expect([s.low, s.high]).toEqual([18.5, 23]);
+    expect([s.low, s.high]).toEqual([18.4, 22.8]);
+  });
+
+  it('falls back to 19–22 when neither band can be read', async () => {
+    const el = await nowTab(
+      makeHass({
+        'sensor.gym_effective_low': 'unavailable',
+        'sensor.gym_effective_high': 'unavailable',
+        'number.gym_manual_low': 'unavailable',
+        'number.gym_manual_high': 'unavailable',
+      }),
+    );
+    expect([slider(el).low, slider(el).high]).toEqual([19, 22]);
+  });
+
+  it('widens a band narrower than one step, which the slider cannot hold', async () => {
+    const el = await nowTab(
+      makeHass({ 'sensor.gym_effective_low': '21', 'sensor.gym_effective_high': '21.2' }),
+    );
+    expect([slider(el).low, slider(el).high]).toEqual([21, 21.5]);
+  });
+
+  it('keeps its usual 16–26 track for a band inside it', async () => {
+    const el = await nowTab(makeHass());
+    expect([slider(el).min, slider(el).max]).toEqual([16, 26]);
+  });
+
+  // Clamped to the track, a band of 15–28 showed as 16–26, and nudging the low
+  // handle sent 16.5–26: the high limit rewritten without being touched.
+  it('takes in a band outside its track, and sends the other limit back unchanged', async () => {
+    const hass = makeHass({ 'sensor.gym_effective_low': '15', 'sensor.gym_effective_high': '28' });
+    const el = await nowTab(hass);
+    const s = slider(el) as SliderProbe & { min: number; max: number };
+    expect([s.min, s.max, s.low, s.high]).toEqual([15, 28, 15, 28]);
+
+    const lowThumb = s.shadowRoot!.querySelector('.thumb') as HTMLElement;
+    lowThumb.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await flush(el);
+    expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'start_override', {
+      zone: 'gym',
+      low: 15.5,
+      high: 28,
+    });
+  });
+
+  it('keeps the widened track while a handle is dragged back inside it', async () => {
+    const el = await nowTab(
+      makeHass({ 'sensor.gym_effective_low': '15', 'sensor.gym_effective_high': '28' }),
+    );
+    slider(el).dispatchEvent(
+      new CustomEvent('input', { detail: { low: 17, high: 25 }, bubbles: true }),
+    );
+    await el.updateComplete;
+    expect([slider(el).min, slider(el).max]).toEqual([15, 28]);
   });
 
   it('falls back to the manual values when the band is unavailable', async () => {
@@ -158,7 +327,7 @@ describe('comfort-band-now-tab', () => {
     slider.dispatchEvent(
       new CustomEvent('change', { detail: { low: 20.5, high: 23.5 }, bubbles: true }),
     );
-    await el.updateComplete;
+    await flush(el);
     expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'start_override', {
       zone: 'gym',
       low: 20.5,
@@ -191,7 +360,7 @@ describe('comfort-band-now-tab', () => {
     const el = await nowTab(hass);
     const cancel = el.shadowRoot!.querySelector('.button.secondary') as HTMLButtonElement;
     cancel.click();
-    await el.updateComplete;
+    await flush(el);
     expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'cancel_override', {
       zone: 'gym',
     });
@@ -411,91 +580,204 @@ describe('comfort-band-now-tab', () => {
   describe('undo', () => {
     afterEach(() => vi.useRealTimers());
 
-    it('confirms an adjustment with an Undo that cancels it when none was active', async () => {
-      const hass = makeHass();
-      const el = await nowTab(hass);
-      await release(el, 20.5, 23.5);
+    const state = (zone: ZoneModel, inForce: [number, number]) => ({
+      inForce,
+      manual: [zone.manualLow, zone.manualHigh],
+      override: zone.overrideUntil !== null,
+    });
 
-      const n = notice(el)!;
-      // Same range format as the schedule list.
-      expect(n.text).toMatch(/^Adjusted to 20\.5° – 23\.5° until /);
-      expect(n.undo).not.toBeNull();
+    // start_override writes the manual band, and with no schedule the manual
+    // band is the band in force. Cancelling the override isn't enough: the
+    // adjusted band would stay, with no end.
+    it('puts the band back in a zone with no schedule', async () => {
+      const fake = integration({ schedule: null, manualLow: 19.5, manualHigh: 22.5 });
+      const el = await fake.mount();
+      await release(el, 21, 24);
+      expect(fake.inForce()).toEqual([21, 24]);
 
-      n.undo!.click();
-      await flush(el);
-      expect(hass.callService).toHaveBeenLastCalledWith('comfort_band', 'cancel_override', {
-        zone: 'gym',
+      await undo(el);
+      expect(state(fake.zone, fake.inForce())).toEqual({
+        inForce: [19.5, 22.5],
+        manual: [19.5, 22.5],
+        override: false,
       });
       expect(notice(el)!.text).toBe('Undone');
     });
 
-    it('restores the previous override, band and time left, when one was active', async () => {
-      vi.useFakeTimers({ toFake: ['Date'] });
-      vi.setSystemTime(new Date('2026-10-21T10:00:00Z'));
-      const hass = makeHass({
-        'binary_sensor.gym_override_active': 'on',
-        'sensor.gym_override_ends': '2026-10-21T11:20:00Z', // 1 h 20 min left
-        'number.gym_manual_low': '20',
-        'number.gym_manual_high': '22',
+    it('goes back to the schedule, and puts the manual band back too', async () => {
+      const fake = integration({ schedule: [18, 23], manualLow: 19.5, manualHigh: 22.5 });
+      const el = await fake.mount();
+      await release(el, 20, 24);
+      await undo(el);
+      expect(state(fake.zone, fake.inForce())).toEqual({
+        inForce: [18, 23],
+        manual: [19.5, 22.5],
+        override: false,
       });
-      const el = await nowTab(hass);
-      await release(el, 21, 24);
-
-      notice(el)!.undo!.click();
-      await flush(el);
-      // 1 h 20 min, rounded up to the service's quarter-hour steps.
-      expect(hass.callService).toHaveBeenLastCalledWith('comfort_band', 'start_override', {
-        zone: 'gym',
-        low: 20,
-        high: 22,
-        hours: 1.5,
-      });
+      // In one call, so nothing else is in force in between.
+      expect(fake.callService).toHaveBeenCalledTimes(2);
     });
 
-    it('cancels instead when the previous override has run out by the time of undo', async () => {
+    it('restores a running override with its band and its end time', async () => {
       vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(new Date('2026-10-21T10:00:00Z'));
-      const hass = makeHass({
-        'binary_sensor.gym_override_active': 'on',
-        'sensor.gym_override_ends': '2026-10-21T10:00:05Z',
+      const ends = Date.parse('2026-10-21T11:20:00Z');
+      const fake = integration({ manualLow: 20.5, manualHigh: 23, overrideUntil: ends });
+      const el = await fake.mount();
+      await release(el, 21, 24);
+      vi.setSystemTime(new Date('2026-10-21T10:00:03Z'));
+
+      await undo(el);
+      expect(fake.inForce()).toEqual([20.5, 23]);
+      // Not rounded up to a quarter-hour: the service takes any length.
+      expect(Math.abs(fake.zone.overrideUntil! - ends)).toBeLessThan(1);
+    });
+
+    it('lets the previous override go if it has run out by the time of undo', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-21T10:00:00Z'));
+      const fake = integration({
+        manualLow: 20.5,
+        manualHigh: 23,
+        overrideUntil: Date.parse('2026-10-21T10:00:05Z'),
       });
-      const el = await nowTab(hass);
+      const el = await fake.mount();
       await release(el, 21, 24);
       vi.setSystemTime(new Date('2026-10-21T10:00:09Z'));
 
-      notice(el)!.undo!.click();
-      await flush(el);
-      expect(hass.callService).toHaveBeenLastCalledWith('comfort_band', 'cancel_override', {
-        zone: 'gym',
+      await undo(el);
+      expect(state(fake.zone, fake.inForce())).toEqual({
+        inForce: [18, 23],
+        manual: [20.5, 23],
+        override: false,
       });
     });
 
-    it('makes Cancel undoable too, restoring the override it ended', async () => {
+    // Each keyboard step is its own change. Undoing only the last would leave
+    // a band the user was passing through.
+    it('takes a run of changes back together, to before the first', async () => {
+      const fake = integration();
+      const el = await fake.mount();
+      for (const high of [23.5, 24, 24.5, 25]) await release(el, 18, high);
+      expect(fake.inForce()).toEqual([18, 25]);
+
+      await undo(el);
+      expect(state(fake.zone, fake.inForce())).toEqual({
+        inForce: [18, 23],
+        manual: [19, 22],
+        override: false,
+      });
+      expect(fake.callService).toHaveBeenCalledTimes(5);
+    });
+
+    it('starts a new run once the notice has gone', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 18, 24);
+      const firstEnds = fake.zone.overrideUntil!;
+      vi.advanceTimersByTime(10_000);
+      await el.updateComplete;
+      expect(notice(el)).toBeNull();
+
+      await release(el, 18, 25);
+      await undo(el);
+      // Back to the first change, which is no longer part of a run.
+      expect(fake.inForce()).toEqual([18, 24]);
+      expect(Math.abs(fake.zone.overrideUntil! - firstEnds)).toBeLessThan(1);
+    });
+
+    it('keeps a run going while a change in it is still going through', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 18, 24);
+      vi.advanceTimersByTime(9_000);
+      const open = fake.hold();
+      await release(el, 18, 24.5);
+      // The first change's notice goes while the second is still going through.
+      vi.advanceTimersByTime(1_000);
+      await release(el, 18, 25);
+      open();
+      await flush(el);
+      await undo(el);
+      expect(state(fake.zone, fake.inForce())).toEqual({
+        inForce: [18, 23],
+        manual: [19, 22],
+        override: false,
+      });
+    });
+
+    it('starts a new run once a rejected change has had its notice', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 18, 24);
+      fake.rejectNext();
+      await release(el, 18, 24.5);
+      vi.advanceTimersByTime(10_000);
+      await el.updateComplete;
+      expect(notice(el)).toBeNull();
+
+      await release(el, 18, 25);
+      await undo(el);
+      expect(fake.inForce()).toEqual([18, 24]);
+    });
+
+    it('starts a new run after the tab is detached and put back', async () => {
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 18, 24);
+      el.remove();
+      document.body.appendChild(el);
+      await el.updateComplete;
+      await release(el, 18, 25);
+      await undo(el);
+      expect(fake.inForce()).toEqual([18, 24]);
+    });
+
+    it('makes Cancel undoable, restoring the override it ended', async () => {
       vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(new Date('2026-10-21T10:00:00Z'));
-      const hass = makeHass({
-        'binary_sensor.gym_override_active': 'on',
-        'sensor.gym_override_ends': '2026-10-21T12:00:00Z',
-        'number.gym_manual_low': '20',
-        'number.gym_manual_high': '22',
-      });
-      const el = await nowTab(hass);
-      (el.shadowRoot!.querySelector('.button.secondary') as HTMLButtonElement).click();
-      await flush(el);
+      const ends = Date.parse('2026-10-21T12:00:00Z');
+      const fake = integration({ manualLow: 20.5, manualHigh: 23, overrideUntil: ends });
+      const el = await fake.mount();
+      await cancel(el);
+      expect(fake.inForce()).toEqual([18, 23]);
+      // Not "back to the schedule": with no schedule, the band would stay.
+      expect(notice(el)!.text).toBe('Override cancelled');
 
-      const n = notice(el)!;
-      expect(n.text).toBe('Back to the schedule');
-      n.undo!.click();
-      await flush(el);
-      expect(hass.callService).toHaveBeenLastCalledWith('comfort_band', 'start_override', {
-        zone: 'gym',
-        low: 20,
-        high: 22,
-        hours: 2,
+      await undo(el);
+      expect(fake.inForce()).toEqual([20.5, 23]);
+      expect(Math.abs(fake.zone.overrideUntil! - ends)).toBeLessThan(1);
+    });
+
+    it('takes back an adjustment and a Cancel made in the same run', async () => {
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 20, 24);
+      await cancel(el);
+      await undo(el);
+      expect(state(fake.zone, fake.inForce())).toEqual({
+        inForce: [18, 23],
+        manual: [19, 22],
+        override: false,
       });
     });
 
-    it('offers no undo when the previous override cannot be read back', async () => {
+    for (const overrideState of ['unavailable', 'unknown', undefined]) {
+      it(`offers no undo when the override's state is ${overrideState ?? 'missing'}`, async () => {
+        const hass = makeHass();
+        if (overrideState) hass.states['binary_sensor.gym_override_active']!.state = overrideState;
+        else delete hass.states['binary_sensor.gym_override_active'];
+        const el = await nowTab(hass);
+        await release(el, 21, 24);
+        expect(notice(el)!.text).toMatch(/^Adjusted to/);
+        expect(notice(el)!.undo).toBeNull();
+      });
+    }
+
+    it("offers no undo when a running override's end cannot be read", async () => {
       const hass = makeHass({
         'binary_sensor.gym_override_active': 'on',
         'sensor.gym_override_ends': 'unknown',
@@ -503,6 +785,52 @@ describe('comfort-band-now-tab', () => {
       const el = await nowTab(hass);
       await release(el, 21, 24);
       expect(notice(el)!.undo).toBeNull();
+    });
+
+    it('offers no undo when the manual band cannot be read', async () => {
+      const el = await nowTab(makeHass({ 'number.gym_manual_high': 'unavailable' }));
+      await release(el, 21, 24);
+      expect(notice(el)!.undo).toBeNull();
+    });
+
+    // hass may not show the undo's result yet, so the state to go back to
+    // isn't known.
+    it('offers no undo for a change made while an undo is going through', async () => {
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 20, 24);
+      const open = fake.hold();
+      notice(el)!.undo!.click();
+      await flush(el);
+      await release(el, 20.5, 24);
+      open();
+      await flush(el);
+      expect(notice(el)!.text).toMatch(/^Adjusted to 20\.5°/);
+      expect(notice(el)!.undo).toBeNull();
+    });
+
+    it('offers no further undo once undone, and sends one undo however often it is tapped', async () => {
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 20, 24);
+      const button = notice(el)!.undo!;
+      button.click();
+      button.click();
+      await flush(el);
+      expect(fake.callService).toHaveBeenCalledTimes(2);
+      expect(notice(el)).toEqual({ text: 'Undone', undo: null });
+    });
+
+    it('says when the adjustment ends, from the zone override length', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-21T10:00:00Z'));
+      const el = await nowTab(makeHass({ 'number.gym_override_hours': '3' }));
+      await release(el, 20.5, 23.5);
+      const until = new Date('2026-10-21T13:00:00Z').toLocaleTimeString([], {
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+      expect(notice(el)!.text).toBe(`Adjusted to 20.5° – 23.5° until ${until}`);
     });
 
     // The region exists before anything is said in it, so screen readers
@@ -517,22 +845,50 @@ describe('comfort-band-now-tab', () => {
       expect(el.shadowRoot!.querySelector('.notice-region .notice')).not.toBeNull();
     });
 
-    it('takes the notice down after the undo window', async () => {
-      vi.useFakeTimers();
-      const el = await nowTab(makeHass());
+    it('keeps an Undo up for ten seconds, and other notices for four', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const fake = integration();
+      const el = await fake.mount();
       await release(el, 20.5, 23.5);
-      expect(notice(el)).not.toBeNull();
-      vi.advanceTimersByTime(10_000);
+      vi.advanceTimersByTime(9_999);
+      await el.updateComplete;
+      expect(notice(el)!.undo).not.toBeNull();
+      vi.advanceTimersByTime(1);
+      await el.updateComplete;
+      expect(notice(el)).toBeNull();
+
+      await release(el, 21, 23.5);
+      await undo(el);
+      vi.advanceTimersByTime(3_999);
+      await el.updateComplete;
+      expect(notice(el)!.text).toBe('Undone');
+      vi.advanceTimersByTime(1);
       await el.updateComplete;
       expect(notice(el)).toBeNull();
     });
 
-    it('clears a pending notice when the tab is detached', async () => {
+    it('clears a notice and its timers when the tab is detached', async () => {
       vi.useFakeTimers();
       const el = await nowTab(makeHass());
       await release(el, 20.5, 23.5);
+      expect(notice(el)).not.toBeNull();
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
       el.remove();
       expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('leaves a detached tab alone when a call finishes after', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const fake = integration();
+      const el = await fake.mount();
+      const open = fake.hold();
+      await release(el, 20.5, 23.5);
+      el.remove();
+      open();
+      await flush(el);
+      expect(fake.callService).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(notice(el)).toBeNull();
     });
   });
 
@@ -548,6 +904,69 @@ describe('comfort-band-now-tab', () => {
       // And the slider goes back to what is really in force.
       expect([slider(el).low, slider(el).high]).toEqual([19.5, 22.5]);
     });
+
+    it('keeps the Undo for earlier changes in the run when a later one is rejected', async () => {
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 20, 24);
+      fake.rejectNext();
+      await release(el, 20, 25);
+      expect(notice(el)!.text).toBe("Couldn't adjust this room. Try again.");
+      await undo(el);
+      expect(fake.inForce()).toEqual([18, 23]);
+    });
+
+    it('says so when Cancel is rejected', async () => {
+      const fake = integration({ overrideUntil: Date.now() + 3_600_000 });
+      const el = await fake.mount();
+      fake.rejectNext();
+      await cancel(el);
+      expect(notice(el)).toEqual({ text: "Couldn't cancel the override. Try again.", undo: null });
+    });
+
+    it('says so when an undo is rejected, and keeps the Undo to try again', async () => {
+      const fake = integration();
+      const el = await fake.mount();
+      await release(el, 20, 24);
+      fake.rejectNext();
+      await undo(el);
+      expect(notice(el)!.text).toBe("Couldn't undo that.");
+      expect(fake.inForce()).toEqual([20, 24]);
+      await undo(el);
+      expect(fake.inForce()).toEqual([18, 23]);
+    });
+  });
+
+  describe('order', () => {
+    // HA runs service calls concurrently; two sent together could land in
+    // either order and leave the earlier one in force.
+    it('sends calls one at a time, in the order they were made', async () => {
+      const fake = integration();
+      const el = await fake.mount();
+      const open = fake.hold();
+      await release(el, 20, 24);
+      await release(el, 20, 25);
+      expect(fake.callService).toHaveBeenCalledTimes(1);
+      open();
+      await flush(el);
+      expect(fake.callService.mock.calls.map((c) => c[2])).toEqual([
+        { zone: 'gym', low: 20, high: 24 },
+        { zone: 'gym', low: 20, high: 25 },
+      ]);
+      expect(fake.inForce()).toEqual([20, 25]);
+      expect(notice(el)!.text).toMatch(/^Adjusted to 20\.0° – 25\.0°/);
+    });
+
+    it('waits for Cancel to go through before saying it has', async () => {
+      const fake = integration({ overrideUntil: Date.now() + 3_600_000 });
+      const el = await fake.mount();
+      const open = fake.hold();
+      await cancel(el);
+      expect(notice(el)).toBeNull();
+      open();
+      await flush(el);
+      expect(notice(el)!.text).toBe('Override cancelled');
+    });
   });
 
   describe('after a change', () => {
@@ -556,16 +975,26 @@ describe('comfort-band-now-tab', () => {
     it('keeps showing the chosen band until the integration reports it', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const el = await nowTab(makeHass());
-      await release(el, 20.5, 23.5);
+      // Only the high handle moved: the low limit already matches.
+      await release(el, 19.5, 23.5);
 
       // An unrelated state update arrives before ours: no snapping back.
       el.hass = makeHass({ 'sensor.gym_room_temperature': '21.1' });
       await el.updateComplete;
-      expect([slider(el).low, slider(el).high]).toEqual([20.5, 23.5]);
+      expect([slider(el).low, slider(el).high]).toEqual([19.5, 23.5]);
+      // Nor for a band that is close to ours on either side, but not ours.
+      for (const [low, high] of [
+        ['19.8', '23.5'],
+        ['19.5', '23'],
+      ]) {
+        el.hass = makeHass({ 'sensor.gym_effective_low': low, 'sensor.gym_effective_high': high });
+        await el.updateComplete;
+        expect([slider(el).low, slider(el).high]).toEqual([19.5, 23.5]);
+      }
 
       // Ours arrives: the slider now follows the integration again.
       el.hass = makeHass({
-        'sensor.gym_effective_low': '20.5',
+        'sensor.gym_effective_low': '19.5',
         'sensor.gym_effective_high': '23.5',
       });
       await el.updateComplete;
@@ -574,13 +1003,59 @@ describe('comfort-band-now-tab', () => {
       expect([slider(el).low, slider(el).high]).toEqual([18, 23]);
     });
 
-    it('stops waiting if the new band never arrives', async () => {
+    it('stops waiting after five seconds if the new band never arrives', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const el = await nowTab(makeHass());
       await release(el, 20.5, 23.5);
+      vi.advanceTimersByTime(4_999);
+      el.hass = makeHass();
+      await el.updateComplete;
+      expect([slider(el).low, slider(el).high]).toEqual([20.5, 23.5]);
+      vi.advanceTimersByTime(1);
+      el.hass = makeHass();
+      await el.updateComplete;
+      expect([slider(el).low, slider(el).high]).toEqual([19.5, 22.5]);
+    });
+
+    it('stops waiting when a new drag starts, so nothing moves under the finger', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const el = await nowTab(makeHass());
+      await release(el, 20.5, 23.5);
+      slider(el).dispatchEvent(
+        new CustomEvent('input', { detail: { low: 21, high: 23.5 }, bubbles: true }),
+      );
       vi.advanceTimersByTime(5_000);
       el.hass = makeHass();
       await el.updateComplete;
+      expect([slider(el).low, slider(el).high]).toEqual([21, 23.5]);
+    });
+
+    it('does not start waiting for a change that finishes during a new drag', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const fake = integration();
+      const el = await fake.mount();
+      const open = fake.hold();
+      await release(el, 20.5, 23.5);
+      slider(el).dispatchEvent(
+        new CustomEvent('input', { detail: { low: 21, high: 23.5 }, bubbles: true }),
+      );
+      open();
+      await flush(el);
+      vi.advanceTimersByTime(5_000);
+      await el.updateComplete;
+      expect([slider(el).low, slider(el).high]).toEqual([21, 23.5]);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('shows the band in force as soon as Cancel is tapped', async () => {
+      const hass = makeHass({
+        'binary_sensor.gym_override_active': 'on',
+        'sensor.gym_override_ends': new Date(Date.now() + 3_600_000).toISOString(),
+      });
+      const el = await nowTab(hass);
+      await release(el, 20.5, 23.5);
+      expect([slider(el).low, slider(el).high]).toEqual([20.5, 23.5]);
+      await cancel(el);
       expect([slider(el).low, slider(el).high]).toEqual([19.5, 22.5]);
     });
   });

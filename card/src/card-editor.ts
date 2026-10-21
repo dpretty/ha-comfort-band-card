@@ -28,7 +28,7 @@ export class ComfortBandCardEditor extends LitElement {
     this.config = {
       type: config.type ?? 'custom:comfort-band-card',
       zone: config.zone ?? '',
-      ...(config.name !== undefined ? { name: config.name } : {}),
+      ...(config.name != null ? { name: config.name } : {}),
       ...(config.compact !== undefined ? { compact: config.compact } : {}),
       ...(config.variant !== undefined ? { variant: config.variant } : {}),
     };
@@ -142,7 +142,10 @@ export class ComfortBandCardEditor extends LitElement {
   /** Committed on `change` (blur/Enter) rather than every keystroke, so the
    *  dashboard preview isn't re-rendered mid-word. Blank removes the key. */
   private _onNameChange = (event: Event) => {
-    const name = (event.target as HTMLInputElement).value.trim();
+    const input = event.target as HTMLInputElement;
+    const name = input.value.trim();
+    // Show what was saved: a name of only spaces is no name.
+    input.value = name;
     const next = { ...this.config };
     if (name) next.name = name;
     else delete next.name;

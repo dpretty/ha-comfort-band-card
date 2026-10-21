@@ -209,8 +209,8 @@ export class ComfortBandSettingsTab extends LitElement {
         // plain on/off at the band edges. Samples are recorded either way.
         desc: html`Uses what this room has learned about how quickly it warms and cools to start and
         stop ahead of time, instead of waiting for the temperature to reach the edge of the
-        comfortable range. Predictive scheduling (MPC) needs this on too. The room keeps learning
-        while it's off; it just doesn't act on what it has learned.`,
+        comfortable range. Predictive control (the MPC switch) needs this on too. While it's off,
+        the room still records how it warms and cools; it just doesn't act on it.`,
       })}
       <div class="row">
         <div class="row-label">

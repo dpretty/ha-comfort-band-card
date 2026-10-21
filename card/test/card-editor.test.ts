@@ -157,6 +157,33 @@ describe('comfort-band-card-editor', () => {
     expect(fire).toHaveBeenLastCalledWith({ type: 'custom:comfort-band-card', zone: 'gym' });
   });
 
+  it('clears a name of only spaces from the field as well as the config', async () => {
+    const el = await editor(makeHass(['gym']), { type: 'custom:comfort-band-card', zone: 'gym' });
+    const fire = vi.fn();
+    el.addEventListener('config-changed', (e) => fire((e as CustomEvent).detail.config));
+    const input = el.shadowRoot!.querySelector('input[type="text"]') as HTMLInputElement;
+    input.value = '   ';
+    input.dispatchEvent(new Event('change'));
+    expect(fire).toHaveBeenLastCalledWith({ type: 'custom:comfort-band-card', zone: 'gym' });
+    expect(input.value).toBe('');
+  });
+
+  it("changes the placeholder to the new zone's default name when the zone changes", async () => {
+    const hass = makeHass(['gym', 'office']);
+    hass.devices['dev-0']!.area_id = 'area-gym';
+    hass.devices['dev-1']!.area_id = 'area-office';
+    hass.areas = {
+      'area-gym': { area_id: 'area-gym', name: 'Home Gym' },
+      'area-office': { area_id: 'area-office', name: 'Study' },
+    };
+    const el = await editor(hass, { type: 'custom:comfort-band-card', zone: 'gym' });
+    const input = () => el.shadowRoot!.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(input().placeholder).toBe('Home Gym');
+    el.setConfig({ type: 'custom:comfort-band-card', zone: 'office' });
+    await el.updateComplete;
+    expect(input().placeholder).toBe('Study');
+  });
+
   it('shows the default name as the placeholder', async () => {
     const hass = makeHass(['gym']);
     hass.devices['dev-0']!.area_id = 'area-1';
