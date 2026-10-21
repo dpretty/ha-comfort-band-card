@@ -11,7 +11,6 @@
  *   - Dual-handle slider, starting from the band actually in force. Any
  *     change starts an override via `comfort_band.start_override` (the
  *     slider's `change` event, fired on release, drives the service call).
- *     A rejected call says so under the slider.
  *   - Override-active state line + Cancel-override button.
  *   - Override-duration buttons (1h / 3h / 6h) that update the
  *     `number.{zone}_override_hours` entity for future overrides.
@@ -45,9 +44,6 @@ const SLIDER_MIN = 16;
 const SLIDER_MAX = 26;
 const SLIDER_STEP = 0.5;
 
-/** How long a notice under the slider stays up. */
-const NOTICE_MS = 4_000;
-
 @customElement('comfort-band-now-tab')
 export class ComfortBandNowTab extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
@@ -61,15 +57,9 @@ export class ComfortBandNowTab extends LitElement {
   /** Timer that clears `_feedbackConfirmed`; cancelled on disconnect so it
    *  never fires `setState` on an unmounted element. */
   private _feedbackTimer: ReturnType<typeof setTimeout> | null = null;
-
-  /** What went wrong with the last change, if anything. */
-  @state() private _notice: string | null = null;
-  private _noticeTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Bumped by every change and by detach. A rejection only says so if no
-   *  newer change has been made since: that one has the last word. */
-  private _seq = 0;
-  /** The track's range as last shown, kept while the user's values are on it,
-   *  so it doesn't rescale under a drag when the band in force changes. */
+  /** The track's range as last shown, kept from a drag's first move until its
+   *  release, so the track doesn't rescale under the finger if the band in
+   *  force changes meanwhile. */
   private _heldRange: { min: number; max: number } | null = null;
   /** Monotonic tap counter. Service calls are concurrent and may resolve
    *  out of order, so each tap captures its seq and only claims the
@@ -145,14 +135,6 @@ export class ComfortBandNowTab extends LitElement {
         color: var(--cb-text-secondary);
         text-transform: uppercase;
         letter-spacing: 0.04em;
-      }
-      .notice {
-        margin-top: var(--cb-gap-sm);
-        padding: var(--cb-gap-sm) var(--cb-gap-md);
-        border-radius: var(--cb-radius-card);
-        background: var(--cb-track-bg);
-        font-size: 13px;
-        color: var(--error-color, #db4437);
       }
       .override-row {
         display: flex;
@@ -236,9 +218,6 @@ export class ComfortBandNowTab extends LitElement {
       this._feedbackTimer = null;
     }
     this._feedbackConfirmed = null;
-    // Calls already sent still finish, but leave this element alone.
-    this._seq++;
-    this._clearNotice();
   }
 
   private get _stateOf() {
@@ -260,41 +239,19 @@ export class ComfortBandNowTab extends LitElement {
 
   private _onSliderChange = (event: CustomEvent<{ low: number; high: number }>) => {
     if (!this.hass || !this.zone) return;
-    const { low, high } = event.detail;
     this._pendingLow = null;
     this._pendingHigh = null;
-    void this._call(
-      startOverride(this.hass, { zone: this.zone, low, high }),
-      "Couldn't adjust this room. Try again.",
-    );
+    void startOverride(this.hass, {
+      zone: this.zone,
+      low: event.detail.low,
+      high: event.detail.high,
+    });
   };
 
   private _onCancel = () => {
     if (!this.hass || !this.zone) return;
-    void this._call(
-      cancelOverride(this.hass, { zone: this.zone }),
-      "Couldn't cancel the override. Try again.",
-    );
+    void cancelOverride(this.hass, { zone: this.zone });
   };
-
-  /** Says so if a change is rejected, rather than failing silently. */
-  private async _call(sent: Promise<unknown>, failed: string): Promise<void> {
-    const seq = ++this._seq;
-    this._clearNotice();
-    try {
-      await sent;
-    } catch {
-      if (seq !== this._seq) return;
-      this._notice = failed;
-      this._noticeTimer = setTimeout(() => this._clearNotice(), NOTICE_MS);
-    }
-  }
-
-  private _clearNotice(): void {
-    if (this._noticeTimer !== null) clearTimeout(this._noticeTimer);
-    this._noticeTimer = null;
-    this._notice = null;
-  }
 
   private _onFeedbackTap = async (label: FeedbackLabel): Promise<void> => {
     if (!this.hass || !this.zone) return;
@@ -349,8 +306,9 @@ export class ComfortBandNowTab extends LitElement {
     const start = sliderStart(effLow, effHigh, lowState, highState);
     const sliderLow = this._pendingLow ?? start.low;
     const sliderHigh = this._pendingHigh ?? start.high;
-    // Widen the track to take in a band outside it. Clamped to the track, the
-    // limit the user didn't move would be sent back changed.
+    // Widen the track to take in a band outside it, so both handles sit on it
+    // and Home/End can't move a limit the wrong way (on a 16-26 track, End
+    // on a high of 28 sent 26).
     const range =
       this._pendingLow !== null && this._heldRange
         ? this._heldRange
@@ -390,18 +348,10 @@ export class ComfortBandNowTab extends LitElement {
           @input=${this._onSliderInput}
           @change=${this._onSliderChange}
         ></dual-handle-slider>
-        ${this._renderNotice()}
       </section>
 
       ${this._renderOverrideSection(overrideActive)} ${this._renderHoursSection(overrideHours)}
     `;
-  }
-
-  private _renderNotice() {
-    // The live region is always present so screen readers announce changes.
-    return html`<div class="notice-region" role="status" aria-live="polite">
-      ${this._notice ? html`<div class="notice">${this._notice}</div>` : nothing}
-    </div>`;
   }
 
   private _renderFeedbackSection() {
@@ -508,7 +458,7 @@ export class ComfortBandNowTab extends LitElement {
  * handle must send the other limit back as it is. Only a band narrower than
  * one step, which the slider can't hold, is widened.
  */
-export function sliderStart(
+function sliderStart(
   effLow: number,
   effHigh: number,
   manualLow: number,

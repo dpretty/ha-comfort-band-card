@@ -81,10 +81,6 @@ async function flush(el: ComfortBandNowTab): Promise<void> {
   await el.updateComplete;
 }
 
-function notice(el: ComfortBandNowTab): string | null {
-  return el.shadowRoot!.querySelector('.notice')?.textContent!.trim() ?? null;
-}
-
 async function nowTab(
   hass: HomeAssistant,
   entities = makeEntities(),
@@ -125,7 +121,7 @@ describe('comfort-band-now-tab', () => {
     expect([s.low, s.high]).toEqual([18, 23]);
   });
 
-  // Rounded to what the labels show, not to the slider's steps: snapping would
+  // Rounded to what the readout shows, not to the slider's steps: snapping would
   // change the limit the user doesn't move when they nudge the other.
   it('starts from a mid-ramp band to the tenth of a degree the values show', async () => {
     const el = await nowTab(
@@ -180,12 +176,12 @@ describe('comfort-band-now-tab', () => {
     expect([slider(el).min, slider(el).max]).toEqual([16, 26]);
   });
 
-  // Clamped to the track, a band of 15–28 showed as 16–26, and nudging the low
-  // handle sent 16.5–26: the high limit rewritten without being touched.
-  it('takes in a band outside its track, and sends the other limit back unchanged', async () => {
+  // On a 16–26 track, a band of 15–28 had both handles drawn off the track, the
+  // low handle's first press took it to 16, and End on the high one sent 26.
+  it('takes in a band outside its track, so each handle moves only itself', async () => {
     const hass = makeHass({ 'sensor.gym_effective_low': '15', 'sensor.gym_effective_high': '28' });
     const el = await nowTab(hass);
-    const s = slider(el) as SliderProbe & { min: number; max: number };
+    const s = slider(el);
     expect([s.min, s.max, s.low, s.high]).toEqual([15, 28, 15, 28]);
 
     const lowThumb = s.shadowRoot!.querySelector('.thumb') as HTMLElement;
@@ -196,6 +192,12 @@ describe('comfort-band-now-tab', () => {
       low: 15.5,
       high: 28,
     });
+
+    // End on the high handle, already at the top: nothing to send.
+    const highThumb = s.shadowRoot!.querySelectorAll('.thumb')[1] as HTMLElement;
+    highThumb.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+    await flush(el);
+    expect(hass.callService).toHaveBeenCalledTimes(1);
   });
 
   it('widens the track to whole degrees around a fractional band outside it', async () => {
@@ -206,7 +208,7 @@ describe('comfort-band-now-tab', () => {
     expect([slider(el).min, slider(el).max]).toEqual([15, 28]);
   });
 
-  it('keeps the track while the chosen values are on it, though the band in force moves', async () => {
+  it('keeps the track during a drag, though the band in force moves', async () => {
     const el = await nowTab(
       makeHass({ 'sensor.gym_effective_low': '15', 'sensor.gym_effective_high': '28' }),
     );
@@ -496,128 +498,8 @@ describe('comfort-band-now-tab', () => {
     }
   });
 
-  describe('when a change is rejected', () => {
-    afterEach(() => vi.useRealTimers());
-
-    const rejecting = (overrides: Partial<Record<string, string>> = {}) => {
-      const hass = makeHass(overrides);
-      (hass.callService as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('rejected'));
-      return hass;
-    };
-
-    // It used to fail silently: the slider moved, nothing happened.
-    it('says so when an adjustment is rejected', async () => {
-      const el = await nowTab(rejecting());
-      await release(el, 20.5, 23.5);
-      expect(notice(el)).toBe("Couldn't adjust this room. Try again.");
-      // And the slider shows what is really in force.
-      expect([slider(el).low, slider(el).high]).toEqual([19.5, 22.5]);
-    });
-
-    it('says so when Cancel is rejected', async () => {
-      const el = await nowTab(
-        rejecting({
-          'binary_sensor.gym_override_active': 'on',
-          'sensor.gym_override_ends': new Date(Date.now() + 3_600_000).toISOString(),
-        }),
-      );
-      (el.shadowRoot!.querySelector('.button.secondary') as HTMLButtonElement).click();
-      await flush(el);
-      expect(notice(el)).toBe("Couldn't cancel the override. Try again.");
-    });
-
-    it('says nothing when a change goes through', async () => {
-      const el = await nowTab(makeHass());
-      await release(el, 20.5, 23.5);
-      expect(notice(el)).toBeNull();
-    });
-
-    // The region exists before anything is said in it, so screen readers
-    // announce the message when it appears.
-    it('says it through a polite live region that is always present', async () => {
-      const el = await nowTab(rejecting());
-      const region = el.shadowRoot!.querySelector('.notice-region')!;
-      expect(region.getAttribute('role')).toBe('status');
-      expect(region.getAttribute('aria-live')).toBe('polite');
-      expect(region.querySelector('.notice')).toBeNull();
-      await release(el, 20.5, 23.5);
-      expect(el.shadowRoot!.querySelector('.notice-region .notice')).not.toBeNull();
-    });
-
-    // A newer change has the last word: the older one failing says nothing
-    // about the band now being set.
-    it('says nothing about a rejection once a newer change has been made', async () => {
-      const hass = makeHass();
-      let reject!: (err: Error) => void;
-      (hass.callService as ReturnType<typeof vi.fn>).mockImplementationOnce(
-        () => new Promise((_resolve, rej) => (reject = rej)),
-      );
-      const el = await nowTab(hass);
-      await release(el, 20, 24);
-      await release(el, 20, 25);
-      reject(new Error('rejected'));
-      await flush(el);
-      expect(notice(el)).toBeNull();
-    });
-
-    it('takes the message down when the next change is made', async () => {
-      const hass = rejecting();
-      let resolve!: () => void;
-      const el = await nowTab(hass);
-      await release(el, 20.5, 23.5);
-      expect(notice(el)).not.toBeNull();
-      (hass.callService as ReturnType<typeof vi.fn>).mockImplementationOnce(
-        () => new Promise<void>((res) => (resolve = res)),
-      );
-      await release(el, 21, 23.5);
-      expect(notice(el)).toBeNull();
-      resolve();
-      await flush(el);
-    });
-
-    it('takes the message down after four seconds', async () => {
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-      const el = await nowTab(rejecting());
-      await release(el, 20.5, 23.5);
-      vi.advanceTimersByTime(3_999);
-      await el.updateComplete;
-      expect(notice(el)).not.toBeNull();
-      vi.advanceTimersByTime(1);
-      await el.updateComplete;
-      expect(notice(el)).toBeNull();
-    });
-
-    it('clears the message and its timer when the tab is detached', async () => {
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-      const el = await nowTab(rejecting());
-      await release(el, 20.5, 23.5);
-      expect(notice(el)).not.toBeNull();
-      expect(vi.getTimerCount()).toBeGreaterThan(0);
-      el.remove();
-      expect(vi.getTimerCount()).toBe(0);
-      await el.updateComplete;
-      expect(notice(el)).toBeNull();
-    });
-
-    it('leaves a detached tab alone when a rejection comes after', async () => {
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-      const hass = makeHass();
-      let reject!: (err: Error) => void;
-      (hass.callService as ReturnType<typeof vi.fn>).mockImplementationOnce(
-        () => new Promise((_resolve, rej) => (reject = rej)),
-      );
-      const el = await nowTab(hass);
-      await release(el, 20.5, 23.5);
-      el.remove();
-      reject(new Error('rejected'));
-      await flush(el);
-      expect(vi.getTimerCount()).toBe(0);
-      expect(notice(el)).toBeNull();
-    });
-  });
-
-  // As before this change: the slider follows the band in force once a
-  // change is released, and shows the dragged values only while dragging.
+  // As on main: the slider shows the dragged values while dragging, and follows
+  // the band in force once the drag is released.
   it('lets go of the dragged values on release', async () => {
     const el = await nowTab(makeHass());
     slider(el).dispatchEvent(

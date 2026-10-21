@@ -208,6 +208,20 @@ describe('comfort-band-card-editor', () => {
     expect(fire).toHaveBeenLastCalledWith({ type: 'custom:comfort-band-card', zone: 'office' });
   });
 
+  // The placeholder is what an empty field would give, not the name in it.
+  it('shows the default name as the placeholder even with a name set', async () => {
+    const hass = makeHass(['gym']);
+    hass.devices['dev-0']!.area_id = 'area-1';
+    hass.areas = { 'area-1': { area_id: 'area-1', name: 'Home Gym' } };
+    const el = await editor(hass, {
+      type: 'custom:comfort-band-card',
+      zone: 'gym',
+      name: 'Weights room',
+    });
+    const input = el.shadowRoot!.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(input.placeholder).toBe('Home Gym');
+  });
+
   it('keeps an existing name when the config is loaded', async () => {
     const el = await editor(makeHass(['gym']), {
       type: 'custom:comfort-band-card',
