@@ -42,6 +42,11 @@ describe('shiftBand', () => {
     expect(shiftBand({ low: 8, high: 34 }, 3)).toEqual({ low: 9, high: 35 });
   });
 
+  it('rounds both ends to the tenth when a limit stops a step short', () => {
+    // The bottom can only go 0.1 lower: 16.4 - 0.1 is 16.299999... in floats.
+    expect(shiftBand({ low: 10.1, high: 16.4 }, -1)).toEqual({ low: 10, high: 16.3 });
+  });
+
   it('rounds a range clamped from a fractional base to the tenth', () => {
     expect(shiftBand({ low: 30.37, high: 34.83 }, 1)).toEqual({ low: 30.5, high: 35 });
   });
@@ -75,6 +80,12 @@ describe('headlineTemperature', () => {
       value: 19.9,
       note: 'Feels like · room 19.2°',
     });
+  });
+
+  it('writes "feels like" to one decimal', () => {
+    expect(headlineTemperature({ room: 21, apparent: 22, useApparent: false }).note).toBe(
+      'Feels like 22.0°',
+    );
   });
 
   it('falls back to the room reading when "feels like" can\'t be read', () => {
@@ -135,6 +146,7 @@ describe('statusLine', () => {
   });
 
   it('promises no end when the next change is past, missing, or unscheduled', () => {
+    expect(line({ nextChange: NOW }).text).toBe('Comfortable · 18–23°');
     expect(line({ nextChange: NOW - 1 }).text).toBe('Comfortable · 18–23°');
     expect(line({ nextChange: null }).text).toBe('Comfortable · 18–23°');
     expect(line({ scheduled: null }).text).toBe('Comfortable · 18–23°');
@@ -150,8 +162,11 @@ describe('statusLine', () => {
     expect(line({ overrideActive: true, overrideEnds: NOW + 1, scheduled: null }).text).toBe(
       'Comfortable · adjusted to 18–23°',
     );
-    // An end already past isn't one to promise.
+    // An end already past, or now, isn't one to promise.
     expect(line({ overrideActive: true, overrideEnds: NOW - 1 }).text).toBe(
+      'Comfortable · adjusted to 18–23°',
+    );
+    expect(line({ overrideActive: true, overrideEnds: NOW }).text).toBe(
       'Comfortable · adjusted to 18–23°',
     );
   });
@@ -213,18 +228,19 @@ describe('formatTime', () => {
     expect(formatTime(at(21, 0), locale('24', 'en-US'))).toBe('21:00');
   });
 
-  it("follows the browser's own clock for HA's 'system' setting", () => {
-    // A language whose clock differs from the browser's, so following it
-    // would show.
+  // As HA's frontend does: the browser's 12/24-hour choice, HA's language.
+  it("takes the browser's 12/24-hour choice for HA's 'system' setting", () => {
     const cycle = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions()
       .hourCycle;
-    const browser12 = cycle === 'h11' || cycle === 'h12';
-    const other = browser12 ? 'en-GB' : 'en-US';
-    const expected = formatTime(at(21, 0));
+    const browser = cycle === 'h11' || cycle === 'h12' ? '12' : '24';
+    // A language whose own clock is the other one, so following it would show.
+    const other = browser === '12' ? 'en-GB' : 'en-US';
     expect(formatTime(at(21, 0), { locale: { language: other, time_format: 'system' } })).toBe(
-      expected,
+      formatTime(at(21, 0), { locale: { language: other, time_format: browser } }),
     );
-    expect(formatTime(at(21, 0), { locale: { language: other } })).not.toBe(expected);
+    expect(formatTime(at(21, 0), { locale: { language: other, time_format: 'system' } })).not.toBe(
+      formatTime(at(21, 0), { locale: { language: other } }),
+    );
   });
 
   it("follows the language's own clock when no preference is set", () => {

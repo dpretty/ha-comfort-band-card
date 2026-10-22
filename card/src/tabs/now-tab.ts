@@ -5,14 +5,16 @@
  *   - The temperature that drives control, large; the other underneath.
  *   - One status line: what the room is doing, the range in force, and when
  *     it next changes ("Comfortable · 17.5–23° until 9 pm").
- *   - "Adjust for" (1 h · 3 h · until the next change), then Cooler / Warmer.
- *     Each tap moves the whole range by 0.5°; taps made close together are
- *     sent as one `comfort_band.start_override` once they stop. Picking a
- *     length while an adjustment runs re-times it; until then, more taps
- *     keep the running adjustment's end.
+ *   - "Adjust for" (1 h · 3 h), then Cooler / Warmer. Each tap moves the
+ *     whole range by 0.5°; taps made close together are sent as one
+ *     `comfort_band.start_override` once they stop, for the length picked.
+ *     Picking a length while an adjustment runs re-times it. The lengths are
+ *     relative, so the panel's clock doesn't come into it; the end shown is
+ *     HA's.
  *   - "Back to schedule" while an adjustment runs.
- *   - While a call from this tab is going through, these controls wait for
- *     it, so nothing is built on a state the tab has just changed.
+ *   - While a call from this tab is going through, these controls ignore
+ *     presses (marked aria-disabled, so they keep focus), so nothing is
+ *     built on a state the tab has just changed.
  *   - "How does it feel?" feedback pills (`comfort_band.record_feedback`).
  *   - "Set an exact range": the two-handled slider, folded away.
  *
@@ -58,30 +60,20 @@ const SLIDER_STEP = 0.5;
 
 /** Taps on Warmer / Cooler made within this long of each other are one change. */
 export const ADJUST_DELAY_MS = 1500;
-/** "Until 9 pm" is offered only when the change is at least this far off. */
-const UNTIL_MIN_MS = 15 * 60_000;
-/** The length used when none has been chosen and there's no next change. */
+/** The length used until another is picked. */
 const DEFAULT_HOURS = 3;
 
-/** How long an adjustment lasts. 'running': as long as the adjustment
- *  already running, while no other length has been picked. */
-type Length = 1 | 3 | 'next' | 'running';
+/** How long an adjustment lasts, in hours. */
+type Length = 1 | 3;
 
-/** Warmer / Cooler taps not yet sent: the range they started from, how many
- *  steps from it (warmer positive), and the length in force at the first tap,
- *  with the time it ends at, so it can't change under the taps. */
+/** Warmer / Cooler taps not yet sent: the range they started from, and how
+ *  many steps from it (warmer positive). They're sent for the length picked. */
 interface Burst {
   base: Band;
   steps: number;
-  length: Length;
-  endsAt: number | null;
   /** A length was picked during the burst: send it even if the taps cancel out. */
   picked: boolean;
 }
-
-const HOUR_MS = 3_600_000;
-/** The longest adjustment sent, whatever a clock says. */
-const MAX_HOURS = 24;
 
 const STATUS_ICONS: Record<StatusKind, string> = {
   adjusting: 'mdi:timer-sand',
@@ -117,7 +109,7 @@ export class ComfortBandNowTab extends LitElement {
   private _feedbackSeq = 0;
 
   /** The length picked under "Adjust for" in this tab, if any. */
-  @state() private _length: 1 | 3 | 'next' | null = null;
+  @state() private _length: Length | null = null;
   @state() private _burst: Burst | null = null;
   private _burstTimer: ReturnType<typeof setTimeout> | null = null;
   /** What a call from this tab is doing while it goes through, such as
@@ -212,11 +204,6 @@ export class ComfortBandNowTab extends LitElement {
       .steps button {
         font-size: 15px;
       }
-      .lengths button[data-length='next'] {
-        /* "Until 4:30 pm" is the longest label; on a phone it would wrap. */
-        flex: 1.8;
-        white-space: nowrap;
-      }
       .lengths button[aria-pressed='true'] {
         background: var(--cb-accent, var(--primary-color, #03a9f4));
         /* A border as well as the fill, so the choice shows in forced colours. */
@@ -224,9 +211,9 @@ export class ComfortBandNowTab extends LitElement {
         color: #ffffff;
         font-weight: 500;
       }
-      .lengths button:disabled,
-      .steps button:disabled,
-      .back:disabled {
+      .lengths button[aria-disabled='true'],
+      .steps button[aria-disabled='true'],
+      .back[aria-disabled='true'] {
         opacity: 0.5;
         cursor: default;
       }
@@ -326,45 +313,9 @@ export class ComfortBandNowTab extends LitElement {
     };
   }
 
-  /** The next change, when a schedule sets the band and it is still ahead. */
-  private _nextOffered(now: number): number | null {
-    const { scheduled, nextChange } = this._schedule();
-    return scheduled === true && nextChange !== null && nextChange > now ? nextChange : null;
-  }
-
-  /** When the running adjustment ends, if one is running and that's ahead. */
-  private _runningEnds(now: number): number | null {
-    if (this._stateOf(this.entities?.overrideActive ?? null)?.state !== 'on') return null;
-    const ends = Date.parse(this._stateOf(this.entities?.overrideEnds ?? null)?.state ?? '');
-    return Number.isNaN(ends) || ends <= now ? null : ends;
-  }
-
-  /** The length in force: the one picked here, else the running
-   *  adjustment's, else until the next change when that's at least
-   *  15 minutes off, else three hours. */
-  private _lengthInForce(now: number): Length {
-    const next = this._nextOffered(now);
-    if (this._length === 'next' ? next !== null : this._length !== null) return this._length!;
-    if (this._runningEnds(now) !== null) return 'running';
-    return next !== null && next - now >= UNTIL_MIN_MS ? 'next' : DEFAULT_HOURS;
-  }
-
-  /** A length, with the time it ends at where it ends at a time. */
-  private _snapshot(length: Length, now: number): Pick<Burst, 'length' | 'endsAt'> {
-    const endsAt =
-      length === 'next'
-        ? this._nextOffered(now)
-        : length === 'running'
-          ? this._runningEnds(now)
-          : null;
-    return { length, endsAt };
-  }
-
-  private _hoursFor(snapshot: Pick<Burst, 'length' | 'endsAt'>, now: number): number {
-    const { length, endsAt } = snapshot;
-    if (length === 1 || length === 3) return length;
-    if (endsAt === null) return DEFAULT_HOURS;
-    return Math.min(MAX_HOURS, Math.max(0, (endsAt - now) / HOUR_MS));
+  /** The length in force: the one picked here, else three hours. */
+  private _hours(): Length {
+    return this._length ?? DEFAULT_HOURS;
   }
 
   /** Runs a call after the ones before it from this tab, saying what it's
@@ -394,12 +345,11 @@ export class ComfortBandNowTab extends LitElement {
 
   private _onStep = (direction: 1 | -1) => {
     if (this._busy) return;
-    const now = Date.now();
     let burst = this._burst;
     if (!burst) {
       const base = this._bandInForce();
       if (!base) return;
-      burst = { base, steps: 0, ...this._snapshot(this._lengthInForce(now), now), picked: false };
+      burst = { base, steps: 0, picked: false };
     }
     // At a limit a further tap would change nothing; don't count it.
     const before = shiftBand(burst.base, burst.steps);
@@ -418,11 +368,10 @@ export class ComfortBandNowTab extends LitElement {
     const burst = this._burst;
     this._burst = null;
     if (!burst) return;
-    const now = Date.now();
     if (burst.steps !== 0) {
-      this._sendBand(shiftBand(burst.base, burst.steps), this._hoursFor(burst, now));
+      this._sendBand(shiftBand(burst.base, burst.steps), this._hours());
     } else if (burst.picked) {
-      this._retime(burst, now);
+      this._retime(this._hours());
     }
   }
 
@@ -432,26 +381,25 @@ export class ComfortBandNowTab extends LitElement {
     this._burst = null;
   }
 
-  private _onPickLength = (length: 1 | 3 | 'next') => {
+  private _onPickLength = (length: Length) => {
     if (this._busy) return;
     this._length = length;
-    const now = Date.now();
     // Taps still being made take the length when they're sent.
     if (this._burst) {
-      this._burst = { ...this._burst, ...this._snapshot(length, now), picked: true };
+      this._burst = { ...this._burst, picked: true };
       return;
     }
-    this._retime(this._snapshot(length, now), now);
+    this._retime(length);
   };
 
   /** Gives a running adjustment a new length, keeping its band: the
    *  integration keeps an adjustment's band in the manual values. */
-  private _retime(snapshot: Pick<Burst, 'length' | 'endsAt'>, now: number): void {
+  private _retime(hours: Length): void {
     if (this._stateOf(this.entities?.overrideActive ?? null)?.state !== 'on') return;
     const low = this._numericState(this.entities?.manualLow ?? null);
     const high = this._numericState(this.entities?.manualHigh ?? null);
     if (!Number.isFinite(low) || !Number.isFinite(high)) return;
-    this._sendBand({ low, high }, this._hoursFor(snapshot, now));
+    this._sendBand({ low, high }, hours);
   }
 
   private _onBackToSchedule = () => {
@@ -473,11 +421,7 @@ export class ComfortBandNowTab extends LitElement {
     this._pendingLow = null;
     this._pendingHigh = null;
     this._dropBurst();
-    const now = Date.now();
-    this._sendBand(
-      { low: event.detail.low, high: event.detail.high },
-      this._hoursFor(this._snapshot(this._lengthInForce(now), now), now),
-    );
+    this._sendBand({ low: event.detail.low, high: event.detail.high }, this._hours());
   };
 
   private _onFeedbackTap = async (label: FeedbackLabel): Promise<void> => {
@@ -562,21 +506,17 @@ export class ComfortBandNowTab extends LitElement {
         <span>${status.text}</span>
       </div>
 
-      ${this._renderAdjust(now, overrideActive, scheduled)} ${this._renderFeedbackSection()}
+      ${this._renderAdjust(overrideActive, scheduled)} ${this._renderFeedbackSection()}
       ${this._renderExactRange(effLow, effHigh)}
     `;
   }
 
-  private _renderAdjust(now: number, overrideActive: boolean, scheduled: boolean | null) {
-    const busy = this._busy !== null;
-    const next = this._nextOffered(now);
-    const length = this._burst?.length ?? this._lengthInForce(now);
-    const lengths: Array<{ value: 1 | 3 | 'next'; text: string }> = [
-      { value: 1, text: '1 h' },
-      { value: 3, text: '3 h' },
-    ];
-    if (next !== null)
-      lengths.push({ value: 'next', text: `Until ${formatTime(next, this.hass)}` });
+  private _renderAdjust(overrideActive: boolean, scheduled: boolean | null) {
+    // aria-disabled rather than disabled: a disabled button loses focus,
+    // and a keyboard user would be thrown out of the dialog's flow.
+    const busy = this._busy !== null ? 'true' : 'false';
+    const hours = this._hours();
+    const lengths: Length[] = [1, 3];
     return html`
       <section class="adjust">
         ${scheduled === false
@@ -584,29 +524,29 @@ export class ComfortBandNowTab extends LitElement {
           : html`<h3 id="adjust-for">Adjust for</h3>
               <div class="lengths" role="group" aria-labelledby="adjust-for">
                 ${lengths.map(
-                  (l) =>
+                  (h) =>
                     html`<button
-                      aria-pressed=${length === l.value ? 'true' : 'false'}
-                      data-length=${l.value}
-                      ?disabled=${busy}
-                      @click=${() => this._onPickLength(l.value)}
+                      aria-pressed=${hours === h ? 'true' : 'false'}
+                      aria-disabled=${busy}
+                      data-length=${h}
+                      @click=${() => this._onPickLength(h)}
                     >
-                      ${l.text}
+                      ${h} h
                     </button>`,
                 )}
               </div>`}
         ${this._bandInForce() !== null
           ? html`<div class="steps">
-              <button class="cooler" ?disabled=${busy} @click=${() => this._onStep(-1)}>
+              <button class="cooler" aria-disabled=${busy} @click=${() => this._onStep(-1)}>
                 <ha-icon icon="mdi:minus" aria-hidden="true"></ha-icon> Cooler
               </button>
-              <button class="warmer" ?disabled=${busy} @click=${() => this._onStep(1)}>
+              <button class="warmer" aria-disabled=${busy} @click=${() => this._onStep(1)}>
                 <ha-icon icon="mdi:plus" aria-hidden="true"></ha-icon> Warmer
               </button>
             </div>`
           : nothing}
         ${overrideActive && scheduled !== false
-          ? html`<button class="back" ?disabled=${busy} @click=${this._onBackToSchedule}>
+          ? html`<button class="back" aria-disabled=${busy} @click=${this._onBackToSchedule}>
               ${scheduled === true ? 'Back to schedule' : 'End adjustment'}
             </button>`
           : nothing}

@@ -46,7 +46,8 @@ function makeHass(
     'binary_sensor.gym_override_active': 'off',
     'number.gym_manual_low': '19',
     'number.gym_manual_high': '22',
-    'number.gym_override_hours': '3',
+    // Not the card's default of 3 h: the card no longer reads it.
+    'number.gym_override_hours': '6',
     ...overrides,
   };
   return {
@@ -130,13 +131,17 @@ function calls(hass: HomeAssistant): unknown[] {
   return (hass.callService as ReturnType<typeof vi.fn>).mock.calls.map((c) => [c[1], c[2]]);
 }
 
+/** Whether each of the tab's controls ignores presses; throws if none is
+ *  rendered, so an every() over the result can't pass on an empty list. */
 function controlsDisabled(el: ComfortBandNowTab): boolean[] {
-  return Array.from(el.shadowRoot!.querySelectorAll('.lengths button, .steps button, .back')).map(
-    (b) => (b as HTMLButtonElement).disabled,
+  const controls = Array.from(
+    el.shadowRoot!.querySelectorAll('.lengths button, .steps button, .back'),
   );
+  if (controls.length === 0) throw new Error('no controls rendered');
+  return controls.map((b) => b.getAttribute('aria-disabled') === 'true');
 }
 
-async function pickLength(el: ComfortBandNowTab, value: '1' | '3' | 'next'): Promise<void> {
+async function pickLength(el: ComfortBandNowTab, value: '1' | '3'): Promise<void> {
   (el.shadowRoot!.querySelector(`.lengths button[data-length="${value}"]`) as HTMLElement).click();
   await flush(el);
 }
@@ -832,160 +837,26 @@ describe('comfort-band-now-tab', () => {
   describe('Adjust for', () => {
     afterEach(() => vi.useRealTimers());
 
-    it('offers 1 h, 3 h and until the next change, and starts on until', async () => {
-      vi.useFakeTimers({ toFake: ['Date'] });
-      vi.setSystemTime(NOW);
+    it('offers 1 h and 3 h, and starts on 3 h', async () => {
       const el = await nowTab(scheduledHass(NOW + 5 * HOUR));
       expect(lengths(el)).toEqual([
         { text: '1 h', checked: false },
-        { text: '3 h', checked: false },
-        { text: `Until ${formatTime(NOW + 5 * HOUR)}`, checked: true },
-      ]);
-    });
-
-    it('sends the hours to the next change for "until"', async () => {
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
-      vi.setSystemTime(NOW);
-      const hass = scheduledHass(NOW + 3.5 * HOUR);
-      const el = await nowTab(hass);
-      await tap(el, 'warmer');
-      vi.advanceTimersByTime(1_500);
-      await flush(el);
-      expect(calls(hass)).toEqual([
-        ['start_override', { zone: 'gym', low: 20, high: 23, hours: 3.5 - 1_500 / HOUR }],
-      ]);
-    });
-
-    // The length shown at the first tap is the one sent, even if the change
-    // comes within fifteen minutes while the taps are being made.
-    it('keeps "until" chosen at the first tap', async () => {
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
-      vi.setSystemTime(NOW);
-      const next = NOW + 15 * 60_000 + 1_000;
-      const hass = scheduledHass(next);
-      const el = await nowTab(hass);
-      expect(lengths(el)[2]!.checked).toBe(true);
-      await tap(el, 'warmer');
-      vi.advanceTimersByTime(1_500);
-      await flush(el);
-      expect(calls(hass)).toEqual([
-        ['start_override', { zone: 'gym', low: 20, high: 23, hours: (next - NOW - 1_500) / HOUR }],
+        { text: '3 h', checked: true },
       ]);
     });
 
     it('sends the length picked', async () => {
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
-      vi.setSystemTime(NOW);
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const hass = scheduledHass(NOW + 5 * HOUR);
       const el = await nowTab(hass);
       await pickLength(el, '1');
-      expect(lengths(el).map((l) => l.checked)).toEqual([true, false, false]);
+      expect(lengths(el).map((l) => l.checked)).toEqual([true, false]);
       await tap(el, 'cooler');
       vi.advanceTimersByTime(1_500);
       await flush(el);
       expect(calls(hass)).toEqual([
         ['start_override', { zone: 'gym', low: 19, high: 22, hours: 1 }],
       ]);
-    });
-
-    it('offers until a change under fifteen minutes off, but starts on 3 h', async () => {
-      vi.useFakeTimers({ toFake: ['Date'] });
-      vi.setSystemTime(NOW);
-      const el = await nowTab(scheduledHass(NOW + 14 * 60_000));
-      expect(lengths(el)).toEqual([
-        { text: '1 h', checked: false },
-        { text: '3 h', checked: true },
-        { text: `Until ${formatTime(NOW + 14 * 60_000)}`, checked: false },
-      ]);
-    });
-
-    it("doesn't offer until a change that has already passed", async () => {
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
-      vi.setSystemTime(NOW);
-      const hass = scheduledHass(NOW + 20 * 60_000);
-      const el = await nowTab(hass);
-      await pickLength(el, 'next');
-      vi.setSystemTime(NOW + 21 * 60_000);
-      el.hass = scheduledHass(NOW + 20 * 60_000);
-      el.hass.callService = hass.callService;
-      await el.updateComplete;
-      expect(lengths(el).map((l) => l.text)).toEqual(['1 h', '3 h']);
-      await tap(el, 'warmer');
-      vi.advanceTimersByTime(1_500);
-      await flush(el);
-      expect(calls(hass)).toEqual([
-        ['start_override', { zone: 'gym', low: 20, high: 23, hours: 3 }],
-      ]);
-    });
-
-    it('never sends more than a day, whatever a clock says', async () => {
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
-      vi.setSystemTime(NOW);
-      const hass = scheduledHass(NOW + 30 * HOUR);
-      const el = await nowTab(hass);
-      await tap(el, 'warmer');
-      vi.advanceTimersByTime(1_500);
-      await flush(el);
-      expect(calls(hass)).toEqual([
-        ['start_override', { zone: 'gym', low: 20, high: 23, hours: 24 }],
-      ]);
-    });
-
-    // The running adjustment's end is the one the status line gives.
-    it('marks no length for a running adjustment, and keeps its end for more taps', async () => {
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
-      vi.setSystemTime(NOW);
-      const hass = scheduledHass(NOW + 5 * HOUR, {
-        'binary_sensor.gym_override_active': 'on',
-        'sensor.gym_override_ends': new Date(NOW + 2 * HOUR).toISOString(),
-      });
-      const el = await nowTab(hass);
-      expect(lengths(el).every((l) => !l.checked)).toBe(true);
-      await tap(el, 'warmer');
-      vi.advanceTimersByTime(1_500);
-      await flush(el);
-      expect(calls(hass)).toEqual([
-        ['start_override', { zone: 'gym', low: 20, high: 23, hours: 2 - 1_500 / HOUR }],
-      ]);
-    });
-
-    // hass can still show an adjustment whose end has just passed.
-    it("doesn't keep the end of an adjustment that has already ended", async () => {
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
-      vi.setSystemTime(NOW);
-      const hass = scheduledHass(null, {
-        'binary_sensor.gym_override_active': 'on',
-        'sensor.gym_override_ends': new Date(NOW - 60_000).toISOString(),
-      });
-      const el = await nowTab(hass);
-      await tap(el, 'warmer');
-      vi.advanceTimersByTime(1_500);
-      await flush(el);
-      expect(calls(hass)).toEqual([
-        ['start_override', { zone: 'gym', low: 20, high: 23, hours: 3 }],
-      ]);
-    });
-
-    it('goes back to the running adjustment once a picked "until" has passed', async () => {
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
-      vi.setSystemTime(NOW);
-      const running = {
-        'binary_sensor.gym_override_active': 'on',
-        'sensor.gym_override_ends': new Date(NOW + 2 * HOUR).toISOString(),
-      };
-      const hass = scheduledHass(NOW + 20 * 60_000, running);
-      const el = await nowTab(hass);
-      // Picking re-times; then the change passes, and the adjustment's end stands.
-      await pickLength(el, 'next');
-      vi.setSystemTime(NOW + 21 * 60_000);
-      el.hass = scheduledHass(NOW + 20 * 60_000, running);
-      el.hass.callService = hass.callService;
-      await el.updateComplete;
-      await tap(el, 'warmer');
-      vi.advanceTimersByTime(1_500);
-      await flush(el);
-      const sent = calls(hass)[1] as [string, { hours: number }];
-      expect(sent[1].hours).toBeCloseTo((2 * HOUR - 21 * 60_000 - 1_500) / HOUR, 9);
     });
 
     it('re-times an adjustment that is running, keeping its band', async () => {
@@ -1033,6 +904,7 @@ describe('comfort-band-now-tab', () => {
       await tap(el, 'warmer');
       await pickLength(el, '1');
       expect(hass.callService).not.toHaveBeenCalled();
+      expect(lengths(el).map((l) => l.checked)).toEqual([true, false]);
       vi.advanceTimersByTime(1_500);
       await flush(el);
       expect(calls(hass)).toEqual([
@@ -1054,26 +926,75 @@ describe('comfort-band-now-tab', () => {
       ]);
     });
 
-    it('sends the length in force with the slider too', async () => {
-      vi.useFakeTimers({ toFake: ['Date'] });
-      vi.setSystemTime(NOW);
-      const hass = scheduledHass(NOW + 5 * HOUR);
+    it("doesn't re-time when taps cancel out and no length was picked", async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const hass = scheduledHass(null, { 'binary_sensor.gym_override_active': 'on' });
       const el = await nowTab(hass);
+      await pickLength(el, '1');
+      (hass.callService as ReturnType<typeof vi.fn>).mockClear();
+      await tap(el, 'warmer');
+      await tap(el, 'cooler');
+      vi.advanceTimersByTime(1_500);
+      await flush(el);
+      expect(hass.callService).not.toHaveBeenCalled();
+    });
+
+    it('sends the length picked with the slider too', async () => {
+      const hass = scheduledHass(null);
+      const el = await nowTab(hass);
+      await pickLength(el, '1');
       await release(el, 18, 21);
       expect(calls(hass)).toEqual([
-        ['start_override', { zone: 'gym', low: 18, high: 21, hours: 5 }],
+        ['start_override', { zone: 'gym', low: 18, high: 21, hours: 1 }],
       ]);
     });
 
     it("uses HA's 12/24-hour setting for the times it shows", async () => {
       vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(new Date(2026, 9, 22, 10, 0).getTime());
-      const next = new Date(2026, 9, 22, 21, 0).getTime();
-      const hass = scheduledHass(next);
+      const hass = scheduledHass(new Date(2026, 9, 22, 21, 0).getTime());
       hass.locale = { language: 'en-US', time_format: '24' };
       const el = await nowTab(hass);
       expect(statusText(el)).toBe('Comfortable · 19.5–22.5° until 21:00');
-      expect(lengths(el)[2]!.text).toBe('Until 21:00');
+    });
+
+    // aria-disabled controls still receive clicks; the tab's own guards
+    // have to ignore them.
+    it('ignores presses while a change is going through', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const hass = scheduledHass(null, { 'binary_sensor.gym_override_active': 'on' });
+      const held = holdNextCall(hass);
+      const el = await nowTab(hass);
+      await tap(el, 'warmer');
+      vi.advanceTimersByTime(1_500);
+      await flush(el);
+      expect(controlsDisabled(el).every((d) => d)).toBe(true);
+      await tap(el, 'cooler');
+      await pickLength(el, '1');
+      backButton(el)!.click();
+      vi.advanceTimersByTime(1_500);
+      await flush(el);
+      expect(calls(hass)).toHaveLength(1);
+      held.resolve();
+      await flush(el);
+      expect(calls(hass)).toHaveLength(1);
+      expect(lengths(el).map((l) => l.checked)).toEqual([false, true]);
+    });
+
+    // Disabling the focused button would drop focus to the page.
+    it('keeps focus on the control pressed while its change goes through', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const hass = makeHass();
+      holdNextCall(hass);
+      const el = await nowTab(hass);
+      const warmer = el.shadowRoot!.querySelector('.steps .warmer') as HTMLButtonElement;
+      warmer.focus();
+      warmer.click();
+      vi.advanceTimersByTime(1_500);
+      await flush(el);
+      expect(statusText(el)).toBe('Adjusting to 20–23°');
+      expect(warmer.disabled).toBe(false);
+      expect(el.shadowRoot!.activeElement).toBe(warmer);
     });
   });
 

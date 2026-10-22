@@ -164,8 +164,14 @@ export function formatTime(ms: number, hass?: Pick<HomeAssistant, 'locale'>): st
   const options: Intl.DateTimeFormatOptions = { hour: 'numeric' };
   if (pref === '12') options.hour12 = true;
   if (pref === '24') options.hour12 = false;
-  // 'system' follows the browser's own locale, as HA's frontend does.
-  const language = pref === 'system' ? undefined : hass?.locale?.language;
+  // 'system' takes the 12/24-hour choice from the browser, as HA's frontend
+  // does, and keeps HA's language for everything else.
+  if (pref === 'system') {
+    const cycle = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions()
+      .hourCycle;
+    options.hour12 = cycle === 'h11' || cycle === 'h12';
+  }
+  const language = hass?.locale?.language;
   const cycle = new Intl.DateTimeFormat(language, options).resolvedOptions().hourCycle;
   const twelveHour = cycle === 'h11' || cycle === 'h12';
   if (!twelveHour) options.hour = '2-digit';
