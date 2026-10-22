@@ -32,7 +32,11 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import '../profile-edit-dialog.js';
-import { findActiveProfileEntity, profileManagerExists } from '../helpers.js';
+import {
+  findActiveProfileEntity,
+  profileManagerExists,
+  profileSelectReadable,
+} from '../helpers.js';
 import {
   cloneProfile,
   createProfile,
@@ -352,7 +356,7 @@ export class ComfortBandProfilesTab extends LitElement {
     const state = this.hass.states[entityId];
     // An entry that failed to load or is reloading leaves its select
     // "unavailable", with only the last known options: not one to act on.
-    if (!state || state.state === 'unavailable') return null;
+    if (!profileSelectReadable(state)) return null;
     const optionsAttr = state.attributes.options;
     const options = Array.isArray(optionsAttr)
       ? (optionsAttr as unknown[]).filter((v): v is string => typeof v === 'string')
@@ -703,6 +707,16 @@ export class ComfortBandProfilesTab extends LitElement {
               aria-controls=${this._openMenu === profile ? menuId : nothing}
               aria-expanded=${this._openMenu === profile ? 'true' : 'false'}
               @click=${(e: Event) => this._toggleMenu(profile, e)}
+              @keydown=${(e: KeyboardEvent) => {
+                // A menu opened by pointer leaves focus here; Escape closes
+                // the menu, not the whole dialog.
+                if (e.key === 'Escape' && this._openMenu === profile) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  this._openMenu = null;
+                  this._menuOpenedByKeyboard = false;
+                }
+              }}
             >
               ⋮
             </button>`
