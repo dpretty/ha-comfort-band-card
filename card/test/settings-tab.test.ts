@@ -1438,6 +1438,11 @@ describe('comfort-band-settings-tab once a call has gone through', () => {
     });
     await el.updateComplete;
     expect(row(el, 'idleFanMode').querySelector('select')!.value).toBe('auto');
+    // Its own call comes back before HA reports it: it waits, from the state
+    // HA had when that call started.
+    finishes[1]();
+    await flush(el);
+    expect(row(el, 'idleFanMode').querySelector('select')!.value).toBe('auto');
   });
 
   it('keeps a newer choice when the one before it is refused', async () => {
