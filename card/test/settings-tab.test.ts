@@ -4,6 +4,7 @@ import {
   type ComfortBandSettingsTab,
   type SettingsSection,
   SETTINGS,
+  SETTLE_MS,
   STEP_SEND_DELAY_MS,
   optionLabel,
   stepDecimals,
@@ -381,6 +382,10 @@ describe('comfort-band-settings-tab switches', () => {
     await flush(el);
     expect(hass.callService).toHaveBeenCalledTimes(1);
     finish();
+    el.hass = makeHass({
+      states: { 'switch.gym_use_apparent_temperature': { state: 'on' } },
+      callServiceImpl: slow,
+    });
     await flush(el);
     expect(toggle().getAttribute('aria-disabled')).toBe('false');
     toggle().click();
@@ -866,6 +871,202 @@ describe('comfort-band-settings-tab calls', () => {
     finish();
     await flush(el);
     expect(calls(hass).map((c) => c[1])).toEqual(['turn_on', 'select_option']);
+  });
+});
+
+// The integration saves a number through HA's debounced refresh, so its
+// new state can come up to 10 s after the call returns.
+describe('comfort-band-settings-tab once a call has gone through', () => {
+  const below = (value: string) =>
+    makeHass({ states: { 'number.gym_deadband_below': number(value, 0.1, 2, 0.1, '°C') } });
+
+  async function sent(): Promise<{ el: ComfortBandSettingsTab; hass: HomeAssistant }> {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const hass = below('0.3');
+    const el = await settingsTab(hass);
+    stepButtons(el, 'deadbandBelow').more.click();
+    vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    expect(calls(hass)).toHaveLength(1);
+    return { el, hass };
+  }
+
+  it('keeps showing the value sent until HA reports it, then follows HA', async () => {
+    const { el } = await sent();
+    expect(shown(el, 'deadbandBelow')).toBe('0.4 °C');
+    el.hass = below('0.4');
+    await el.updateComplete;
+    expect(shown(el, 'deadbandBelow')).toBe('0.4 °C');
+    el.hass = below('0.7');
+    await el.updateComplete;
+    expect(shown(el, 'deadbandBelow')).toBe('0.7 °C');
+  });
+
+  it('shows what HA reports, even if not the value sent', async () => {
+    const { el } = await sent();
+    el.hass = below('0.5');
+    await el.updateComplete;
+    expect(shown(el, 'deadbandBelow')).toBe('0.5 °C');
+  });
+
+  it('stops waiting after 15 s', async () => {
+    expect(SETTLE_MS).toBe(15000);
+    const { el } = await sent();
+    vi.advanceTimersByTime(SETTLE_MS - 1);
+    await el.updateComplete;
+    expect(shown(el, 'deadbandBelow')).toBe('0.4 °C');
+    vi.advanceTimersByTime(1);
+    await el.updateComplete;
+    expect(shown(el, 'deadbandBelow')).toBe('0.3 °C');
+  });
+
+  // HA keeps an unchanged entity's state object.
+  it('keeps waiting through changes to other entities', async () => {
+    const { el, hass } = await sent();
+    const other = makeHass({ states: { 'switch.gym_enabled': { state: 'off' } } });
+    el.hass = {
+      ...hass,
+      states: { ...hass.states, 'switch.gym_enabled': other.states['switch.gym_enabled'] },
+    };
+    await el.updateComplete;
+    expect(shown(el, 'deadbandBelow')).toBe('0.4 °C');
+  });
+
+  it('keeps a tap made while waiting, past the end of the earlier wait', async () => {
+    const { el, hass } = await sent();
+    vi.advanceTimersByTime(SETTLE_MS - 500);
+    stepButtons(el, 'deadbandBelow').more.click();
+    vi.advanceTimersByTime(600);
+    await el.updateComplete;
+    expect(shown(el, 'deadbandBelow')).toBe('0.5 °C');
+    vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    expect(calls(hass).map((c) => (c[2] as { value: number }).value)).toEqual([0.4, 0.5]);
+  });
+
+  it('keeps a choice made while waiting, past the end of the earlier wait', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const finishes: Array<() => void> = [];
+    const slow = vi.fn().mockImplementation(() => new Promise<void>((r) => finishes.push(r)));
+    const el = await settingsTab(makeHass({ callServiceImpl: slow }), 'fan');
+    const pick = (option: string) => {
+      const s = row(el, 'idleFanMode').querySelector('select')!;
+      s.value = option;
+      s.dispatchEvent(new Event('change'));
+    };
+    pick('high');
+    await flush(el);
+    finishes[0]();
+    await flush(el);
+    vi.advanceTimersByTime(SETTLE_MS - 500);
+    pick('auto');
+    await flush(el);
+    vi.advanceTimersByTime(600);
+    await el.updateComplete;
+    expect(row(el, 'idleFanMode').querySelector('select')!.value).toBe('auto');
+  });
+
+  it('keeps a newer tap when HA reports the value before it', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let finish: () => void = () => {};
+    const slow = vi.fn().mockImplementationOnce(() => new Promise<void>((r) => (finish = r)));
+    slow.mockResolvedValue(undefined);
+    const el = await settingsTab(
+      makeHass({
+        states: { 'number.gym_deadband_below': number('0.3', 0.1, 2, 0.1, '°C') },
+        callServiceImpl: slow,
+      }),
+    );
+    const { more } = stepButtons(el, 'deadbandBelow');
+    more.click();
+    vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    more.click();
+    el.hass = makeHass({
+      states: { 'number.gym_deadband_below': number('0.4', 0.1, 2, 0.1, '°C') },
+      callServiceImpl: slow,
+    });
+    finish();
+    await flush(el);
+    expect(shown(el, 'deadbandBelow')).toBe('0.5 °C');
+  });
+
+  it('keeps a newer tap when the call before it is refused', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let refuse: (e: Error) => void = () => {};
+    const slow = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<void>((_, r) => (refuse = r)))
+      .mockResolvedValue(undefined);
+    const el = await settingsTab(makeHass({ callServiceImpl: slow }));
+    const { more } = stepButtons(el, 'deadbandBelow');
+    more.click();
+    vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    more.click();
+    refuse(new Error('Busy'));
+    await flush(el);
+    expect(shown(el, 'deadbandBelow')).toBe('0.5 °C');
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain('Busy');
+  });
+
+  it('shows what HA says when it is shown again', async () => {
+    const { el } = await sent();
+    el.remove();
+    document.body.appendChild(el);
+    await el.updateComplete;
+    expect(shown(el, 'deadbandBelow')).toBe('0.3 °C');
+  });
+
+  // As HA does: the entity's new state is written before the call returns.
+  describe('where HA has reported the change by the time the call returns', () => {
+    function reporting(states: Record<string, StateSpec>) {
+      let el!: ComfortBandSettingsTab;
+      const hass = makeHass({
+        callServiceImpl: vi.fn(async () => {
+          el.hass = makeHass({ states });
+        }),
+      });
+      return { hass, set: (e: ComfortBandSettingsTab) => (el = e) };
+    }
+
+    it('is ready for the next press at once', async () => {
+      const r = reporting({ 'switch.gym_use_apparent_temperature': { state: 'on' } });
+      const el = r.set(await settingsTab(r.hass));
+      const toggle = () =>
+        row(el, 'useApparentTemperature').querySelector<HTMLButtonElement>(
+          'button[role="switch"]',
+        )!;
+      toggle().click();
+      await flush(el);
+      expect(toggle().getAttribute('aria-checked')).toBe('true');
+      expect(toggle().getAttribute('aria-disabled')).toBe('false');
+    });
+
+    it('stops waiting for a number or a choice at once', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const r = reporting({
+        'number.gym_peak_heat_offset': number('1.5', 0, 5, 0.5, '°C'),
+      });
+      const el = r.set(await settingsTab(r.hass, 'peak'));
+      stepButtons(el, 'peakHeatOffset').more.click();
+      vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+      await flush(el);
+      expect(shown(el, 'peakHeatOffset')).toBe('1.5 °C');
+      expect(vi.getTimerCount()).toBe(0);
+      el.remove();
+
+      const r2 = reporting({
+        'select.gym_idle_fan_mode': { state: 'high', attributes: { options: FAN_MODES } },
+      });
+      const el2 = r2.set(await settingsTab(r2.hass, 'fan'));
+      const s = row(el2, 'idleFanMode').querySelector('select')!;
+      s.value = 'high';
+      s.dispatchEvent(new Event('change'));
+      await flush(el2);
+      expect(row(el2, 'idleFanMode').querySelector('select')!.value).toBe('high');
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 });
 

@@ -11,21 +11,29 @@
  *   - schedules: which schedule the room follows.
  *
  * Switches flip at once and roll back on rejection. Steppers move a step
- * per tap and send once the taps stop; choices send when picked. A setting
+ * per tap and send once the taps stop; choices send when picked. What's
+ * shown stays until HA reports the change, or goes back if the call is
+ * refused. A setting
  * whose entity isn't there (an older integration, or the entity turned
  * off) is left out, and the section says so.
  */
 
-import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
+import { LitElement, html, css, nothing, type PropertyValues, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { readHumiditySensor, type ZoneEntities } from '../helpers.js';
-import type { HomeAssistant } from '../types.js';
+import type { HassEntity, HomeAssistant } from '../types.js';
 import { tokens } from '../styles.js';
 
 export type SettingsSection = 'comfort' | 'automation' | 'fan' | 'peak' | 'schedules';
 
 /** How long after the last tap on a stepper its value is sent. */
 export const STEP_SEND_DELAY_MS = 1000;
+
+/** How long a value that has gone through keeps showing while HA hasn't
+ *  reported it yet. The integration saves a number through HA's debounced
+ *  refresh: the first goes out at once, but another within 10 s waits for
+ *  the end of those 10 s. */
+export const SETTLE_MS = 15000;
 
 interface Setting {
   kind: 'switch' | 'number' | 'select';
@@ -228,6 +236,13 @@ export class ComfortBandSettingsTab extends LitElement {
   @state() private _error: string | null = null;
   /** A stepper's send timer, per entity. */
   private _timers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Values that have gone through but HA hasn't reported yet: HA's state
+   *  for the entity when the call came back, and the timer that stops
+   *  waiting for a new one. */
+  private _settling = new Map<
+    string,
+    { baseline: HassEntity | undefined; timer: ReturnType<typeof setTimeout> }
+  >();
   /** Calls go one after another, so they land in the order made. */
   private _chain: Promise<unknown> = Promise.resolve();
 
@@ -432,7 +447,18 @@ export class ComfortBandSettingsTab extends LitElement {
       clearTimeout(timer);
       this._timers.delete(entityId);
       const value = this._pending[entityId];
-      if (typeof value === 'number') this._send(entityId, 'number', 'set_value', { value });
+      if (typeof value === 'number') this._send(entityId, value, 'number', 'set_value', { value });
+    }
+    // Shown again, it shows what HA says.
+    for (const entityId of [...this._settling.keys()]) this._drop(entityId);
+  }
+
+  /** A value that has gone through shows until HA's state for its entity
+   *  changes, then HA's state shows: the value sent, or what HA made of it. */
+  protected override willUpdate(changed: PropertyValues<this>): void {
+    if (!changed.has('hass')) return;
+    for (const [entityId, { baseline }] of [...this._settling]) {
+      if (this.hass?.states[entityId] !== baseline) this._drop(entityId);
     }
   }
 
@@ -441,32 +467,67 @@ export class ComfortBandSettingsTab extends LitElement {
     return typeof id === 'string' ? id : null;
   }
 
-  /** Sends a call after the ones before it; drops the shown-ahead value
-   *  once it's through (HA has reported the change by then) or refused. */
+  /** Sends a call for the value shown, after the ones before it. Refused,
+   *  the value in force shows again; through, the value shows until HA
+   *  reports it. A newer tap or choice made meanwhile keeps showing. */
   private _send(
     entityId: string,
+    value: boolean | number | string,
     domain: string,
     service: string,
     data: Record<string, unknown>,
   ): void {
     const hass = this.hass;
     if (!hass) return;
-    const sent = data.value ?? data.option ?? service;
+    const current = () => this._pending[entityId] === value && !this._timers.has(entityId);
     this._chain = this._chain
       .then(() => hass.callService(domain, service, { entity_id: entityId, ...data }))
-      .catch((err: unknown) => {
-        this._error = err instanceof Error ? err.message : 'That setting couldn’t be changed.';
-      })
-      .finally(() => {
-        // A newer tap or choice made meanwhile keeps showing.
-        const shown = this._pending[entityId];
-        const value = typeof shown === 'boolean' ? (shown ? 'turn_on' : 'turn_off') : shown;
-        if (value === sent && !this._timers.has(entityId)) {
-          const next = { ...this._pending };
-          delete next[entityId];
-          this._pending = next;
-        }
-      });
+      .then(
+        () => {
+          if (!current()) return;
+          // Taken off the page (its taps sent as it went), it waits for nothing.
+          if (this._reported(entityId, value) || !this.isConnected) this._drop(entityId);
+          else this._settle(entityId);
+        },
+        (err: unknown) => {
+          this._error = err instanceof Error ? err.message : 'That setting couldn’t be changed.';
+          if (current()) this._drop(entityId);
+        },
+      );
+  }
+
+  /** Whether HA's state for the entity already says the value. */
+  private _reported(entityId: string, value: boolean | number | string): boolean {
+    const state = this.hass?.states[entityId]?.state;
+    if (state === undefined) return false;
+    if (typeof value === 'boolean') return state === (value ? 'on' : 'off');
+    if (typeof value === 'number') return Number.parseFloat(state) === value;
+    return state === value;
+  }
+
+  /** Keeps a value that has gone through showing until HA's state for its
+   *  entity changes, or for SETTLE_MS at most. */
+  private _settle(entityId: string): void {
+    this._stopSettling(entityId);
+    this._settling.set(entityId, {
+      baseline: this.hass?.states[entityId],
+      timer: setTimeout(() => this._drop(entityId), SETTLE_MS),
+    });
+  }
+
+  private _stopSettling(entityId: string): void {
+    const settling = this._settling.get(entityId);
+    if (settling) clearTimeout(settling.timer);
+    this._settling.delete(entityId);
+  }
+
+  /** Shows HA's value again. */
+  private _drop(entityId: string): void {
+    this._stopSettling(entityId);
+    if (this._pending[entityId] === undefined) return;
+    const next = { ...this._pending };
+    delete next[entityId];
+    this._pending = next;
   }
 
   private _isOn(entityId: string): boolean {
@@ -480,7 +541,7 @@ export class ComfortBandSettingsTab extends LitElement {
     const target = !this._isOn(entityId);
     this._pending = { ...this._pending, [entityId]: target };
     this._error = null;
-    this._send(entityId, 'switch', target ? 'turn_on' : 'turn_off', {});
+    this._send(entityId, target, 'switch', target ? 'turn_on' : 'turn_off', {});
   };
 
   private _onStep(entityId: string, direction: 1 | -1): void {
@@ -496,13 +557,14 @@ export class ComfortBandSettingsTab extends LitElement {
     const next = Number(Math.min(max, Math.max(min, current + direction * step)).toFixed(decimals));
     this._pending = { ...this._pending, [entityId]: next };
     this._error = null;
+    this._stopSettling(entityId);
     const timer = this._timers.get(entityId);
     if (timer !== undefined) clearTimeout(timer);
     this._timers.set(
       entityId,
       setTimeout(() => {
         this._timers.delete(entityId);
-        this._send(entityId, 'number', 'set_value', { value: next });
+        this._send(entityId, next, 'number', 'set_value', { value: next });
       }, STEP_SEND_DELAY_MS),
     );
   }
@@ -510,7 +572,8 @@ export class ComfortBandSettingsTab extends LitElement {
   private _onChoose(entityId: string, option: string): void {
     this._pending = { ...this._pending, [entityId]: option };
     this._error = null;
-    this._send(entityId, 'select', 'select_option', { option });
+    this._stopSettling(entityId);
+    this._send(entityId, option, 'select', 'select_option', { option });
   }
 
   protected override render() {
