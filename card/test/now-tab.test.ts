@@ -627,6 +627,8 @@ describe('comfort-band-now-tab', () => {
         makeHass({
           'binary_sensor.gym_room_sensor_unavailable': 'on',
           'sensor.gym_room_temperature': 'unknown',
+          'sensor.gym_apparent_temperature': 'unknown',
+          'switch.gym_use_apparent_temperature': 'on',
           'sensor.gym_current_action': 'heating',
         }),
       );
