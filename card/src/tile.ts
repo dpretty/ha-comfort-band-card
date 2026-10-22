@@ -21,7 +21,8 @@ export class ComfortBandTile extends LitElement {
   @property({ type: String }) public zoneName = '';
   /** The temperature that drives control. */
   @property({ type: Number }) public temperature = NaN;
-  /** Whether `temperature` is "feels like": the tile and the chip say so. */
+  /** Whether `temperature` is "feels like": the tile's name and the chip's
+   *  label and tooltip say so. */
   @property({ type: Boolean }) public feelsLike = false;
   @property({ type: Number }) public low = NaN;
   @property({ type: Number }) public high = NaN;
@@ -137,27 +138,22 @@ export class ComfortBandTile extends LitElement {
         align-items: center;
         gap: var(--cb-gap-md);
       }
-      .reading {
-        min-width: 70px;
-      }
       .room-temp {
         font-size: 32px;
         font-weight: 300;
         color: var(--cb-text-primary);
         font-variant-numeric: tabular-nums;
         line-height: 1;
+        min-width: 70px;
       }
-      /* Under the temperature, not beside it: beside, it took the gauge's
-         width on a narrow tile. Every tile keeps the line, so tiles with and
-         without it line up. */
-      .feels {
-        font-size: 11px;
-        line-height: 14px;
+      /* Read by screen readers, not shown. */
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
         white-space: nowrap;
-        color: var(--cb-text-secondary);
-      }
-      .feels.placeholder {
-        visibility: hidden;
       }
       .gauge-wrap {
         flex: 1;
@@ -213,19 +209,18 @@ export class ComfortBandTile extends LitElement {
           <div class="zone-name">${this.zoneName || '—'}</div>
         </div>
         <div class="body">
-          <div class="reading">
-            <div class="room-temp">${this._renderTemperature()}</div>
-            <div
-              class="feels ${this.feelsLike ? '' : 'placeholder'}"
-              aria-hidden=${this.feelsLike ? nothing : 'true'}
-            >
-              feels like
-            </div>
+          <!-- The tile is named from what it shows, in order: "Bedroom feels
+               like 18.6°. Heating · …". "feels like" and the full stop are for
+               screen readers only; the status sentence gives the range, so
+               the gauge is decorative here. -->
+          <div class="room-temp">
+            ${this.feelsLike
+              ? html`<span class="sr-only"> feels like </span>`
+              : nothing}${this._renderTemperature()}<span class="sr-only">. </span>
           </div>
-          <!-- Named from what it shows, in order; the status sentence gives
-               the range, so the gauge's own label would only repeat it. -->
           <div class="gauge-wrap" aria-hidden="true">
             <band-gauge
+              decorative
               .low=${this.low}
               .high=${this.high}
               .room=${this.temperature}

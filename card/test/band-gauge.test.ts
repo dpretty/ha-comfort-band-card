@@ -66,6 +66,14 @@ describe('band-gauge', () => {
     );
   });
 
+  it('hides itself from screen readers when decorative', async () => {
+    const el = await mount('band-gauge', { low: 19, high: 23, room: 21, decorative: true });
+    const svg = el.shadowRoot!.querySelector('svg')!;
+    expect(svg.getAttribute('aria-hidden')).toBe('true');
+    expect(svg.hasAttribute('role')).toBe(false);
+    expect(svg.hasAttribute('aria-label')).toBe(false);
+  });
+
   it('writes a descriptive aria-label including the action', async () => {
     const el = await gauge({ low: 19, high: 23, room: 21.4, action: 'heating' });
     const aria = el.shadowRoot!.querySelector('svg')!.getAttribute('aria-label');

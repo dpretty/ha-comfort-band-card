@@ -24,6 +24,25 @@ function rule(css: string, selector: string): string {
   return match[1];
 }
 
+/** The text a screen reader takes from an element's content: everything not
+ *  under aria-hidden, in order, whitespace collapsed. */
+function readable(root: Element): string {
+  const parts: string[] = [];
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) parts.push(node.textContent ?? '');
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const element = node as Element;
+    if (element.getAttribute('aria-hidden') === 'true') return;
+    if (element.tagName === 'STYLE') return;
+    // Block-level boxes are separate words.
+    parts.push(' ');
+    element.childNodes.forEach(walk);
+    parts.push(' ');
+  };
+  root.childNodes.forEach(walk);
+  return parts.join('').replace(/\s+/g, ' ').replace(/ \./g, '.').trim();
+}
+
 function badgesOf(el: ComfortBandTile): Array<{ badge: string | null; icon: string | null }> {
   return Array.from(el.shadowRoot!.querySelectorAll('.mini ha-icon')).map((i) => ({
     badge: i.getAttribute('data-badge'),
@@ -134,47 +153,53 @@ describe('comfort-band-tile', () => {
     expect(gauge.action).toBe('cooling');
   });
 
-  // Named from its content, in the order shown; the gauge's own label would
-  // only repeat the range the sentence gives.
-  it('is named by what it shows, without the gauge', async () => {
+  // Named from its content, in the order shown. jsdom computes no names, so
+  // this walks what a screen reader would take: text not under aria-hidden.
+  // Checked in Chromium and WebKit's accessibility trees as well.
+  it('is named "zone, feels like temperature. status", in the order shown', async () => {
     const el = await tile({
       zoneName: 'Lounge',
       temperature: 23.7,
       feelsLike: true,
+      statusKind: 'above',
       statusText: 'A bit warm · 19–23°',
     });
     const t = el.shadowRoot!.querySelector('.tile')!;
     expect(t.hasAttribute('aria-label')).toBe(false);
-    expect(t.querySelector('.gauge-wrap')!.getAttribute('aria-hidden')).toBe('true');
+    expect(readable(t)).toBe('Lounge feels like 23.7°. A bit warm · 19–23°');
     teardown();
-    const compact = await tile({ zoneName: 'Gym', temperature: 21, noExpand: true });
-    expect(compact.shadowRoot!.querySelector('.tile')!.hasAttribute('aria-label')).toBe(false);
+    const room = await tile({
+      zoneName: 'Gym',
+      temperature: 21,
+      statusText: 'Comfortable · 19–23°',
+    });
+    expect(readable(room.shadowRoot!.querySelector('.tile')!)).toBe(
+      'Gym 21.0°. Comfortable · 19–23°',
+    );
   });
 
-  // Beside the number it took the gauge's width on a narrow tile.
-  it('keeps a line under the temperature for "feels like" on every tile', () => {
-    const css = tileCss();
-    expect(rule(css, '.reading')).not.toMatch(/display:\s*flex/);
-    expect(rule(css, '.reading')).toMatch(/min-width:\s*70px/);
-    expect(rule(css, '.feels')).toMatch(/white-space:\s*nowrap/);
-    expect(rule(css, '.feels.placeholder')).toMatch(/visibility:\s*hidden/);
+  it('shows "feels like" only to screen readers', async () => {
+    const el = await tile({ temperature: 23.7, feelsLike: true });
+    const hidden = Array.from(el.shadowRoot!.querySelectorAll('.room-temp .sr-only'));
+    expect(hidden.map((n) => n.textContent)).toEqual([' feels like ', '. ']);
+    expect(rule(tileCss(), '.sr-only')).toMatch(/clip-path:\s*inset\(50%\)/);
+    expect(rule(tileCss(), '.sr-only')).toMatch(/position:\s*absolute/);
   });
 
-  it('says "feels like" under the temperature when that is what it shows', async () => {
-    const feels = await tile({ temperature: 22.4, feelsLike: true });
-    expect(feels.shadowRoot!.querySelector('.reading .feels')!.textContent!.trim()).toBe(
-      'feels like',
-    );
-    expect(feels.shadowRoot!.querySelector('.feels')!.classList.contains('placeholder')).toBe(
-      false,
-    );
-    expect(feels.shadowRoot!.querySelector('.feels')!.hasAttribute('aria-hidden')).toBe(false);
-    teardown();
-    // The line is kept, unseen and unread, so tiles line up.
-    const room = await tile({ temperature: 21.4 });
-    const placeholder = room.shadowRoot!.querySelector('.feels')!;
-    expect(placeholder.classList.contains('placeholder')).toBe(true);
-    expect(placeholder.getAttribute('aria-hidden')).toBe('true');
+  // The status sentence gives the range; and Chromium reads a label inside
+  // the gauge's shadow root into the tile's name even under aria-hidden.
+  it('makes its gauge decorative', async () => {
+    const el = await tile({ temperature: 21, low: 19, high: 23 });
+    const gauge = el.shadowRoot!.querySelector('band-gauge') as HTMLElement & {
+      decorative: boolean;
+      updateComplete: Promise<boolean>;
+    };
+    expect(gauge.decorative).toBe(true);
+    expect(el.shadowRoot!.querySelector('.gauge-wrap')!.getAttribute('aria-hidden')).toBe('true');
+    await gauge.updateComplete;
+    const svg = gauge.shadowRoot!.querySelector('svg')!;
+    expect(svg.getAttribute('aria-hidden')).toBe('true');
+    expect(svg.hasAttribute('aria-label')).toBe(false);
   });
 
   it('labels the gauge\'s marker "feels like" when that is the temperature shown', async () => {

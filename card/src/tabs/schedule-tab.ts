@@ -174,8 +174,7 @@ export class ComfortBandScheduleTab extends LitElement {
         font-variant-numeric: tabular-nums;
         font-weight: 500;
         color: var(--cb-text-primary);
-        /* Room for "10:30 PM", so the ranges line up on a 12-hour clock. */
-        min-width: 5.5em;
+        min-width: 48px;
       }
       .row .band {
         color: var(--cb-text-secondary);
