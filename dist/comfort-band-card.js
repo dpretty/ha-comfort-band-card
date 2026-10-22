@@ -2432,7 +2432,7 @@ let Qt = class extends Ee {
       ${this._renderToggle({
       entityId: e,
       title: "Use “feels like”",
-      desc: y`When on, heating and cooling go by the humidity-adjusted "feels like" temperature
+      desc: y`When on, heating and cooling go by the humidity-adjusted “feels like” temperature
         instead of the room's own reading. Falls back to the room's reading automatically if the
         humidity sensor is unavailable.`
     })}
@@ -2875,7 +2875,7 @@ let Xt = class extends Ee {
     const e = Zo(this.hass);
     if (e === null) return null;
     const t = this.hass.states[e];
-    if (!t) return null;
+    if (!t || t.state === "unavailable") return null;
     const i = t.attributes.options, n = Array.isArray(i) ? i.filter((b) => typeof b == "string") : [], r = typeof t.state == "string" ? t.state : "", s = t.attributes.default_profile, l = typeof s == "string" && !!s, h = l ? s : "home", d = t.attributes.descriptions, p = {};
     if (d && typeof d == "object" && !Array.isArray(d))
       for (const [b, m] of Object.entries(d))
@@ -6665,11 +6665,8 @@ let Fi = class extends Ee {
   }
   _schedulesSummary() {
     if (!this.hass) return "";
-    const e = Zo(this.hass);
-    if (!(e !== null && this.hass.states[e] !== void 0))
-      return da(this.hass) ? "Not available right now" : "No profiles set up";
-    const i = this.hass.states[e]?.state;
-    return !i || i === "unavailable" || i === "unknown" ? "" : `Profile: ${i}`;
+    const e = Zo(this.hass), t = e !== null ? this.hass.states[e]?.state : void 0;
+    return t === void 0 || t === "unavailable" ? da(this.hass) ? "Not available right now" : "No profiles set up" : !t || t === "unknown" ? "" : `Profile: ${t}`;
   }
   _section(e, t, i, n, r) {
     return y`
@@ -6868,8 +6865,10 @@ let Vt = class extends Ee {
       });
     };
   }
+  /** Opens on Now, whichever tab it was left on: the family's tap shouldn't
+   *  land on Advanced because someone set the house up last. */
   open() {
-    this._isOpen = !0, this.updateComplete.then(() => this._dialog?.showModal());
+    this._activeTab = "now", this._isOpen = !0, this.updateComplete.then(() => this._dialog?.showModal());
   }
   close() {
     this._dialog?.close();

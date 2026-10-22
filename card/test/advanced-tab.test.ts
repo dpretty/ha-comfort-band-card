@@ -167,7 +167,14 @@ describe('comfort-band-advanced-tab', () => {
         { profile: 'unavailable' },
       ),
     );
-    expect(sections(el).map((s) => s.summary)).toEqual([null, null, null, 'Last 24 hours']);
+    // A select left "unavailable" (its entry failed to load or is
+    // reloading) isn't readable: the section says profiles aren't available.
+    expect(sections(el).map((s) => s.summary)).toEqual([
+      null,
+      null,
+      'Not available right now',
+      'Last 24 hours',
+    ]);
   });
 
   it('puts "feels like", the humidity sensor and the exact range under Comfort', async () => {
@@ -211,6 +218,17 @@ describe('comfort-band-advanced-tab', () => {
   });
 
   // The charts subscribe to HA's history.
+  // Only History's own opening and closing count.
+  it("doesn't load or drop the history chart when another section opens or closes", async () => {
+    const el = await advancedTab();
+    const charts = () => section(el, 'history').querySelector('comfort-band-insights-tab');
+    await setOpen(el, 'comfort', true);
+    expect(charts()).toBeNull();
+    await setOpen(el, 'history', true);
+    await setOpen(el, 'comfort', false);
+    expect(charts()).not.toBeNull();
+  });
+
   it('loads the history charts only while History is open', async () => {
     const el = await advancedTab();
     const charts = () => section(el, 'history').querySelector('comfort-band-insights-tab');

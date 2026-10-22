@@ -192,7 +192,7 @@ export class ComfortBandSettingsTab extends LitElement {
       ${this._renderToggle({
         entityId: useApparent,
         title: 'Use “feels like”',
-        desc: html`When on, heating and cooling go by the humidity-adjusted "feels like" temperature
+        desc: html`When on, heating and cooling go by the humidity-adjusted “feels like” temperature
         instead of the room's own reading. Falls back to the room's reading automatically if the
         humidity sensor is unavailable.`,
       })}

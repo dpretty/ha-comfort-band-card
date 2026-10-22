@@ -135,7 +135,10 @@ export class ComfortBandModal extends LitElement {
     `,
   ];
 
+  /** Opens on Now, whichever tab it was left on: the family's tap shouldn't
+   *  land on Advanced because someone set the house up last. */
   public open(): void {
+    this._activeTab = 'now';
     this._isOpen = true;
     this.updateComplete.then(() => this._dialog?.showModal());
   }

@@ -350,7 +350,9 @@ export class ComfortBandProfilesTab extends LitElement {
     const entityId = findActiveProfileEntity(this.hass);
     if (entityId === null) return null;
     const state = this.hass.states[entityId];
-    if (!state) return null;
+    // An entry that failed to load or is reloading leaves its select
+    // "unavailable", with only the last known options: not one to act on.
+    if (!state || state.state === 'unavailable') return null;
     const optionsAttr = state.attributes.options;
     const options = Array.isArray(optionsAttr)
       ? (optionsAttr as unknown[]).filter((v): v is string => typeof v === 'string')
@@ -557,8 +559,8 @@ export class ComfortBandProfilesTab extends LitElement {
     const state = this._readState();
     if (state === null) {
       // A profile manager that's there but can't be read (still starting,
-      // failed to load, or its entity disabled) isn't one to set up again:
-      // the integration only offers that while there's none.
+      // failed to load or reloading, or its entity disabled) isn't one to
+      // set up again: the integration only offers that while there's none.
       return profileManagerExists(this.hass)
         ? html`<div class="empty">
             Profiles aren't available right now. If the Comfort Band Profiles entry or its active

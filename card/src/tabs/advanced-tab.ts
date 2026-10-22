@@ -6,7 +6,7 @@
  *   - Comfort: "feels like", the humidity sensor, and an exact range.
  *   - Automation: learning.
  *   - Schedules: profiles.
- *   - History: the last 24 hours' charts, loaded only while open.
+ *   - History: the last 24 hours' chart, loaded only while open.
  */
 
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
@@ -25,8 +25,8 @@ export class ComfortBandAdvancedTab extends LitElement {
   @property({ type: String }) public zone = '';
   @property({ attribute: false }) public entities?: ZoneEntities;
 
-  /** Whether History is open: its charts subscribe to HA's history, so
-   *  they're only there while it is. */
+  /** Whether History is open: its chart subscribes to HA's history, so it's
+   *  only there while it is. */
   @state() private _historyOpen = false;
 
   public static override styles = [
@@ -125,13 +125,13 @@ export class ComfortBandAdvancedTab extends LitElement {
     if (!this.hass) return '';
     const entity = findActiveProfileEntity(this.hass);
     // As the section says: a manager that's there but can't be read (its
-    // select disabled, or not loaded) isn't "none set up".
-    const readable = entity !== null && this.hass.states[entity] !== undefined;
-    if (!readable) {
+    // select disabled, not loaded yet, or failed to load and "unavailable")
+    // isn't "none set up".
+    const profile = entity !== null ? this.hass.states[entity]?.state : undefined;
+    if (profile === undefined || profile === 'unavailable') {
       return profileManagerExists(this.hass) ? 'Not available right now' : 'No profiles set up';
     }
-    const profile = this.hass.states[entity]?.state;
-    if (!profile || profile === 'unavailable' || profile === 'unknown') return '';
+    if (!profile || profile === 'unknown') return '';
     return `Profile: ${profile}`;
   }
 

@@ -118,6 +118,19 @@ describe('comfort-band-modal tab a11y', () => {
     expect(panel.getAttribute('aria-labelledby')).toBe('cb-tab-now');
   });
 
+  // The family's tap shouldn't land on Advanced because someone set the
+  // house up last.
+  it('opens on Now, whichever tab it was left on', async () => {
+    const el = await openModal();
+    el.selectTab('advanced');
+    await el.updateComplete;
+    el.close();
+    el.open();
+    await el.updateComplete;
+    expect(getTabs(el)[0].getAttribute('aria-selected')).toBe('true');
+    expect(getPanel(el).querySelector('comfort-band-now-tab')).not.toBeNull();
+  });
+
   it('shows the Advanced tab, with what it needs', async () => {
     const el = await openModal();
     el.selectTab('advanced');

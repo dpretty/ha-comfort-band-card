@@ -129,7 +129,10 @@ describe('comfort-band-profiles-tab', () => {
     // Its select disabled: it drops out of hass.entities; the device stays.
     const disabled = makeHass({});
     disabled.entities = {};
-    for (const hass of [unloaded, disabled]) {
+    // Its entry failed to load or is reloading: the select is "unavailable",
+    // keeping only its last options.
+    const failed = makeHass({ active: 'unavailable', defaultProfile: '' });
+    for (const hass of [unloaded, disabled, failed]) {
       const el = await profilesTab(hass);
       const text = el.shadowRoot!.querySelector('.empty')!.textContent!.replace(/\s+/g, ' ').trim();
       expect(text).toBe(
