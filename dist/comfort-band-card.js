@@ -2602,10 +2602,9 @@ let pi = class extends Ce {
   }
   /** A value that has gone through shows until HA's state for its entity
    *  changes, then HA's state shows: the value sent, or what HA made of it. */
-  willUpdate(e) {
-    if (e.has("hass"))
-      for (const [t, { baseline: i }] of [...this._settling])
-        this.hass?.states[t] !== i && this._drop(t);
+  willUpdate() {
+    for (const [e, { baseline: t }] of [...this._settling])
+      this.hass?.states[e] !== t && this._drop(e);
   }
   _entity(e) {
     const t = this.entities?.[e];
@@ -2630,12 +2629,12 @@ let pi = class extends Ce {
   /** Whether HA's state for the entity already says the value. */
   _reported(e, t) {
     const i = this.hass?.states[e]?.state;
-    return i === void 0 ? !1 : typeof t == "boolean" ? i === (t ? "on" : "off") : typeof t == "number" ? Number.parseFloat(i) === t : i === t;
+    return typeof t == "boolean" ? i === (t ? "on" : "off") : typeof t == "number" ? Number.parseFloat(i ?? "") === t : i === t;
   }
   /** Keeps a value that has gone through showing until HA's state for its
    *  entity changes, or for SETTLE_MS at most. */
   _settle(e) {
-    this._stopSettling(e), this._settling.set(e, {
+    this._settling.set(e, {
       baseline: this.hass?.states[e],
       timer: setTimeout(() => this._drop(e), qu)
     });

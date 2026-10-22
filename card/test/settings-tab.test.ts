@@ -897,6 +897,7 @@ describe('comfort-band-settings-tab once a call has gone through', () => {
     el.hass = below('0.4');
     await el.updateComplete;
     expect(shown(el, 'deadbandBelow')).toBe('0.4 °C');
+    expect(vi.getTimerCount()).toBe(0);
     el.hass = below('0.7');
     await el.updateComplete;
     expect(shown(el, 'deadbandBelow')).toBe('0.7 °C');
@@ -1008,6 +1009,97 @@ describe('comfort-band-settings-tab once a call has gone through', () => {
     await flush(el);
     expect(shown(el, 'deadbandBelow')).toBe('0.5 °C');
     expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain('Busy');
+  });
+
+  // The taps end on the value going through; HA then reports another.
+  it('keeps taps back to the value going through, whatever HA reports meanwhile', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let finish: () => void = () => {};
+    const slow = vi.fn().mockImplementationOnce(() => new Promise<void>((r) => (finish = r)));
+    slow.mockResolvedValue(undefined);
+    const el = await settingsTab(
+      makeHass({
+        states: { 'number.gym_deadband_below': number('0.3', 0.1, 2, 0.1, '°C') },
+        callServiceImpl: slow,
+      }),
+    );
+    const { less, more } = stepButtons(el, 'deadbandBelow');
+    more.click();
+    vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    more.click();
+    less.click();
+    finish();
+    await flush(el);
+    el.hass = makeHass({
+      states: { 'number.gym_deadband_below': number('0.6', 0.1, 2, 0.1, '°C') },
+      callServiceImpl: slow,
+    });
+    await el.updateComplete;
+    expect(shown(el, 'deadbandBelow')).toBe('0.4 °C');
+  });
+
+  it('keeps taps back to the value going through when it is refused', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let refuse: (e: Error) => void = () => {};
+    const slow = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<void>((_, r) => (refuse = r)))
+      .mockResolvedValue(undefined);
+    const el = await settingsTab(makeHass({ callServiceImpl: slow }));
+    const { less, more } = stepButtons(el, 'deadbandBelow');
+    more.click();
+    vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    more.click();
+    less.click();
+    refuse(new Error('Busy'));
+    await flush(el);
+    expect(shown(el, 'deadbandBelow')).toBe('0.4 °C');
+  });
+
+  // A choice has no send timer: only its value tells it's newer.
+  it('keeps a newer choice when HA reports the one before it', async () => {
+    const finishes: Array<() => void> = [];
+    const slow = vi.fn().mockImplementation(() => new Promise<void>((r) => finishes.push(r)));
+    const el = await settingsTab(makeHass({ callServiceImpl: slow }), 'fan');
+    const pick = (option: string) => {
+      const s = row(el, 'idleFanMode').querySelector('select')!;
+      s.value = option;
+      s.dispatchEvent(new Event('change'));
+    };
+    pick('high');
+    await flush(el);
+    pick('auto');
+    await flush(el);
+    finishes[0]();
+    await flush(el);
+    el.hass = makeHass({
+      states: { 'select.gym_idle_fan_mode': { state: 'high', attributes: { options: FAN_MODES } } },
+      callServiceImpl: slow,
+    });
+    await el.updateComplete;
+    expect(row(el, 'idleFanMode').querySelector('select')!.value).toBe('auto');
+  });
+
+  it('keeps a newer choice when the one before it is refused', async () => {
+    let refuse: (e: Error) => void = () => {};
+    const slow = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<void>((_, r) => (refuse = r)))
+      .mockImplementation(() => new Promise<void>(() => {}));
+    const el = await settingsTab(makeHass({ callServiceImpl: slow }), 'fan');
+    const pick = (option: string) => {
+      const s = row(el, 'idleFanMode').querySelector('select')!;
+      s.value = option;
+      s.dispatchEvent(new Event('change'));
+    };
+    pick('high');
+    await flush(el);
+    pick('auto');
+    refuse(new Error('Busy'));
+    await flush(el);
+    expect(row(el, 'idleFanMode').querySelector('select')!.value).toBe('auto');
   });
 
   it('shows what HA says when it is shown again', async () => {

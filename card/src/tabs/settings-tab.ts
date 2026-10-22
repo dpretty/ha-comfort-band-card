@@ -18,7 +18,7 @@
  * off) is left out, and the section says so.
  */
 
-import { LitElement, html, css, nothing, type PropertyValues, type TemplateResult } from 'lit';
+import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { readHumiditySensor, type ZoneEntities } from '../helpers.js';
 import type { HassEntity, HomeAssistant } from '../types.js';
@@ -455,8 +455,7 @@ export class ComfortBandSettingsTab extends LitElement {
 
   /** A value that has gone through shows until HA's state for its entity
    *  changes, then HA's state shows: the value sent, or what HA made of it. */
-  protected override willUpdate(changed: PropertyValues<this>): void {
-    if (!changed.has('hass')) return;
+  protected override willUpdate(): void {
     for (const [entityId, { baseline }] of [...this._settling]) {
       if (this.hass?.states[entityId] !== baseline) this._drop(entityId);
     }
@@ -499,16 +498,16 @@ export class ComfortBandSettingsTab extends LitElement {
   /** Whether HA's state for the entity already says the value. */
   private _reported(entityId: string, value: boolean | number | string): boolean {
     const state = this.hass?.states[entityId]?.state;
-    if (state === undefined) return false;
     if (typeof value === 'boolean') return state === (value ? 'on' : 'off');
-    if (typeof value === 'number') return Number.parseFloat(state) === value;
+    if (typeof value === 'number') return Number.parseFloat(state ?? '') === value;
     return state === value;
   }
 
   /** Keeps a value that has gone through showing until HA's state for its
    *  entity changes, or for SETTLE_MS at most. */
   private _settle(entityId: string): void {
-    this._stopSettling(entityId);
+    // Never already waiting: a tap or a choice stops the wait, and a switch
+    // takes no press while it waits.
     this._settling.set(entityId, {
       baseline: this.hass?.states[entityId],
       timer: setTimeout(() => this._drop(entityId), SETTLE_MS),
