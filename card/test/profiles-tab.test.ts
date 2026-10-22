@@ -155,6 +155,30 @@ describe('comfort-band-profiles-tab', () => {
 
   // Escape on a pointer-opened menu, focus still on ⋮, closes the menu, not
   // the whole dialog.
+  // Safari doesn't focus a button on click: focus is on the row.
+  it('closes a pointer-opened menu on Escape from the row too', async () => {
+    const el = await profilesTab(makeHass({ options: ['home', 'away'] }));
+    const rows = el.shadowRoot!.querySelectorAll<HTMLLIElement>('li');
+    rows[1]
+      .querySelector<HTMLButtonElement>('.overflow')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, detail: 1 }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('.menu')).not.toBeNull();
+    const outer = vi.fn();
+    el.addEventListener('keydown', outer);
+    const esc = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    rows[0].dispatchEvent(esc);
+    await el.updateComplete;
+    expect(esc.defaultPrevented).toBe(true);
+    expect(outer).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector('.menu')).toBeNull();
+  });
+
   it('closes a pointer-opened menu on Escape without the dialog seeing it', async () => {
     const el = await profilesTab(makeHass({ options: ['home', 'away'] }));
     const overflow = el

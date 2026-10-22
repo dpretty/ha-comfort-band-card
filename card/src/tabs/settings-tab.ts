@@ -41,6 +41,8 @@ interface Setting {
   field: keyof ZoneEntities;
   title: string;
   desc: string;
+  /** A choice's option as shown. */
+  label?: (option: string) => string;
 }
 
 const sw = (field: keyof ZoneEntities, title: string, desc: string): Setting => ({
@@ -55,12 +57,14 @@ const num = (field: keyof ZoneEntities, title: string, desc: string): Setting =>
   title,
   desc,
 });
-const pick = (field: keyof ZoneEntities, title: string, desc: string): Setting => ({
-  kind: 'select',
-  field,
-  title,
-  desc,
-});
+const pick = (
+  field: keyof ZoneEntities,
+  title: string,
+  desc: string,
+  label: (option: string) => string,
+): Setting => ({ kind: 'select', field, title, desc, label });
+/** A name someone typed, shown as typed. */
+const asTyped = (option: string) => option;
 
 /** Each section's settings, in order, worded from the integration's own
  *  documentation of what each one does. */
@@ -75,12 +79,12 @@ export const SETTINGS: Record<SettingsSection, { main: Setting[]; fine?: Setting
       num(
         'deadbandBelow',
         'Heating starts below the range by',
-        'How far below the range the room may drop before heating starts. Heating stops once it’s back at the bottom of the range.',
+        'How far below the range the room may drop before heating starts. Heating stops once it’s back at the bottom of the range. Not used while predictive control is planning: it decides when to start and stop, and heats towards the top of the range.',
       ),
       num(
         'deadbandAbove',
         'Cooling starts above the range by',
-        'How far above the range the room may rise before cooling starts. Cooling stops once it’s back at the top of the range.',
+        'How far above the range the room may rise before cooling starts. Cooling stops once it’s back at the top of the range. Not used while predictive control is planning: it decides when to start and stop, and cools towards the bottom of the range.',
       ),
       num(
         'bandRampMinutes',
@@ -109,14 +113,14 @@ export const SETTINGS: Record<SettingsSection, { main: Setting[]; fine?: Setting
       sw(
         'mpcEnabled',
         'Predictive control',
-        'Plans whole heating and cooling cycles ahead, from what the room has learned and the schedule coming up. Needs Learning on, and acts once the room has learned enough, usually after a few hours of normal running.',
+        'Plans whole heating and cooling cycles ahead, from what the room has learned and the schedule coming up. Needs Learning on. It plans only while it has recent enough readings of how this room warms and cools, usually after a few hours of normal running, and not during a peak or on a stand-in sensor; otherwise heating and cooling start and stop as set under Comfort.',
       ),
     ],
     fine: [
       num(
         'lookaheadMinutes',
         'Look ahead by',
-        'How far ahead learning projects the room’s temperature, to start early or hold off.',
+        'How far ahead learning projects the room’s temperature, to start or stop early, or hold off.',
       ),
       num(
         'passiveTolerance',
@@ -151,11 +155,13 @@ export const SETTINGS: Record<SettingsSection, { main: Setting[]; fine?: Setting
         'activeFanMode',
         'Fan while heating or cooling',
         'The fan speed while the unit is working.',
+        optionLabel,
       ),
       pick(
         'idleFanMode',
         'Fan while idle',
         'The fan speed while the unit isn’t heating or cooling. A quiet one stops air rushing round at full speed.',
+        optionLabel,
       ),
     ],
   },
@@ -164,17 +170,17 @@ export const SETTINGS: Record<SettingsSection, { main: Setting[]; fine?: Setting
       sw(
         'peakSavingEnabled',
         'Peak saving',
-        'Keeps heating and cooling out of expensive power times: relaxes the range during one, and warms or cools the room a little ahead of one that’s announced. Needs a peak entity chosen under Settings → Devices & Services → Comfort Band → Configure.',
+        'Runs heating and cooling less in expensive power times. During one, the range widens, so the room drifts further before heating or cooling starts. Ahead of one that’s announced, the room is warmed or cooled a little within its range. An adjustment in force sets both aside. Needs a peak entity chosen under Settings → Devices & Services → Comfort Band → Configure.',
       ),
       num(
         'peakHeatOffset',
         'Relax the bottom of the range by',
-        'How much lower the room may go during a peak before heating, and how much warmer to make it ahead of one.',
+        'How far the bottom of the range drops during a peak; heating still starts the usual amount below it. Ahead of one, how far the bottom rises to warm the room first.',
       ),
       num(
         'peakCoolOffset',
         'Relax the top of the range by',
-        'How much warmer the room may get during a peak before cooling, and how much cooler to make it ahead of one.',
+        'How far the top of the range rises during a peak; cooling still starts the usual amount above it. Ahead of one, how far the top falls to cool the room first.',
       ),
       num(
         'peakPreconditionMinutes',
@@ -188,19 +194,21 @@ export const SETTINGS: Record<SettingsSection, { main: Setting[]; fine?: Setting
       pick(
         'scheduleAssignment',
         'Follows',
-        'Which schedule sets this room’s range: its own, or one shared with other rooms.',
+        'Which schedule sets this room’s range: its own, or one shared with other rooms. The Schedule tab shows and changes the room’s own schedule, even while it follows a shared one.',
+        asTyped,
       ),
     ],
   },
 };
 
-/** The integration version each section's settings arrived in, for the note
- *  when none of them is there. Comfort's and automation's first ones came
- *  with v0.1.0, as far back as the card goes: there, none means turned off. */
-const SECTION_SINCE: Partial<Record<SettingsSection, string>> = {
-  fan: 'v0.13.0',
-  peak: 'v0.24.0',
-  schedules: 'v0.14.0',
+/** What each section's settings do and the integration version they
+ *  arrived in, for the note when none of them is there. Comfort's and
+ *  automation's first ones came with v0.1.0, as far back as the card goes:
+ *  there, none means turned off. */
+const SECTION_NEEDS: Partial<Record<SettingsSection, { what: string; since: string }>> = {
+  fan: { what: 'Fan control needs', since: 'v0.13.0' },
+  peak: { what: 'Peak saving needs', since: 'v0.24.0' },
+  schedules: { what: 'Choosing a shared schedule needs', since: 'v0.14.0' },
 };
 
 /** A select option as people say it: "medium-low" → "Medium low"; the
@@ -218,6 +226,19 @@ export function stepDecimals(step: number): number {
   return dot < 0 ? 0 : text.length - dot - 1;
 }
 
+/** Decimal places a value shows: the step's, or more for a value set
+ *  elsewhere off the step's grid (0.25 on a 0.1 step), up to 3. */
+function valueDecimals(value: number, step: number): number {
+  return Math.max(stepDecimals(step), stepDecimals(Number(value.toFixed(3))));
+}
+
+/** HA's error text: the frontend rejects with `{code, message}`, not an Error. */
+function errorText(err: unknown): string {
+  const message =
+    typeof err === 'object' && err !== null ? (err as { message?: unknown }).message : undefined;
+  return typeof message === 'string' && message ? message : 'That setting couldn’t be changed.';
+}
+
 function attrNumber(value: unknown): number | null {
   const n = typeof value === 'number' ? value : Number.parseFloat(String(value));
   return Number.isFinite(n) ? n : null;
@@ -233,7 +254,9 @@ export class ComfortBandSettingsTab extends LitElement {
   /** Values shown ahead of HA, keyed by entity_id: a switch's flip, a
    *  stepper's taps not yet confirmed, a choice going through. */
   @state() private _pending: Record<string, boolean | number | string> = {};
-  @state() private _error: string | null = null;
+  /** A refused call's error, and its entity: a later call for the same
+   *  one going through clears it. */
+  @state() private _error: { entityId: string; message: string } | null = null;
   /** A stepper's send timer, per entity. */
   private _timers = new Map<string, ReturnType<typeof setTimeout>>();
   /** Values that have gone through but HA hasn't reported yet: HA's state
@@ -384,17 +407,41 @@ export class ComfortBandSettingsTab extends LitElement {
         font-variant-numeric: tabular-nums;
         color: var(--cb-text-primary);
       }
+      /* A choice too wide to sit beside its title goes below it. */
+      .row.pick {
+        flex-wrap: wrap;
+      }
+      .row.pick .row-label {
+        flex: 1 1 12em;
+      }
+      /* WCAG 2.5.5: 44px tall. WebKit's own menu button ignores the height and
+         the border, so it's drawn here, chevron included. */
       .choice {
-        flex: 0 0 auto;
-        max-width: 45%;
+        flex: 0 1 auto;
+        max-width: 100%;
         min-height: 44px;
-        padding: 0 8px;
+        margin-left: auto;
+        padding: 0 28px 0 10px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 8px;
-        background: var(--card-background-color, #ffffff);
+        -webkit-appearance: none;
+        appearance: none;
+        background-color: var(--card-background-color, #ffffff);
+        background-image:
+          linear-gradient(45deg, transparent 50%, var(--cb-text-secondary) 50%),
+          linear-gradient(135deg, var(--cb-text-secondary) 50%, transparent 50%);
+        background-position:
+          calc(100% - 15px) 50%,
+          calc(100% - 10px) 50%;
+        background-size: 5px 5px;
+        background-repeat: no-repeat;
         color: var(--cb-text-primary);
         font: inherit;
         font-size: 14px;
+        text-overflow: ellipsis;
+      }
+      .choice:disabled {
+        opacity: 0.6;
       }
       .note {
         margin-top: var(--cb-gap-sm);
@@ -483,13 +530,14 @@ export class ComfortBandSettingsTab extends LitElement {
       .then(() => hass.callService(domain, service, { entity_id: entityId, ...data }))
       .then(
         () => {
+          if (this._error?.entityId === entityId) this._error = null;
           if (!current()) return;
           // Taken off the page (its taps sent as it went), it waits for nothing.
           if (this._reported(entityId, value) || !this.isConnected) this._drop(entityId);
           else this._settle(entityId);
         },
         (err: unknown) => {
-          this._error = err instanceof Error ? err.message : 'That setting couldn’t be changed.';
+          this._error = { entityId, message: errorText(err) };
           if (current()) this._drop(entityId);
         },
       );
@@ -506,8 +554,9 @@ export class ComfortBandSettingsTab extends LitElement {
   /** Keeps a value that has gone through showing until HA's state for its
    *  entity changes, or for SETTLE_MS at most. */
   private _settle(entityId: string): void {
-    // Never already waiting: a tap or a choice stops the wait, and a switch
-    // takes no press while it waits.
+    // Two calls for the same value can both come back while it's shown (a
+    // choice of A, B, then A again): the later one's wait replaces the first.
+    this._stopSettling(entityId);
     this._settling.set(entityId, {
       baseline: this.hass?.states[entityId],
       timer: setTimeout(() => this._drop(entityId), SETTLE_MS),
@@ -552,8 +601,13 @@ export class ComfortBandSettingsTab extends LitElement {
     const shown = this._pending[entityId];
     // Its buttons don't call this at a limit, or with no value to step from.
     const current = typeof shown === 'number' ? shown : Number.parseFloat(s.state);
-    const decimals = stepDecimals(step);
-    const next = Number(Math.min(max, Math.max(min, current + direction * step)).toFixed(decimals));
+    // The steps run from the bottom limit, as on HA's own slider. A value set
+    // elsewhere off them goes to the next one along.
+    const base = Number.isFinite(min) ? min : 0;
+    const steps = (current - base) / step;
+    const k = direction > 0 ? Math.floor(steps + 1e-9) + 1 : Math.ceil(steps - 1e-9) - 1;
+    const decimals = Math.max(stepDecimals(step), stepDecimals(base));
+    const next = Number(Math.min(max, Math.max(min, base + k * step)).toFixed(decimals));
     this._pending = { ...this._pending, [entityId]: next };
     this._error = null;
     this._stopSettling(entityId);
@@ -583,9 +637,9 @@ export class ComfortBandSettingsTab extends LitElement {
     const shownFine = present(fine);
     const missing = main.length + fine.length - shownMain.length - shownFine.length;
     const none = shownMain.length + shownFine.length === 0;
-    const since = SECTION_SINCE[this.section];
+    const needs = SECTION_NEEDS[this.section];
     return html`
-      ${this._error ? html`<div class="error" role="alert">${this._error}</div>` : nothing}
+      ${this._error ? html`<div class="error" role="alert">${this._error.message}</div>` : nothing}
       ${shownMain.map((s) => this._renderSetting(s))}
       ${this.section === 'comfort' ? this._renderHumidity() : nothing}
       ${shownFine.length
@@ -596,9 +650,9 @@ export class ComfortBandSettingsTab extends LitElement {
         : nothing}
       ${none
         ? html`<div class="upgrade-hint">
-            ${since
-              ? html`These settings need the <code>comfort_band</code> integration ${since} or
-                  later, with their entities turned on.`
+            ${needs
+              ? html`${needs.what} the <code>comfort_band</code> integration ${needs.since} or
+                  later, with its entities turned on.`
               : html`These settings’ entities are turned off. Turn them on from this room’s device
                 page, under Settings → Devices &amp; Services.`}
           </div>`
@@ -636,19 +690,23 @@ export class ComfortBandSettingsTab extends LitElement {
     const roomState = room !== null ? this.hass!.states[room] : undefined;
     const known = roomState !== undefined && roomState.state !== 'unavailable';
     const humidity = known ? readHumiditySensor(this.hass!, room) : null;
-    const value = !known
-      ? 'Can’t be read right now'
-      : humidity
-        ? this._sensorText(humidity)
-        : 'Not configured';
+    const value =
+      roomState === undefined
+        ? 'Can’t be read'
+        : !known
+          ? 'Can’t be read right now'
+          : humidity
+            ? this._sensorText(humidity)
+            : 'Not configured';
+    const desc =
+      roomState === undefined
+        ? 'It’s read from this room’s Room temperature sensor, which is turned off. Turn it on from this room’s device page, under Settings → Devices & Services.'
+        : `${!known ? 'Set' : humidity ? 'Change it' : 'Set one up'} under Settings → Devices & Services → Comfort Band → Configure.`;
     return html`
       <div class="row">
         <div class="row-label">
           <div class="title">Humidity sensor</div>
-          <div class="desc">
-            ${!known ? 'Set' : humidity ? 'Change it' : 'Set one up'} under Settings → Devices &amp;
-            Services → Comfort Band → Configure.
-          </div>
+          <div class="desc">${desc}</div>
         </div>
         <div class="info-value ${humidity ? '' : 'unconfigured'}">${value}</div>
       </div>
@@ -682,7 +740,9 @@ export class ComfortBandSettingsTab extends LitElement {
     const shown = this._pending[entityId];
     const value = typeof shown === 'number' ? shown : Number.parseFloat(s?.state ?? '');
     const readable = Number.isFinite(value);
-    const text = readable ? `${value.toFixed(stepDecimals(step))}${unit ? ` ${unit}` : ''}` : '—';
+    const text = readable
+      ? `${value.toFixed(valueDecimals(value, step))}${unit ? ` ${unit}` : ''}`
+      : '—';
     const titleId = `t-${setting.field}`;
     const atMin = !readable || (min !== null && value <= min);
     const atMax = !readable || (max !== null && value >= max);
@@ -725,9 +785,13 @@ export class ComfortBandSettingsTab extends LitElement {
     const shown = this._pending[entityId];
     const value = typeof shown === 'string' ? shown : (s?.state ?? '');
     const titleId = `t-${setting.field}`;
-    const readable = options.includes(value);
+    const unavailable = !s || s.state === 'unavailable' || options.length === 0;
+    // A value that isn't one of the options (a fan mode the unit no longer
+    // offers reads "unknown") shows a dash, and a choice can still be made.
+    const listed = options.includes(value);
+    const label = setting.label ?? asTyped;
     return html`
-      <div class="row" data-setting=${setting.field}>
+      <div class="row pick" data-setting=${setting.field}>
         <div class="row-label">
           <div class="title" id=${titleId}>${setting.title}</div>
           <div class="desc">${setting.desc}</div>
@@ -735,12 +799,19 @@ export class ComfortBandSettingsTab extends LitElement {
         <select
           class="choice"
           aria-labelledby=${titleId}
-          ?disabled=${!readable}
+          ?disabled=${unavailable}
           @change=${(e: Event) => this._onChoose(entityId, (e.target as HTMLSelectElement).value)}
         >
-          ${readable ? nothing : html`<option value="" .selected=${true}>—</option>`}
+          ${listed && !unavailable
+            ? nothing
+            : html`<option value="" disabled .selected=${true}>
+                ${unavailable ? 'Unavailable' : '—'}
+              </option>`}
           ${options.map(
-            (o) => html`<option value=${o} .selected=${o === value}>${optionLabel(o)}</option>`,
+            (o) =>
+              html`<option value=${o} .selected=${!unavailable && o === value}>
+                ${label(o)}
+              </option>`,
           )}
         </select>
       </div>
@@ -754,9 +825,25 @@ export class ComfortBandSettingsTab extends LitElement {
     desc: TemplateResult;
   }) {
     const on = this._isOn(opts.entityId);
-    // Disabled while a service call is in flight to prevent a double-tap
-    // from dispatching two concurrent turn_on/turn_off pairs.
+    // Takes no press from the tap until HA reports the change (or refuses
+    // it), so a double tap can't send turn_on and turn_off together.
     const pending = this._pending[opts.entityId] !== undefined;
+    // Neither on nor off: HA says so rather than the switch looking off. HA
+    // skips an unavailable entity in a call without an error.
+    const state = this.hass!.states[opts.entityId]?.state;
+    if (!pending && state !== 'on' && state !== 'off') {
+      return html`
+        <div class="row" data-setting=${opts.field}>
+          <div class="row-label">
+            <div class="title">${opts.title}</div>
+            <div class="desc">${opts.desc}</div>
+          </div>
+          <div class="info-value unconfigured">
+            ${state === undefined || state === 'unavailable' ? 'Unavailable' : 'Unknown'}
+          </div>
+        </div>
+      `;
+    }
     // Bespoke <button role="switch"> rather than <ha-switch> / <mwc-switch>:
     // those are private HA internal elements with no stable API for custom
     // cards. The hand-rolled control is WCAG-correct (44px target,

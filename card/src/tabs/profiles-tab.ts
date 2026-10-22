@@ -683,6 +683,16 @@ export class ComfortBandProfilesTab extends LitElement {
         aria-current=${isActive ? 'true' : nothing}
         @click=${() => this._onSelect(profile)}
         @keydown=${(e: KeyboardEvent) => {
+          // A menu opened by pointer leaves focus on ⋮, or in Safari on the
+          // row: Escape closes the menu, not the whole dialog. (The menu's
+          // own Escape, with focus inside it, stops before here.)
+          if (e.key === 'Escape' && this._openMenu !== null) {
+            e.preventDefault();
+            e.stopPropagation();
+            this._openMenu = null;
+            this._menuOpenedByKeyboard = false;
+            return;
+          }
           // Only a key pressed on the row itself picks its profile. Enter or
           // Space on the ⋮ button or a menu item bubbles up here too, and
           // used to switch every room's profile instead of opening the menu.
@@ -707,16 +717,6 @@ export class ComfortBandProfilesTab extends LitElement {
               aria-controls=${this._openMenu === profile ? menuId : nothing}
               aria-expanded=${this._openMenu === profile ? 'true' : 'false'}
               @click=${(e: Event) => this._toggleMenu(profile, e)}
-              @keydown=${(e: KeyboardEvent) => {
-                // A menu opened by pointer leaves focus here; Escape closes
-                // the menu, not the whole dialog.
-                if (e.key === 'Escape' && this._openMenu === profile) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  this._openMenu = null;
-                  this._menuOpenedByKeyboard = false;
-                }
-              }}
             >
               ⋮
             </button>`

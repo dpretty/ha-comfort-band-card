@@ -48,6 +48,13 @@ export class ComfortBandAdvancedTab extends LitElement {
       details {
         border-bottom: 1px solid var(--divider-color, #e0e0e0);
       }
+      /* "Profiles", under Schedules after "Follows". */
+      .subhead {
+        margin: var(--cb-gap-md) 0 0;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--cb-text-primary);
+      }
       details:last-of-type {
         border-bottom: none;
       }
@@ -240,6 +247,7 @@ export class ComfortBandAdvancedTab extends LitElement {
             .hass=${this.hass}
             .entities=${this.entities}
           ></comfort-band-settings-tab>
+          <h3 class="subhead">Profiles</h3>
           <comfort-band-profiles-tab .hass=${this.hass}></comfort-band-profiles-tab>`,
       )}
       ${this._section(

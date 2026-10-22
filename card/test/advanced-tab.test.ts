@@ -178,6 +178,17 @@ describe('comfort-band-advanced-tab', () => {
     expect(summaryOf(el, 'automation')).toBe('Learning on');
   });
 
+  // A live select carries default_profile; one that failed to load doesn't.
+  it('names a profile that’s actually called "unavailable"', async () => {
+    const hass = makeHass({}, { profile: 'unavailable' });
+    hass.states['select.comfort_band_profiles_active_profile'].attributes = {
+      options: ['home', 'unavailable'],
+      default_profile: 'home',
+    };
+    const el = await advancedTab(hass);
+    expect(summaryOf(el, 'schedules')).toBe('Profile: unavailable');
+  });
+
   it("doesn't name a profile while the select says unknown", async () => {
     const el = await advancedTab(makeHass({}, { profile: 'unknown' }));
     expect(summaryOf(el, 'schedules')).toBeNull();
@@ -226,6 +237,18 @@ describe('comfort-band-advanced-tab', () => {
     ) as HTMLElement & { section: string };
     expect(automation.section).toBe('automation');
     expect(section(el, 'schedules').querySelector('comfort-band-profiles-tab')).not.toBeNull();
+  });
+
+  // Without it the profiles read as Follows' choices.
+  it('heads the profiles under Schedules, after "Follows"', async () => {
+    const el = await advancedTab();
+    const order = Array.from(
+      section(el, 'schedules').querySelectorAll(
+        'comfort-band-settings-tab, h3, comfort-band-profiles-tab',
+      ),
+    ).map((c) => c.tagName);
+    expect(order).toEqual(['COMFORT-BAND-SETTINGS-TAB', 'H3', 'COMFORT-BAND-PROFILES-TAB']);
+    expect(section(el, 'schedules').querySelector('h3')!.textContent!.trim()).toBe('Profiles');
   });
 
   // Without these, a section is blank or the slider silently sends nothing.

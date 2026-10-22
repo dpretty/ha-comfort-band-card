@@ -187,15 +187,18 @@ describe('comfort-band-settings-tab sections', () => {
 
   it('shows automation: control, learning, predictive control, with timings under "Fine-tuning"', async () => {
     const el = await settingsTab(makeHass(), 'automation');
-    expect(rows(el).map((r) => r.setting)).toEqual([
-      'enabled',
-      'learningEnabled',
-      'mpcEnabled',
-      'lookaheadMinutes',
-      'passiveTolerance',
-      'mpcHorizonMinutes',
-      'minCycleMinutes',
-      'crossModeMinMinutes',
+    expect(rows(el)).toEqual([
+      { setting: 'enabled', title: 'Control this room' },
+      { setting: 'learningEnabled', title: 'Learning' },
+      { setting: 'mpcEnabled', title: 'Predictive control' },
+      { setting: 'lookaheadMinutes', title: 'Look ahead by' },
+      { setting: 'passiveTolerance', title: 'Let it drift back within' },
+      { setting: 'mpcHorizonMinutes', title: 'Plan ahead by' },
+      { setting: 'minCycleMinutes', title: 'Repeat a command no sooner than' },
+      {
+        setting: 'crossModeMinMinutes',
+        title: 'Switch between heating and cooling no sooner than',
+      },
     ]);
     const fine = el.shadowRoot!.querySelector('details.fine') as HTMLDetailsElement;
     expect(fine.open).toBe(false);
@@ -218,22 +221,22 @@ describe('comfort-band-settings-tab sections', () => {
 
   it('shows fan, peak saving and schedules', async () => {
     const fan = await settingsTab(makeHass(), 'fan');
-    expect(rows(fan).map((r) => r.title)).toEqual([
-      'Fan control',
-      'Fan while heating or cooling',
-      'Fan while idle',
+    expect(rows(fan)).toEqual([
+      { setting: 'fanControlEnabled', title: 'Fan control' },
+      { setting: 'activeFanMode', title: 'Fan while heating or cooling' },
+      { setting: 'idleFanMode', title: 'Fan while idle' },
     ]);
     fan.remove();
     const peak = await settingsTab(makeHass(), 'peak');
-    expect(rows(peak).map((r) => r.title)).toEqual([
-      'Peak saving',
-      'Relax the bottom of the range by',
-      'Relax the top of the range by',
-      'Prepare ahead by',
+    expect(rows(peak)).toEqual([
+      { setting: 'peakSavingEnabled', title: 'Peak saving' },
+      { setting: 'peakHeatOffset', title: 'Relax the bottom of the range by' },
+      { setting: 'peakCoolOffset', title: 'Relax the top of the range by' },
+      { setting: 'peakPreconditionMinutes', title: 'Prepare ahead by' },
     ]);
     peak.remove();
     const schedules = await settingsTab(makeHass(), 'schedules');
-    expect(rows(schedules).map((r) => r.title)).toEqual(['Follows']);
+    expect(rows(schedules)).toEqual([{ setting: 'scheduleAssignment', title: 'Follows' }]);
   });
 
   // The integration names "Configure" as where a peak entity is chosen.
@@ -242,6 +245,33 @@ describe('comfort-band-settings-tab sections', () => {
     expect(row(el, 'peakSavingEnabled').querySelector('.desc')!.textContent).toContain(
       'Needs a peak entity chosen under Settings → Devices & Services → Comfort Band → Configure.',
     );
+  });
+
+  // Predictive control never reads the deadbands, and heats to the top.
+  it('says the deadbands aren’t used while predictive control plans', async () => {
+    const el = await settingsTab(makeHass());
+    for (const [setting, edge] of [
+      ['deadbandBelow', 'heats towards the top'],
+      ['deadbandAbove', 'cools towards the bottom'],
+    ]) {
+      expect(row(el, setting).querySelector('.desc')!.textContent).toContain(
+        `Not used while predictive control is planning: it decides when to start and stop, and ${edge} of the range.`,
+      );
+    }
+  });
+
+  // In a peak a cycle still starts past the relaxed edge by the deadband.
+  it('doesn’t promise peak saving keeps heating and cooling out of a peak', async () => {
+    const el = await settingsTab(makeHass(), 'peak');
+    const desc = (setting: string) => row(el, setting).querySelector('.desc')!.textContent!;
+    expect(desc('peakSavingEnabled')).not.toMatch(/keeps heating and cooling out/i);
+    expect(desc('peakSavingEnabled')).toContain('An adjustment in force sets both aside.');
+    expect(desc('peakHeatOffset')).toContain('heating still starts the usual amount below it');
+    expect(desc('peakCoolOffset')).toContain('cooling still starts the usual amount above it');
+  });
+
+  it('gives "Fine-tuning" a 44px target', () => {
+    expect(css()).toMatch(/details\.fine > summary\s*\{[^}]*min-height:\s*44px/);
   });
 
   it('describes learning as controlling anticipation, not as having no effect', async () => {
@@ -289,15 +319,16 @@ describe('comfort-band-settings-tab missing settings', () => {
 
   // The version each section's first setting arrived in. A disabled entity
   // drops out of the registry too, hence "turned on".
+  // Named, not "these settings": profiles still work below Follows.
   it.each([
-    ['fan', 'v0.13.0'],
-    ['peak', 'v0.24.0'],
-    ['schedules', 'v0.14.0'],
-  ] as const)('says what %s settings need when none is there', async (section, since) => {
+    ['fan', 'Fan control needs', 'v0.13.0'],
+    ['peak', 'Peak saving needs', 'v0.24.0'],
+    ['schedules', 'Choosing a shared schedule needs', 'v0.14.0'],
+  ] as const)('says what %s settings need when none is there', async (section, what, since) => {
     const el = await settingsTab(makeHass(), section, without(section));
     expect(el.shadowRoot!.querySelectorAll('.row')).toHaveLength(0);
     expect(hint(el)).toBe(
-      `These settings need the comfort_band integration ${since} or later, with their entities turned on.`,
+      `${what} the comfort_band integration ${since} or later, with its entities turned on.`,
     );
   });
 
@@ -406,6 +437,43 @@ describe('comfort-band-settings-tab switches', () => {
     expect(calls(hass)).toEqual([
       ['switch', 'turn_on', { entity_id: 'switch.gym_use_apparent_temperature' }],
     ]);
+  });
+
+  it('stays flipped until HA reports the change', async () => {
+    const hass = makeHass();
+    const el = await settingsTab(hass);
+    const toggle = () =>
+      row(el, 'useApparentTemperature').querySelector<HTMLButtonElement>('button[role="switch"]')!;
+    toggle().click();
+    await flush(el);
+    expect(calls(hass)).toHaveLength(1);
+    expect(toggle().getAttribute('aria-checked')).toBe('true');
+    expect(toggle().getAttribute('aria-disabled')).toBe('true');
+    el.hass = makeHass({ states: { 'switch.gym_use_apparent_temperature': { state: 'on' } } });
+    await el.updateComplete;
+    expect(toggle().getAttribute('aria-checked')).toBe('true');
+    expect(toggle().getAttribute('aria-disabled')).toBe('false');
+  });
+
+  // Not "off": "Control this room" off reads as paused.
+  it('says a switch it can’t read is unavailable, and offers no press', async () => {
+    const el = await settingsTab(
+      makeHass({
+        states: {
+          'switch.gym_enabled': { state: 'unavailable' },
+          'switch.gym_learning_enabled': { state: 'unknown' },
+        },
+      }),
+      'automation',
+    );
+    expect(row(el, 'enabled').querySelector('button')).toBeNull();
+    expect(row(el, 'enabled').querySelector('.info-value')!.textContent!.trim()).toBe(
+      'Unavailable',
+    );
+    expect(row(el, 'learningEnabled').querySelector('.info-value')!.textContent!.trim()).toBe(
+      'Unknown',
+    );
+    expect(row(el, 'mpcEnabled').querySelector('button[role="switch"]')).not.toBeNull();
   });
 
   it('reflects a new state from HA', async () => {
@@ -561,7 +629,8 @@ describe('comfort-band-settings-tab steppers', () => {
     ]);
   });
 
-  it('sends taps not yet sent when the section closes', async () => {
+  // A closed section stays on the page; the dialog closing takes it off.
+  it('sends taps not yet sent when it’s taken off the page', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const hass = makeHass();
     const el = await settingsTab(hass);
@@ -644,6 +713,47 @@ describe('comfort-band-settings-tab steppers', () => {
     expect([less.getAttribute('aria-disabled'), more.getAttribute('aria-disabled')]).toEqual([
       'true',
       'true',
+    ]);
+  });
+
+  it('announces each tap', async () => {
+    const el = await settingsTab(makeHass());
+    expect(row(el, 'deadbandBelow').querySelector('output.value')!.getAttribute('aria-live')).toBe(
+      'polite',
+    );
+  });
+
+  // Set elsewhere, a value can be off the step's grid.
+  it('shows a value off the step’s grid as it is, and steps onto the grid', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const at = async (direction: 'less' | 'more') => {
+      const hass = makeHass({
+        states: { 'number.gym_deadband_below': number('0.25', 0.1, 2, 0.1, '°C') },
+      });
+      const el = await settingsTab(hass);
+      expect(shown(el, 'deadbandBelow')).toBe('0.25 °C');
+      stepButtons(el, 'deadbandBelow')[direction].click();
+      vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+      await flush(el);
+      el.remove();
+      return (calls(hass)[0][2] as { value: number }).value;
+    };
+    expect(await at('more')).toBe(0.3);
+    expect(await at('less')).toBe(0.2);
+  });
+
+  // As HA's own slider: steps of 10 from a bottom limit of 5 are 5, 15, 25...
+  it('counts steps from the bottom limit', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const hass = makeHass({
+      states: { 'number.gym_band_ramp_minutes': number('25', 5, 95, 10, 'min') },
+    });
+    const el = await settingsTab(hass);
+    stepButtons(el, 'bandRampMinutes').more.click();
+    vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    expect(calls(hass)).toEqual([
+      ['number', 'set_value', { entity_id: 'number.gym_band_ramp_minutes', value: 35 }],
     ]);
   });
 
@@ -737,16 +847,68 @@ describe('comfort-band-settings-tab choices', () => {
     ]);
   });
 
-  it("can't be changed while its value isn't one of its options", async () => {
+  // A fanless unit's fan selects have no options and are unavailable.
+  it("can't be changed while it's unavailable", async () => {
+    for (const attributes of [{}, { options: FAN_MODES }]) {
+      const el = await settingsTab(
+        makeHass({ states: { 'select.gym_idle_fan_mode': { state: 'unavailable', attributes } } }),
+        'fan',
+      );
+      const s = select(el, 'idleFanMode');
+      expect(s.disabled).toBe(true);
+      expect(s.options[s.selectedIndex].textContent!.trim()).toBe('Unavailable');
+      el.remove();
+    }
+  });
+
+  // The integration reads "unknown" for a stored fan mode the unit no
+  // longer offers: picking one it does offer is the way out.
+  it('can still be changed while its value is none of its options', async () => {
+    const hass = makeHass({
+      states: {
+        'select.gym_idle_fan_mode': { state: 'unknown', attributes: { options: FAN_MODES } },
+      },
+    });
+    const el = await settingsTab(hass, 'fan');
+    const s = select(el, 'idleFanMode');
+    expect(s.disabled).toBe(false);
+    expect(s.options[s.selectedIndex].textContent!.trim()).toBe('—');
+    expect(s.options[s.selectedIndex].disabled).toBe(true);
+    s.value = 'low';
+    s.dispatchEvent(new Event('change'));
+    await flush(el);
+    expect(calls(hass)).toEqual([
+      ['select', 'select_option', { entity_id: 'select.gym_idle_fan_mode', option: 'low' }],
+    ]);
+  });
+
+  // Shared schedules are named by people; fan modes are the unit's words.
+  it('shows schedule names as typed', async () => {
     const el = await settingsTab(
       makeHass({
-        states: { 'select.gym_idle_fan_mode': { state: 'unavailable', attributes: {} } },
+        states: {
+          'select.gym_schedule_assignment': {
+            state: 'Own schedule',
+            attributes: { options: ['Own schedule', 'iPad corner', 'own-schedule', 'bed_rooms'] },
+          },
+        },
       }),
-      'fan',
+      'schedules',
     );
-    const s = select(el, 'idleFanMode');
-    expect(s.disabled).toBe(true);
-    expect(s.options[s.selectedIndex].textContent).toBe('—');
+    expect(
+      Array.from(select(el, 'scheduleAssignment').options).map((o) => o.textContent!.trim()),
+    ).toEqual(['Own schedule', 'iPad corner', 'own-schedule', 'bed_rooms']);
+  });
+
+  it('draws its own 44px box, as WebKit ignores the height of its menu button', () => {
+    expect(css()).toMatch(/\.choice\s*\{[^}]*min-height:\s*44px/);
+    expect(css()).toMatch(/\.choice\s*\{[^}]*[^-]appearance:\s*none/);
+    expect(css()).toMatch(/\.choice\s*\{[^}]*-webkit-appearance:\s*none/);
+  });
+
+  it('puts a choice below its title when they don’t fit side by side', () => {
+    expect(css()).toMatch(/\.row\.pick\s*\{[^}]*flex-wrap:\s*wrap/);
+    expect(css()).toMatch(/\.choice\s*\{[^}]*max-width:\s*100%/);
   });
 });
 
@@ -846,7 +1008,11 @@ describe('comfort-band-settings-tab humidity sensor', () => {
       'comfort',
       makeEntities('gym', { roomTemperature: null }),
     );
-    expect(info(disabled).value).toBe('Can’t be read right now');
+    expect(info(disabled)).toEqual({
+      value: 'Can’t be read',
+      desc: 'It’s read from this room’s Room temperature sensor, which is turned off. Turn it on from this room’s device page, under Settings → Devices & Services.',
+      unconfigured: true,
+    });
   });
 
   it('wraps a long name rather than overflowing', () => {
@@ -1102,6 +1268,47 @@ describe('comfort-band-settings-tab once a call has gone through', () => {
     expect(row(el, 'idleFanMode').querySelector('select')!.value).toBe('auto');
   });
 
+  it('shows what HA says when shown again after its taps were sent on the way out', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const hass = makeHass();
+    const el = await settingsTab(hass);
+    stepButtons(el, 'deadbandBelow').more.click();
+    el.remove();
+    await flush(el);
+    expect(calls(hass)).toHaveLength(1);
+    document.body.appendChild(el);
+    await el.updateComplete;
+    expect(shown(el, 'deadbandBelow')).toBe('0.3 °C');
+  });
+
+  // Two calls for the same value both come back while it shows.
+  it('waits from the later of two calls for the same choice', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const finishes: Array<() => void> = [];
+    const slow = vi.fn().mockImplementation(() => new Promise<void>((r) => finishes.push(r)));
+    const el = await settingsTab(makeHass({ callServiceImpl: slow }), 'fan');
+    const pick = (option: string) => {
+      const s = row(el, 'idleFanMode').querySelector('select')!;
+      s.value = option;
+      s.dispatchEvent(new Event('change'));
+    };
+    pick('high');
+    await flush(el);
+    pick('auto');
+    pick('high');
+    finishes[0]();
+    await flush(el);
+    vi.advanceTimersByTime(5000);
+    finishes[1]();
+    await flush(el);
+    finishes[2]();
+    await flush(el);
+    expect(vi.getTimerCount()).toBe(1);
+    vi.advanceTimersByTime(SETTLE_MS - 1);
+    await el.updateComplete;
+    expect(row(el, 'idleFanMode').querySelector('select')!.value).toBe('high');
+  });
+
   it('shows what HA says when it is shown again', async () => {
     const { el } = await sent();
     el.remove();
@@ -1212,6 +1419,70 @@ describe('comfort-band-settings-tab errors', () => {
     s.dispatchEvent(new Event('change'));
     await el.updateComplete;
     expect(alert(el)).toBeNull();
+  });
+
+  // HA's frontend rejects with an object, not an Error.
+  it('shows HA’s own message', async () => {
+    const hass = makeHass({
+      callServiceImpl: vi.fn().mockRejectedValueOnce({ code: 'invalid', message: 'Too high' }),
+    });
+    const el = await settingsTab(hass, 'fan');
+    toggle(el, 'fanControlEnabled').click();
+    await flush(el);
+    expect(alert(el)!.textContent).toBe('Too high');
+  });
+
+  it('says something even with no message', async () => {
+    const el = await settingsTab(
+      makeHass({ callServiceImpl: vi.fn().mockRejectedValueOnce('nope') }),
+      'fan',
+    );
+    toggle(el, 'fanControlEnabled').click();
+    await flush(el);
+    expect(alert(el)!.textContent).toBe('That setting couldn’t be changed.');
+  });
+
+  // A newer value for the same setting, tapped while the refused one was
+  // going through, goes through after it.
+  it('clears once a later value for the same setting goes through', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let refuse: (e: Error) => void = () => {};
+    const slow = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<void>((_, r) => (refuse = r)))
+      .mockResolvedValue(undefined);
+    const el = await settingsTab(makeHass({ callServiceImpl: slow }));
+    const { more } = stepButtons(el, 'deadbandBelow');
+    more.click();
+    vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    more.click();
+    refuse(new Error('Busy'));
+    await flush(el);
+    expect(alert(el)).not.toBeNull();
+    vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    expect(alert(el)).toBeNull();
+  });
+
+  it('stays while another setting’s value goes through', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let refuse: (e: Error) => void = () => {};
+    const slow = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<void>((_, r) => (refuse = r)))
+      .mockResolvedValue(undefined);
+    const el = await settingsTab(makeHass({ callServiceImpl: slow }));
+    stepButtons(el, 'deadbandBelow').more.click();
+    vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    stepButtons(el, 'deadbandAbove').more.click();
+    refuse(new Error('Busy'));
+    await flush(el);
+    vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    expect(slow).toHaveBeenCalledTimes(2);
+    expect(alert(el)!.textContent).toContain('Busy');
   });
 
   it('clears with the next step', async () => {
