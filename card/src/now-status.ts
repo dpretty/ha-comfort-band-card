@@ -1,0 +1,167 @@
+/**
+ * Pure helpers behind the Now tab's top half: which temperature to show
+ * large, the one-line status ("Comfortable · 17.5–23° until 9 pm"), and the
+ * Warmer / Cooler shift. Kept free of Lit so each rule can be tested on its own.
+ */
+
+import type { HomeAssistant } from './types.js';
+
+/** One tap of Warmer or Cooler moves the whole range by this much. */
+export const SHIFT_STEP = 0.5;
+/** The schedule editor's limits; Warmer and Cooler stop at them. */
+export const SHIFT_MIN_LOW = 10;
+export const SHIFT_MAX_HIGH = 35;
+
+export interface Band {
+  low: number;
+  high: number;
+}
+
+/** "17.5–23°": whole degrees without a trailing ".0", as people write them. */
+export function bandText(band: Band): string {
+  return `${degrees(band.low)}–${degrees(band.high)}°`;
+}
+
+function degrees(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1);
+}
+
+/**
+ * The range moved `steps` taps warmer (positive) or cooler (negative), keeping
+ * its width, and stopping at the schedule editor's limits rather than passing
+ * them.
+ */
+export function shiftBand(base: Band, steps: number): Band {
+  let delta = steps * SHIFT_STEP;
+  delta = Math.min(delta, SHIFT_MAX_HIGH - base.high);
+  delta = Math.max(delta, SHIFT_MIN_LOW - base.low);
+  return { low: round1(base.low + delta), high: round1(base.high + delta) };
+}
+
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+/**
+ * The temperature shown large is the one that drives control: "feels like"
+ * when apparent temperature is in use and readable, otherwise the room
+ * reading. The other one, when it differs, goes underneath.
+ */
+export function headlineTemperature(opts: {
+  room: number;
+  apparent: number;
+  useApparent: boolean;
+}): { value: number; note: string } {
+  const { room, apparent, useApparent } = opts;
+  const differ =
+    Number.isFinite(room) && Number.isFinite(apparent) && Math.abs(apparent - room) >= 0.1;
+  if (useApparent && Number.isFinite(apparent)) {
+    return {
+      value: apparent,
+      note: differ ? `Feels like · room ${room.toFixed(1)}°` : 'Feels like',
+    };
+  }
+  return { value: room, note: differ ? `Feels like ${apparent.toFixed(1)}°` : '' };
+}
+
+export type StatusKind =
+  | 'adjusting'
+  | 'paused'
+  | 'heating'
+  | 'cooling'
+  | 'comfortable'
+  | 'idle'
+  | 'none';
+
+const STATUS_WORDS: Partial<Record<StatusKind, string>> = {
+  heating: 'Heating',
+  cooling: 'Cooling',
+  comfortable: 'Comfortable',
+  idle: 'Idle',
+};
+
+export interface StatusInput {
+  /** The zone's `enabled` switch; false means it isn't controlling the room. */
+  enabled: boolean;
+  /** `heating`, `cooling`, `idle` or anything else (unknown). */
+  action: string;
+  /** The temperature that drives control. */
+  temperature: number;
+  /** The band in force (NaN when it can't be read). */
+  band: Band;
+  overrideActive: boolean;
+  /** When the override ends, in ms, or null. */
+  overrideEnds: number | null;
+  /** Whether a schedule sets the zone's band; null when the integration doesn't say. */
+  scheduled: boolean | null;
+  /** When the schedule next changes the band, in ms, or null. */
+  nextChange: number | null;
+  /** A change made on the card that hasn't shown up yet. */
+  pending: Band | null;
+  now: number;
+  formatTime: (ms: number) => string;
+}
+
+/**
+ * The status line, in words. "until" is said only when it is true: for a
+ * schedule, its next change; for an adjustment, when it ends, and only when a
+ * schedule sets the zone's band. Without one, an adjustment's band is the
+ * zone's band from then on, so it doesn't end.
+ */
+export function statusLine(s: StatusInput): { kind: StatusKind; text: string } {
+  if (s.pending) return { kind: 'adjusting', text: `Adjusting to ${bandText(s.pending)}` };
+  if (!s.enabled) return { kind: 'paused', text: 'Paused: not controlling this room' };
+  if (!Number.isFinite(s.band.low) || !Number.isFinite(s.band.high)) {
+    return { kind: 'none', text: "Can't read this room's range" };
+  }
+
+  const inBand = s.temperature >= s.band.low && s.temperature <= s.band.high;
+  const kind: StatusKind =
+    s.action === 'heating'
+      ? 'heating'
+      : s.action === 'cooling'
+        ? 'cooling'
+        : s.action === 'idle'
+          ? Number.isFinite(s.temperature) && inBand
+            ? 'comfortable'
+            : 'idle'
+          : 'none';
+  const word = STATUS_WORDS[kind];
+
+  let rest: string;
+  if (s.overrideActive) {
+    const until =
+      s.scheduled === true && s.overrideEnds !== null && s.overrideEnds > s.now
+        ? ` until ${s.formatTime(s.overrideEnds)}`
+        : '';
+    rest = `${s.scheduled === false ? 'set to' : 'adjusted to'} ${bandText(s.band)}${until}`;
+  } else {
+    const until =
+      s.scheduled === true && s.nextChange !== null && s.nextChange > s.now
+        ? ` until ${s.formatTime(s.nextChange)}`
+        : '';
+    rest = `${bandText(s.band)}${until}`;
+  }
+  const text = word ? `${word} · ${rest}` : rest.charAt(0).toUpperCase() + rest.slice(1);
+  return { kind, text };
+}
+
+/**
+ * A wall-clock time in HA's chosen language and 12/24-hour setting where the
+ * frontend provides them: "9 pm" or "4:30 pm" on a 12-hour clock, "21:00" or
+ * "09:05" on a 24-hour one, where an hour on its own would read as a number.
+ */
+export function formatTime(ms: number, hass?: Pick<HomeAssistant, 'locale'>): string {
+  const date = new Date(ms);
+  const pref = hass?.locale?.time_format;
+  const options: Intl.DateTimeFormatOptions = { hour: 'numeric' };
+  if (pref === '12') options.hour12 = true;
+  if (pref === '24') options.hour12 = false;
+  const language = hass?.locale?.language;
+  const cycle = new Intl.DateTimeFormat(language, options).resolvedOptions().hourCycle;
+  const twelveHour = cycle === 'h11' || cycle === 'h12';
+  if (!twelveHour) options.hour = '2-digit';
+  if (!twelveHour || date.getMinutes() !== 0) options.minute = '2-digit';
+  return new Intl.DateTimeFormat(language, options).format(date);
+}

@@ -14,6 +14,7 @@ function makeEntities(overrides: Partial<ZoneEntities> = {}): ZoneEntities {
     roomTemperature: 'sensor.gym_room_temperature',
     apparentTemperature: null,
     overrideEnds: null,
+    nextBandChange: null,
     currentAction: null,
     overrideActive: null,
     manualLow: null,

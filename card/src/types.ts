@@ -70,6 +70,8 @@ export interface HomeAssistant {
   devices: Record<string, DeviceRegistryEntry>;
   /** Optional: older frontends (and minimal test fixtures) omit it. */
   areas?: Record<string, AreaRegistryEntry>;
+  /** The user's language and 12/24-hour preference; optional in test fixtures. */
+  locale?: { language: string; time_format?: 'language' | 'system' | '12' | '24' };
   connection: HassConnection;
   callService(
     domain: string,

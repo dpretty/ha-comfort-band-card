@@ -35,6 +35,8 @@ export interface ZoneEntities {
   effectiveHigh: string | null;
   roomTemperature: string | null;
   overrideEnds: string | null;
+  /** v0.23.0+: when the schedule next changes the band; absent on older integrations. */
+  nextBandChange: string | null;
   currentAction: string | null;
   // Binary sensor
   overrideActive: string | null;
@@ -66,6 +68,7 @@ const KEY_TO_FIELD: Record<string, keyof ZoneEntities> = {
   room_temperature: 'roomTemperature',
   apparent_temperature: 'apparentTemperature',
   override_ends: 'overrideEnds',
+  next_band_change: 'nextBandChange',
   current_action: 'currentAction',
   override_active: 'overrideActive',
   manual_low: 'manualLow',
@@ -87,6 +90,7 @@ function emptyZoneEntities(): ZoneEntities {
     roomTemperature: null,
     apparentTemperature: null,
     overrideEnds: null,
+    nextBandChange: null,
     currentAction: null,
     overrideActive: null,
     manualLow: null,
