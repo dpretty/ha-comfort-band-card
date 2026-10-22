@@ -1135,6 +1135,23 @@ describe('comfort-band-settings-tab once a call has gone through', () => {
       expect(toggle().getAttribute('aria-disabled')).toBe('false');
     });
 
+    it("doesn't take an entity HA has dropped for one that reported the value", async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const ref: { el?: ComfortBandSettingsTab } = {};
+      const hass = makeHass({
+        callServiceImpl: vi.fn(async () => {
+          const next = makeHass();
+          delete next.states['number.gym_deadband_below'];
+          ref.el!.hass = next;
+        }),
+      });
+      const el = (ref.el = await settingsTab(hass));
+      stepButtons(el, 'deadbandBelow').more.click();
+      vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+      await flush(el);
+      expect(vi.getTimerCount()).toBe(1);
+    });
+
     it('stops waiting for a number or a choice at once', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const r = reporting({
