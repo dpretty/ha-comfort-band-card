@@ -696,9 +696,16 @@ describe('comfort-band-settings-tab steppers', () => {
     expect((calls(hass)[0][2] as { value: number }).value).toBe(2.25);
   });
 
-  it('puts a stepper below its title when they don’t fit side by side', () => {
+  it('puts a stepper or a choice below its title when they don’t fit side by side', async () => {
     expect(css()).toMatch(/\.row\.num\s*\{[^}]*flex-wrap:\s*wrap/);
     expect(css()).toMatch(/\.stepper\s*\{[^}]*margin-left:\s*auto/);
+    const el = await settingsTab(makeHass(), 'fan');
+    expect(row(el, 'activeFanMode').classList.contains('pick')).toBe(true);
+    expect(row(el, 'fanControlEnabled').classList.contains('pick')).toBe(false);
+    el.remove();
+    const comfort = await settingsTab(makeHass());
+    expect(row(comfort, 'deadbandBelow').classList.contains('num')).toBe(true);
+    expect(row(comfort, 'useApparentTemperature').classList.contains('num')).toBe(false);
   });
 
   // 0.2 + 0.1 is 0.30000000000000004 in floating point.
