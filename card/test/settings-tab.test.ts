@@ -174,6 +174,11 @@ describe('comfort-band-settings-tab', () => {
     const info = el.shadowRoot!.querySelector('.info-value');
     expect(info!.textContent!.trim()).toBe('Gym humidity · 54 %');
     expect(info!.classList.contains('unconfigured')).toBe(false);
+    const desc = el
+      .shadowRoot!.querySelectorAll('.row .desc')[1]
+      .textContent!.replace(/\s+/g, ' ')
+      .trim();
+    expect(desc).toBe('Change it under Settings → Devices & Services → Comfort Band → Configure.');
   });
 
   it('says a humidity sensor has no reading, and falls back to its ID without a name', async () => {
@@ -229,6 +234,27 @@ describe('comfort-band-settings-tab', () => {
     const info = el.shadowRoot!.querySelector('.info-value');
     expect(info!.textContent).toContain('Not configured');
     expect(info!.classList.contains('unconfigured')).toBe(true);
+    // Nothing to change yet.
+    const desc = el
+      .shadowRoot!.querySelectorAll('.row .desc')[1]
+      .textContent!.replace(/\s+/g, ' ')
+      .trim();
+    expect(desc).toBe('Set one up under Settings → Devices & Services → Comfort Band → Configure.');
+  });
+
+  // A long name or entity ID wraps rather than squeezing the label out or
+  // pushing the row sideways (measured in Chromium and WebKit at 375 px).
+  it('wraps a long humidity sensor name rather than overflowing', () => {
+    const css = (
+      customElements.get('comfort-band-settings-tab') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((s) => s.cssText)
+      .join('\n');
+    expect(css).toMatch(/\.info-value\s*\{[^}]*max-width:\s*55%/);
+    expect(css).toMatch(/\.info-value\s*\{[^}]*overflow-wrap:\s*anywhere/);
   });
 
   it('reflects updated entity state when hass property is reassigned', async () => {

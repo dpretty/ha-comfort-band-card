@@ -137,6 +137,21 @@ describe('comfort-band-advanced-tab', () => {
     ]);
   });
 
+  // As the section says: a manager that's there but can't be read isn't
+  // "none set up". A disabled select drops out of hass.entities; its device
+  // stays.
+  it("says profiles aren't available where a manager exists but can't be read", async () => {
+    const disabled = makeHass({}, { profile: 'home' });
+    disabled.entities = {};
+    const el = await advancedTab(disabled);
+    expect(sections(el)[2].summary).toBe('Not available right now');
+    el.remove();
+    const unloaded = makeHass({}, { profile: 'home' });
+    delete unloaded.states['select.comfort_band_profiles_active_profile'];
+    const el2 = await advancedTab(unloaded);
+    expect(sections(el2)[2].summary).toBe('Not available right now');
+  });
+
   it("doesn't name a profile while the select says unknown", async () => {
     const el = await advancedTab(makeHass({}, { profile: 'unknown' }));
     expect(sections(el)[2].summary).toBeNull();
@@ -219,7 +234,15 @@ describe('comfort-band-advanced-tab', () => {
   });
 
   // A long summary wraps beside the chevron, under the section's name.
-  it('wraps a long summary with the name, beside the chevron', () => {
+  it('wraps a long summary with the name, beside the chevron', async () => {
+    const el = await advancedTab();
+    const summary = el.shadowRoot!.querySelector('summary')!;
+    expect(summary.children).toHaveLength(1);
+    expect(summary.firstElementChild!.className).toBe('label');
+    expect(Array.from(summary.firstElementChild!.children).map((c) => c.className)).toEqual([
+      'name',
+      'summary',
+    ]);
     const css = (
       customElements.get('comfort-band-advanced-tab') as unknown as {
         styles: Array<{ cssText: string }>;
@@ -243,6 +266,10 @@ describe('comfort-band-advanced-tab', () => {
       .map((s) => s.cssText)
       .join('\n');
     expect(css).toMatch(/summary::before\s*\{[^}]*rotate\(-45deg\)/);
+    // Without these, some engines would draw their own marker as well.
+    expect(css).toMatch(/summary\s*\{[^}]*list-style:\s*none/);
+    expect(css).toMatch(/summary::-webkit-details-marker\s*\{[^}]*display:\s*none/);
+    expect(css).toMatch(/summary:focus-visible\s*\{[^}]*outline:/);
     expect(css).toMatch(/details\[open\]\s*>\s*summary::before\s*\{[^}]*rotate\(45deg\)/);
   });
 });

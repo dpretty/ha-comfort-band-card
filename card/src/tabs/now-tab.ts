@@ -93,7 +93,8 @@ export class ComfortBandNowTab extends LitElement {
   private _burstTimer: ReturnType<typeof setTimeout> | null = null;
   /** What a call from this tab is doing while it goes through, such as
    *  "Going back to the schedule"; the controls ignore presses meanwhile, so
-   *  no call from this tab starts while another is going through. */
+   *  no other such call starts (the feedback buttons aside, which don't
+   *  change the range). */
   @state() private _busy: string | null = null;
 
   public static override styles = [

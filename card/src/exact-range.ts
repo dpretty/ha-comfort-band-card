@@ -3,8 +3,9 @@
  * range exactly, in the Advanced tab's Comfort section. Moved from the Now
  * tab, where Warmer and Cooler do the everyday job.
  *
- * Releasing a handle sends `comfort_band.start_override` with the range for
- * three hours, the Now tab's default length. With no schedule, the range
+ * Releasing a handle, or each keyboard step, sends
+ * `comfort_band.start_override` with the range for three hours, the Now
+ * tab's default length. With no schedule, the range
  * then stays until it's changed again. Calls go one after another, so they
  * land in the order made. A failed call is reported by HA's own toast.
  */
@@ -76,8 +77,7 @@ export class ComfortBandExactRange extends LitElement {
       high: event.detail.high,
       hours: EXACT_RANGE_HOURS,
     };
-    // HA's own toast says a call failed. The slider shows what it was moved
-    // to until the range in force changes.
+    // HA's own toast says a call failed.
     this._chain = this._chain.then(() => startOverride(hass, data)).catch(() => undefined);
   };
 

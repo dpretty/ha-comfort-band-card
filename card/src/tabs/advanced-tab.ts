@@ -15,7 +15,7 @@ import './settings-tab.js';
 import './profiles-tab.js';
 import './insights-tab.js';
 import '../exact-range.js';
-import { findActiveProfileEntity, type ZoneEntities } from '../helpers.js';
+import { findActiveProfileEntity, profileManagerExists, type ZoneEntities } from '../helpers.js';
 import type { HomeAssistant } from '../types.js';
 import { tokens } from '../styles.js';
 
@@ -124,7 +124,12 @@ export class ComfortBandAdvancedTab extends LitElement {
   private _schedulesSummary(): string {
     if (!this.hass) return '';
     const entity = findActiveProfileEntity(this.hass);
-    if (entity === null) return 'No profiles set up';
+    // As the section says: a manager that's there but can't be read (its
+    // select disabled, or not loaded) isn't "none set up".
+    const readable = entity !== null && this.hass.states[entity] !== undefined;
+    if (!readable) {
+      return profileManagerExists(this.hass) ? 'Not available right now' : 'No profiles set up';
+    }
     const profile = this.hass.states[entity]?.state;
     if (!profile || profile === 'unavailable' || profile === 'unknown') return '';
     return `Profile: ${profile}`;

@@ -122,15 +122,21 @@ describe('comfort-band-profiles-tab', () => {
   });
 
   it("says profiles aren't available, not how to set them up, where a manager exists but can't be read", async () => {
-    const hass = makeHass({});
     // Registered, but its select has no state (still starting, failed to
-    // load, or disabled): the integration won't offer to set one up again.
-    hass.states = {};
-    const el = await profilesTab(hass);
-    const text = el.shadowRoot!.querySelector('.empty')!.textContent!.replace(/\s+/g, ' ').trim();
-    expect(text).toBe(
-      "Profiles aren't available right now. If the Comfort Band Profiles entry or its active profile entity is disabled, turn it back on under Settings → Devices & Services.",
-    );
+    // load): the integration won't offer to set one up again.
+    const unloaded = makeHass({});
+    unloaded.states = {};
+    // Its select disabled: it drops out of hass.entities; the device stays.
+    const disabled = makeHass({});
+    disabled.entities = {};
+    for (const hass of [unloaded, disabled]) {
+      const el = await profilesTab(hass);
+      const text = el.shadowRoot!.querySelector('.empty')!.textContent!.replace(/\s+/g, ' ').trim();
+      expect(text).toBe(
+        "Profiles aren't available right now. If the Comfort Band Profiles entry or its active profile entity is disabled, turn it back on under Settings → Devices & Services.",
+      );
+      el.remove();
+    }
   });
 
   // Enter or Space on the ⋮ button or a menu item bubbles to the row, which

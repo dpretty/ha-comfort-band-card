@@ -200,7 +200,8 @@ export class ComfortBandSettingsTab extends LitElement {
         <div class="row-label">
           <div class="title">Humidity sensor</div>
           <div class="desc">
-            Change it under Settings → Devices &amp; Services → Comfort Band → Configure.
+            ${humidity ? 'Change it' : 'Set one up'} under Settings → Devices &amp; Services →
+            Comfort Band → Configure.
           </div>
         </div>
         <div class="info-value ${humidity ? '' : 'unconfigured'}">
