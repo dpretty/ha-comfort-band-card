@@ -631,8 +631,10 @@ describe('comfort-band-now-tab', () => {
         }),
       );
       expect(statusText(el)).toBe('On hold: the room sensor is offline');
+      // Not "using the raw room temperature": there isn't one.
+      expect(el.shadowRoot!.querySelector('.warn')).toBeNull();
       expect(el.shadowRoot!.querySelector('.notice')!.textContent!.trim()).toBe(
-        "Heating and cooling here won't be adjusted until the room sensor reports again. Check its battery or connection.",
+        "Heating and cooling here won't be adjusted while there's no room temperature reading. Check the room sensor's battery or connection.",
       );
       const gauge = el.shadowRoot!.querySelector('band-gauge') as HTMLElement & { action: string };
       expect(gauge.action).toBe('unknown');

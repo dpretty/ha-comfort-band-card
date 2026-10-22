@@ -466,7 +466,7 @@ export class ComfortBandNowTab extends LitElement {
         >
         ${headline.note ? html`<span class="note">${headline.note}</span>` : nothing}
       </div>
-      ${useApparent && !Number.isFinite(apparent)
+      ${useApparent && !Number.isFinite(apparent) && Number.isFinite(room)
         ? html`<div class="warn">
             Apparent temperature mode is on but no humidity reading is available — decisions are
             using the raw room temperature.

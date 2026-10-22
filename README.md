@@ -38,17 +38,17 @@ Entity discovery is by device identifier (`(comfort_band, zone:{slug})`), so ren
 
 ```yaml
 type: custom:comfort-band-card
-zone: gym         # required — the zone slug from your comfort_band setup
-name: Gym         # optional — defaults to the room (area) the zone's device is in
-variant: tile     # optional — `tile` (default) or `mini` (floorplan chip)
-compact: false    # optional — set true for a tile that doesn't expand on tap
+zone: gym # required — the zone slug from your comfort_band setup
+name: Gym # optional — defaults to the room (area) the zone's device is in
+variant: tile # optional — `tile` (default) or `mini` (floorplan chip)
+compact: false # optional — set true for a tile that doesn't expand on tap
 ```
 
 The dashboard's visual editor offers a zone dropdown, an optional name, a variant picker, and a compact-mode toggle, so you don't need to write YAML by hand.
 
 ### Mini variant (for floorplans)
 
-`variant: mini` renders a small inline chip showing the temperature that drives control, sized to its content. A comfortable room is the number alone; anything worth noticing adds an icon in front, most urgent first: the room sensor offline, heating or cooling (the background tints red or blue as well), below or above its range while idle, and adjusted. A paused zone shows a pause icon only. The chip's label for screen readers, and its tooltip, is the zone, the temperature and the status line. Its touch area is at least 44 px square, without the chip looking any bigger, and tapping it opens the same modal as the full tile. Drop one inside a `picture-elements` card to label rooms on a floorplan:
+`variant: mini` renders a small inline chip showing the temperature that drives control, sized to its content. A comfortable room is the number alone; anything worth noticing adds an icon in front, most urgent first: the room sensor offline, heating or cooling (the background tints red or blue as well), below or above its range when it's neither heating nor cooling, and adjusted. A paused zone shows a pause icon only, and a room on hold (no reading at all) only the warning icon. The chip's label for screen readers, and its tooltip, is the zone, the temperature and the status line. Its touch area is at least 44 px each way, without the chip looking any bigger, and tapping it opens the same modal as the full tile (a `compact` chip, which doesn't open, keeps to its own size). Drop one inside a `picture-elements` card to label rooms on a floorplan:
 
 ```yaml
 type: picture-elements

@@ -1,5 +1,5 @@
 /**
- * `<comfort-band-tile>` — compact tile (~120 px tall).
+ * `<comfort-band-tile>` — compact tile.
  *
  * Composed of zone display name + prominent temperature (the one that drives
  * control) + horizontal `<band-gauge>` + the Now tab's status sentence with
@@ -34,7 +34,8 @@ export class ComfortBandTile extends LitElement {
   @property({ attribute: false }) public badges: Badge[] = [];
   /** Disable the tap-to-expand affordance. Used for compact embeds. */
   @property({ type: Boolean }) public noExpand = false;
-  /** Visual variant. `mini` renders a content-sized number-only chip. */
+  /** Visual variant. `mini` renders a content-sized chip: the temperature,
+   *  with an icon in front for anything notable. */
   @property({ type: String, reflect: true }) public variant: ComfortBandCardVariant = 'tile';
 
   public static override styles = [
@@ -91,9 +92,10 @@ export class ComfortBandTile extends LitElement {
       .mini.no-expand {
         cursor: default;
       }
-      /* WCAG 2.5.5: a 44px touch target, without making the chip any bigger
-         on the floorplan. */
-      .mini::before {
+      /* WCAG 2.5.5: a touch target at least 44px each way, without making
+         the chip any bigger on the floorplan. Only for a chip that opens:
+         a compact one would just take taps from what's around it. */
+      .mini:not(.no-expand)::before {
         content: '';
         position: absolute;
         left: 50%;

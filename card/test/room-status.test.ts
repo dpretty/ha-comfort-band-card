@@ -141,20 +141,58 @@ describe('readRoom', () => {
     const r = read({
       'binary_sensor.gym_room_sensor_unavailable': 'on',
       'sensor.gym_room_temperature': 'unknown',
+      'sensor.gym_apparent_temperature': 'unknown',
     });
     expect(r.sensor).toBe('offline');
   });
 
   // An integration older than v0.16.0, or one starting up.
   it("says there's no reading when the integration doesn't say the sensor is offline", () => {
-    expect(read({ 'sensor.gym_room_temperature': 'unavailable' }).sensor).toBe('no-reading');
-    const older = readRoom(hassWith({ ...HEALTHY, 'sensor.gym_room_temperature': 'unknown' }), {
+    const noReading = {
+      'sensor.gym_room_temperature': 'unavailable',
+      'sensor.gym_apparent_temperature': 'unavailable',
+    };
+    expect(read(noReading).sensor).toBe('no-reading');
+    const older = readRoom(hassWith({ ...HEALTHY, ...noReading }), {
       ...ENTITIES,
       roomSensorUnavailable: null,
     });
     expect(older.sensor).toBe('no-reading');
     const fine = readRoom(hassWith(HEALTHY), { ...ENTITIES, roomSensorUnavailable: null });
     expect(fine.sensor).toBe('ok');
+  });
+
+  // Only `on` says the sensor is offline.
+  it("doesn't read an unavailable sensor-offline entity as offline", () => {
+    const patch = { 'binary_sensor.gym_room_sensor_unavailable': 'unavailable' };
+    expect(read(patch).sensor).toBe('ok');
+    expect(
+      read({
+        ...patch,
+        'sensor.gym_room_temperature': 'unknown',
+        'sensor.gym_apparent_temperature': 'unknown',
+      }).sensor,
+    ).toBe('no-reading');
+  });
+
+  // It's a diagnostic entity, so it can be disabled; "feels like" comes from
+  // the same reading.
+  it('counts a "feels like" reading when the room temperature entity is missing', () => {
+    const r = readRoom(hassWith({ ...HEALTHY, 'switch.gym_use_apparent_temperature': 'on' }), {
+      ...ENTITIES,
+      roomTemperature: null,
+    });
+    expect(r.sensor).toBe('ok');
+    expect(r.temperature).toBe(22.1);
+    const none = readRoom(hassWith({ ...HEALTHY, 'sensor.gym_apparent_temperature': 'unknown' }), {
+      ...ENTITIES,
+      roomTemperature: null,
+    });
+    expect(none.sensor).toBe('no-reading');
+  });
+
+  it("doesn't read an unavailable override entity as an adjustment", () => {
+    expect(read({ 'binary_sensor.gym_override_active': 'unavailable' }).overrideActive).toBe(false);
   });
 });
 
@@ -230,8 +268,10 @@ describe('roomBadges', () => {
     expect(roomBadges(room({ ...onHold, sensor: 'no-reading' }))).toEqual(['sensor']);
   });
 
-  it("shows nothing for an action it doesn't know", () => {
+  // The current-action entity missing or unavailable, say.
+  it("shows which side of its range a room is when its action isn't known", () => {
     expect(roomBadges(room({ action: 'unknown' }))).toEqual([]);
+    expect(roomBadges(room({ action: 'unknown', temperature: 15 }))).toEqual(['below']);
   });
 });
 
@@ -268,10 +308,10 @@ describe('sensorNotice', () => {
 
   it('says nothing will be adjusted while control is on hold', () => {
     expect(sensorNotice(room({ sensor: 'offline' }))).toBe(
-      "Heating and cooling here won't be adjusted until the room sensor reports again. Check its battery or connection.",
+      "Heating and cooling here won't be adjusted while there's no room temperature reading. Check the room sensor's battery or connection.",
     );
     expect(sensorNotice(room({ sensor: 'no-reading' }))).toBe(
-      "Heating and cooling here won't be adjusted until there's a room temperature reading.",
+      "Heating and cooling here won't be adjusted while there's no room temperature reading.",
     );
   });
 

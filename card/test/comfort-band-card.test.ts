@@ -332,7 +332,9 @@ describe('comfort-band-card', () => {
   it('says control is on hold when the room sensor is offline with nothing standing in', async () => {
     const hass = makeHass('gym');
     hass.states['binary_sensor.gym_room_sensor_unavailable'].state = 'on';
+    // "Feels like" is worked out from the room reading, so it goes too.
     hass.states['sensor.gym_room_temperature'].state = 'unknown';
+    hass.states['sensor.gym_apparent_temperature'].state = 'unknown';
     hass.states['sensor.gym_current_action'].state = 'heating';
     const el = await card('gym', hass);
     expect(tileOf(el).temperature).toBeNaN();

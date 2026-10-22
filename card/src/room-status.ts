@@ -75,9 +75,10 @@ export function readRoom(hass: HomeAssistant, entities: ZoneEntities): RoomReadi
   const ends = Date.parse(stateOf(hass, entities.overrideEnds)?.state ?? '');
   // The room temperature entity mirrors whichever reading drives control,
   // a stand-in's included, so a reading there with the sensor offline is a
-  // stand-in's.
+  // stand-in's. "Feels like" is worked out from that reading, so it counts
+  // too, in case the room temperature entity is disabled.
   const offline = stateOf(hass, entities.roomSensorUnavailable)?.state === 'on';
-  const reading = Number.isFinite(room);
+  const reading = Number.isFinite(room) || Number.isFinite(apparent);
   const source = stateOf(hass, entities.roomTemperature)?.attributes.source;
   return {
     enabled: stateOf(hass, entities.enabled)?.state !== 'off',
@@ -132,9 +133,10 @@ export const BADGE_ICONS: Record<Badge, string> = {
 
 /**
  * The floorplan chip's icons, most urgent first: none for a comfortable room,
- * so anything unusual stands out. A paused room shows only that it's paused;
- * otherwise sensor trouble, then what the room is doing (or which side of its
- * range it's on), then whether someone has adjusted it.
+ * so anything unusual stands out. A paused room shows only that it's paused,
+ * and a room on hold only its sensor trouble; otherwise sensor trouble, then
+ * heating or cooling (or, when it's doing neither, which side of its range
+ * it's on), then whether someone has adjusted it.
  */
 export function roomBadges(r: RoomReadings): Badge[] {
   if (!r.enabled) return ['paused'];
@@ -143,7 +145,7 @@ export function roomBadges(r: RoomReadings): Badge[] {
   if (!controlling(r)) return badges;
   if (r.action === 'heating' || r.action === 'cooling') {
     badges.push(r.action);
-  } else if (r.action === 'idle') {
+  } else {
     const position = rangePosition(r.temperature, r.band);
     if (position === 'below' || position === 'above') badges.push(position);
   }
@@ -173,10 +175,11 @@ export function sensorNotice(r: RoomReadings): string | null {
             : 'a stand-in reading';
       return `Using ${what} until the room sensor reports again. ${check}`;
     }
+    // Not "until the sensor reports": a stand-in may take over first.
     case 'offline':
-      return `Heating and cooling here won't be adjusted until the room sensor reports again. ${check}`;
+      return "Heating and cooling here won't be adjusted while there's no room temperature reading. Check the room sensor's battery or connection.";
     case 'no-reading':
-      return "Heating and cooling here won't be adjusted until there's a room temperature reading.";
+      return "Heating and cooling here won't be adjusted while there's no room temperature reading.";
     default:
       return null;
   }

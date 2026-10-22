@@ -9,6 +9,21 @@ async function tile(props: Partial<ComfortBandTile>): Promise<ComfortBandTile> {
   return mount('comfort-band-tile', props);
 }
 
+function tileCss(): string {
+  return (customElements.get('comfort-band-tile') as unknown as typeof ComfortBandTile).styles
+    .flat()
+    .map((s) => (s as { cssText: string }).cssText)
+    .join('\n');
+}
+
+/** The declarations of the rule whose selector is exactly `selector`. */
+function rule(css: string, selector: string): string {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(`(?:^|[}\\s])${escaped}\\s*\\{([^}]*)\\}`).exec(css);
+  if (!match) throw new Error(`no rule for ${selector}`);
+  return match[1];
+}
+
 function badgesOf(el: ComfortBandTile): Array<{ badge: string | null; icon: string | null }> {
   return Array.from(el.shadowRoot!.querySelectorAll('.mini ha-icon')).map((i) => ({
     badge: i.getAttribute('data-badge'),
@@ -50,6 +65,14 @@ describe('comfort-band-tile', () => {
     });
     const icon = el.shadowRoot!.querySelector('.status ha-icon')!;
     expect(icon.getAttribute('icon')).toBe('mdi:alert-circle-outline');
+  });
+
+  // The words carry the meaning; the colours repeat it.
+  it('colours the status icon for heating, cooling and sensor trouble', () => {
+    const css = tileCss();
+    expect(rule(css, '.status.heating ha-icon')).toMatch(/var\(--cb-action-heating\)/);
+    expect(rule(css, '.status.cooling ha-icon')).toMatch(/var\(--cb-action-cooling\)/);
+    expect(rule(css, '.status.sensor ha-icon')).toMatch(/var\(--warning-color/);
   });
 
   it('leaves the status out until there is one', async () => {
@@ -225,15 +248,25 @@ describe('comfort-band-tile', () => {
       expect(el.shadowRoot!.querySelector('.mini')!.getAttribute('aria-label')).toBe('Gym 21.4°');
     });
 
-    // jsdom has no layout, so this pins the rule; it was measured in a browser.
-    it('has a 44px touch area around the chip', async () => {
-      const el = await tile({ variant: 'mini', temperature: 21.4 });
-      const css = (el.constructor as typeof ComfortBandTile).styles
-        .flat()
-        .map((s) => (s as { cssText: string }).cssText)
-        .join('\n');
-      expect(css).toMatch(/\.mini::before\s*\{[^}]*width:\s*max\(100%,\s*44px\)/);
-      expect(css).toMatch(/\.mini::before\s*\{[^}]*height:\s*max\(100%,\s*44px\)/);
+    // jsdom has no layout, so these pin the rules; they were measured in a
+    // browser: the chip stays 26px tall and takes taps 21px from its centre.
+    it('has a touch area at least 44px each way, centred on a chip that opens', () => {
+      const css = tileCss();
+      const area = rule(css, '.mini:not(.no-expand)::before');
+      expect(area).toMatch(/content:\s*''/);
+      expect(area).toMatch(/position:\s*absolute/);
+      expect(area).toMatch(/width:\s*max\(100%,\s*44px\)/);
+      expect(area).toMatch(/height:\s*max\(100%,\s*44px\)/);
+      expect(area).toMatch(/left:\s*50%/);
+      expect(area).toMatch(/top:\s*50%/);
+      expect(area).toMatch(/transform:\s*translate\(-50%,\s*-50%\)/);
+      expect(rule(css, '.mini')).toMatch(/position:\s*relative/);
+      // A compact chip doesn't open, so it doesn't take taps from around it.
+      expect(css).not.toMatch(/\.mini::before/);
+    });
+
+    it('keeps its icons small', () => {
+      expect(rule(tileCss(), '.mini ha-icon')).toMatch(/--mdc-icon-size:\s*16px/);
     });
   });
 });

@@ -58,11 +58,12 @@ export function headlineTemperature(opts: {
   useApparent: boolean;
 }): { value: number; note: string } {
   const { room, apparent, useApparent } = opts;
-  // Compared in the tenths both are shown in, so 19.8 and 19.9 differ.
+  // Compared as both are shown, so 19.8 and 19.9 differ and 21.45 and 21.4
+  // (both "21.4") don't.
   const differ =
     Number.isFinite(room) &&
     Number.isFinite(apparent) &&
-    Math.round(apparent * 10) !== Math.round(room * 10);
+    shownTenths(apparent) !== shownTenths(room);
   if (useApparent && Number.isFinite(apparent)) {
     return {
       value: apparent,
@@ -72,11 +73,21 @@ export function headlineTemperature(opts: {
   return { value: room, note: differ ? `Feels like ${apparent.toFixed(1)}°` : '' };
 }
 
-/** Where a temperature sits against a range, compared in the tenths both
- *  are shown in; null when either can't be read. */
+/**
+ * A temperature in tenths of a degree, as `toFixed(1)` shows it. That isn't
+ * always `Math.round(t * 10)`: 17.45 is stored just under the half, so it
+ * shows as 17.4, but `17.45 * 10` comes out at exactly 174.5 and rounds up.
+ */
+export function shownTenths(value: number): number {
+  return Math.round(Number(value.toFixed(1)) * 10);
+}
+
+/** Where a temperature sits against a range, compared as each is shown: the
+ *  temperature with `toFixed(1)`, the range's ends as `bandText` writes them.
+ *  Null when either can't be read. */
 export function rangePosition(temperature: number, band: Band): 'below' | 'in' | 'above' | null {
   if (![temperature, band.low, band.high].every(Number.isFinite)) return null;
-  const t = Math.round(temperature * 10);
+  const t = shownTenths(temperature);
   if (t < Math.round(band.low * 10)) return 'below';
   if (t > Math.round(band.high * 10)) return 'above';
   return 'in';

@@ -5,6 +5,7 @@ import {
   headlineTemperature,
   rangePosition,
   shiftBand,
+  shownTenths,
   statusLine,
   type StatusInput,
 } from '../src/now-status.js';
@@ -74,6 +75,11 @@ describe('headlineTemperature', () => {
       'Feels like 19.9°',
     );
     expect(headlineTemperature({ room: 21, apparent: 21.04, useApparent: false }).note).toBe('');
+    // Both shown as 21.4.
+    expect(headlineTemperature({ room: 21.45, apparent: 21.4, useApparent: false }).note).toBe('');
+    expect(headlineTemperature({ room: 21.45, apparent: 21.4, useApparent: true }).note).toBe(
+      'Feels like',
+    );
   });
 
   it('shows "feels like" when it drives control', () => {
@@ -250,6 +256,16 @@ describe('statusLine', () => {
   });
 });
 
+describe('shownTenths', () => {
+  it('rounds as toFixed(1) shows a temperature', () => {
+    expect(shownTenths(17.45)).toBe(174);
+    expect((17.45).toFixed(1)).toBe('17.4');
+    expect(shownTenths(17.46)).toBe(175);
+    expect(shownTenths(21)).toBe(210);
+    expect(shownTenths(-0.05)).toBe(-1);
+  });
+});
+
 describe('rangePosition', () => {
   const band = { low: 18, high: 23 };
 
@@ -260,6 +276,20 @@ describe('rangePosition', () => {
     expect(rangePosition(23, band)).toBe('in');
     expect(rangePosition(23.04, band)).toBe('in');
     expect(rangePosition(23.05, band)).toBe('above');
+  });
+
+  // 17.45 is stored just under the half: shown as 17.4, so below a 17.5 low.
+  it('compares a temperature as it is shown, half-tenths included', () => {
+    expect(rangePosition(17.45, { low: 17.5, high: 23 })).toBe('below');
+    expect(rangePosition(19.95, { low: 20, high: 23 })).toBe('below');
+    expect(rangePosition(20.45, { low: 20.5, high: 23 })).toBe('below');
+    expect(rangePosition(22.55, { low: 18, high: 22.5 })).toBe('above');
+  });
+
+  // Mid-ramp, a range end can sit between tenths; it's shown rounded.
+  it('compares a range end as it is shown', () => {
+    expect(rangePosition(19.8, { low: 19.84, high: 23 })).toBe('in');
+    expect(rangePosition(23.2, { low: 18, high: 23.16 })).toBe('in');
   });
 
   it("is null when the temperature or either end can't be read", () => {
