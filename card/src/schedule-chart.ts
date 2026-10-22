@@ -184,9 +184,9 @@ export class ComfortBandScheduleChart extends LitElement {
           viewBox="0 0 ${VIEW_W} ${VIEW_H}"
           preserveAspectRatio="none"
           role="img"
-          aria-label="Schedule visualization for the active profile"
+          aria-label="The comfortable range through the day"
         >
-          <title>Schedule visualization for the active profile</title>
+          <title>The comfortable range through the day</title>
           ${TEMP_TICKS.map(
             (t) =>
               svg`<line class="grid" x1="0" x2=${VIEW_W} y1=${this._tempToY(t)} y2=${this._tempToY(t)}></line>`,

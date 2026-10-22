@@ -3,8 +3,8 @@
  *
  * **v0.9.0**: list-first editor. The chart (`<comfort-band-schedule-chart>`)
  * is now a read-only visualization. The list below it is the primary
- * editor: each row has explicit Edit + Delete buttons, plus an "Add
- * transition" button in the toolbar above the list. Delete asks for
+ * editor: each row has explicit Edit + Delete buttons, plus an "Add a
+ * change" button in the toolbar above the list. A row's Delete asks for
  * inline confirmation (no more long-press surprise from v0.8.x).
  *
  * Workflow:
@@ -29,6 +29,7 @@ import '../transition-edit-dialog.js';
 import { findActiveProfileEntity } from '../helpers.js';
 import { parseTime } from '../schedule-chart.js';
 import { setSchedule, subscribeSchedule } from '../services.js';
+import { bandText, degrees, formatClock } from '../now-status.js';
 import type { HomeAssistant, Transition, UnsubscribeFunc } from '../types.js';
 import { tokens } from '../styles.js';
 
@@ -121,16 +122,8 @@ export class ComfortBandScheduleTab extends LitElement {
         margin-bottom: var(--cb-gap-sm);
       }
       .profile-label {
-        font-size: 12px;
+        font-size: 13px;
         color: var(--cb-text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
-      .profile-value {
-        font-size: 14px;
-        font-weight: 500;
-        text-transform: capitalize;
-        color: var(--cb-text-primary);
       }
       .loading,
       .error {
@@ -564,10 +557,7 @@ export class ComfortBandScheduleTab extends LitElement {
     }
 
     return html`
-      <div class="header">
-        <span class="profile-label">Active profile</span>
-        <span class="profile-value">${this._profile || '—'}</span>
-      </div>
+      ${this._renderHeader()}
       ${this._loading
         ? html`<div class="loading">Loading schedule…</div>`
         : this._error
@@ -577,18 +567,30 @@ export class ComfortBandScheduleTab extends LitElement {
                 .transitions=${this._transitions}
               ></comfort-band-schedule-chart>
               <div class="list-toolbar">
-                <button class="button primary" @click=${this._onAddClicked}>
-                  + Add transition
-                </button>
+                <button class="button primary" @click=${this._onAddClicked}>+ Add a change</button>
               </div>
               ${this._renderList()}
             `}
     `;
   }
 
+  /**
+   * Which profile's schedule this is, named as typed, where profiles are set
+   * up. Not "the room follows it": with no schedule of its own in the active
+   * profile, a room follows the default profile's.
+   */
+  private _renderHeader() {
+    const profile = this.hass ? readActiveProfile(this.hass) : null;
+    // While the select can't be read, it has no name to give.
+    if (!profile || profile === 'unavailable' || profile === 'unknown') return nothing;
+    return html`<div class="header">
+      <span class="profile-label">Schedule: ${profile}</span>
+    </div>`;
+  }
+
   private _renderList() {
     if (this._transitions.length === 0) {
-      return html`<div class="empty">No transitions yet. Use “Add transition” to create one.</div>`;
+      return html`<div class="empty">No changes yet. Use “Add a change” to create one.</div>`;
     }
     return html`
       <ul class="list" role="list">
@@ -600,9 +602,8 @@ export class ComfortBandScheduleTab extends LitElement {
   }
 
   private _renderRow(t: Transition) {
-    const ariaLabel = `Edit transition at ${t.at}, ${t.low.toFixed(1)} to ${t.high.toFixed(
-      1,
-    )} degrees`;
+    const at = formatClock(t.at, this.hass);
+    const ariaLabel = `Edit the ${at} change, ${degrees(t.low)} to ${degrees(t.high)} degrees`;
     return html`
       <li
         class="row"
@@ -613,19 +614,19 @@ export class ComfortBandScheduleTab extends LitElement {
         @click=${this._onRowClicked(t)}
         @keydown=${this._onRowKeydown(t)}
       >
-        <span class="at">${t.at}</span>
-        <span class="band">${t.low.toFixed(1)}° – ${t.high.toFixed(1)}°</span>
+        <span class="at">${at}</span>
+        <span class="band">${bandText(t)}</span>
         <span class="actions">
           <button
             class="button secondary"
-            aria-label="Edit transition at ${t.at}"
+            aria-label="Edit the ${at} change"
             @click=${this._onEditClicked(t)}
           >
             Edit
           </button>
           <button
             class="button danger"
-            aria-label="Delete transition at ${t.at}"
+            aria-label="Delete the ${at} change"
             @click=${this._onDeleteClicked(t)}
           >
             Delete
@@ -636,14 +637,15 @@ export class ComfortBandScheduleTab extends LitElement {
   }
 
   private _renderConfirmRow(t: Transition) {
+    const question = `Delete the ${formatClock(t.at, this.hass)} change?`;
     return html`
       <li
         class="row confirm"
         role="alertdialog"
-        aria-label="Delete transition at ${t.at}?"
+        aria-label=${question}
         @keydown=${this._onConfirmKeydown}
       >
-        <span class="confirm-text">Delete transition at ${t.at}?</span>
+        <span class="confirm-text">${question}</span>
         <span class="actions">
           <button class="button secondary" @click=${this._onCancelDelete}>Cancel</button>
           <button class="button danger" @click=${this._onConfirmDelete}>Delete</button>

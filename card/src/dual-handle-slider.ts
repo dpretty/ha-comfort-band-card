@@ -205,7 +205,7 @@ export class DualHandleSlider extends LitElement {
           style="left:${lowPct}%"
           tabindex="0"
           role="slider"
-          aria-label="Lower bound"
+          aria-label="Bottom of the range"
           aria-valuemin=${this.min}
           aria-valuemax=${this.high - this.step}
           aria-valuenow=${this.low}
@@ -218,7 +218,7 @@ export class DualHandleSlider extends LitElement {
           style="left:${highPct}%"
           tabindex="0"
           role="slider"
-          aria-label="Upper bound"
+          aria-label="Top of the range"
           aria-valuemin=${this.low + this.step}
           aria-valuemax=${this.max}
           aria-valuenow=${this.high}

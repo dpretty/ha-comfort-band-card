@@ -37,6 +37,43 @@ describe('band-gauge', () => {
     expect(html).not.toContain('<circle');
   });
 
+  it('says the range, the temperature and what the room is doing, without "band"', async () => {
+    const heating = await mount('band-gauge', { low: 19, high: 23, room: 21.4, action: 'heating' });
+    expect(heating.shadowRoot!.querySelector('svg')!.getAttribute('aria-label')).toBe(
+      'Comfortable range 19.0° to 23.0°, room 21.4°, heating',
+    );
+    teardown();
+    const idle = await mount('band-gauge', {
+      low: 19,
+      high: 23,
+      room: 21.4,
+      action: 'idle',
+      roomLabel: 'feels like',
+    });
+    expect(idle.shadowRoot!.querySelector('svg')!.getAttribute('aria-label')).toBe(
+      'Comfortable range 19.0° to 23.0°, feels like 21.4°',
+    );
+    teardown();
+    // Paused or on hold: no word for what it isn't doing.
+    const unknown = await mount('band-gauge', { low: 19, high: 23, room: 21, action: 'unknown' });
+    expect(unknown.shadowRoot!.querySelector('svg')!.getAttribute('aria-label')).toBe(
+      'Comfortable range 19.0° to 23.0°, room 21.0°',
+    );
+    teardown();
+    const cooling = await mount('band-gauge', { low: 19, high: 23, room: 23.4, action: 'cooling' });
+    expect(cooling.shadowRoot!.querySelector('svg')!.getAttribute('aria-label')).toBe(
+      'Comfortable range 19.0° to 23.0°, room 23.4°, cooling',
+    );
+  });
+
+  it('hides itself from screen readers when decorative', async () => {
+    const el = await mount('band-gauge', { low: 19, high: 23, room: 21, decorative: true });
+    const svg = el.shadowRoot!.querySelector('svg')!;
+    expect(svg.getAttribute('aria-hidden')).toBe('true');
+    expect(svg.hasAttribute('role')).toBe(false);
+    expect(svg.hasAttribute('aria-label')).toBe(false);
+  });
+
   it('writes a descriptive aria-label including the action', async () => {
     const el = await gauge({ low: 19, high: 23, room: 21.4, action: 'heating' });
     const aria = el.shadowRoot!.querySelector('svg')!.getAttribute('aria-label');

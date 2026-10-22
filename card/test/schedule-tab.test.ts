@@ -94,6 +94,8 @@ function makeHass(opts: FakeHassOptions = {}): FakeHass {
     },
     callService,
     callWS: vi.fn(),
+    // Times as "06:00", whatever the machine's own clock.
+    locale: { language: 'en-GB', time_format: '24' },
   };
   return {
     hass,
@@ -394,7 +396,8 @@ describe('comfort-band-schedule-tab', () => {
 
     const confirm = el.shadowRoot!.querySelector('li.row.confirm');
     expect(confirm).not.toBeNull();
-    expect(confirm!.textContent).toContain('Delete transition at 06:00?');
+    expect(confirm!.textContent).toContain('Delete the 06:00 change?');
+    expect(confirm!.getAttribute('aria-label')).toBe('Delete the 06:00 change?');
     expect(confirm!.getAttribute('role')).toBe('alertdialog');
 
     // Cancel restores the regular row; no write happened.
@@ -468,7 +471,7 @@ describe('comfort-band-schedule-tab', () => {
     const el = await tab(hass);
     const empty = el.shadowRoot!.querySelector('.empty');
     expect(empty).not.toBeNull();
-    expect(empty!.textContent).toContain('Add transition');
+    expect(empty!.textContent!.trim()).toBe('No changes yet. Use “Add a change” to create one.');
     // The Add button stays visible regardless.
     expect(el.shadowRoot!.querySelector('.list-toolbar button.primary')).not.toBeNull();
   });
@@ -910,5 +913,144 @@ describe('comfort-band-schedule-tab', () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(firstUnsub).toHaveBeenCalledTimes(1);
+  });
+
+  describe('in plain words', () => {
+    /** Text and labels a person meets: not the tab's own CSS. */
+    const shownWords = (root: ParentNode) =>
+      Array.from(root.querySelectorAll('*:not(style)'))
+        .map((n) => `${n.textContent} ${n.getAttribute('aria-label') ?? ''}`)
+        .join(' ');
+
+    const schedule = {
+      baseline: [
+        { at: '06:00', low: 20, high: 23 },
+        { at: '22:30', low: 18.5, high: 21 },
+      ],
+      current: [],
+    };
+
+    it("keeps a profile's name as typed, capitals included", async () => {
+      for (const name of ['home', 'Holiday house']) {
+        const { hass } = makeHass({ initialSchedule: schedule, active: name });
+        const el = await tab(hass);
+        expect(el.shadowRoot!.querySelector('.header')!.textContent!.trim()).toBe(
+          `Schedule: ${name}`,
+        );
+        el.remove();
+      }
+      const css = (
+        customElements.get('comfort-band-schedule-tab') as unknown as {
+          styles: Array<{ cssText: string }>;
+        }
+      ).styles
+        .flat()
+        .map((s) => s.cssText)
+        .join('\n');
+      expect(css).not.toMatch(/\.profile-label\s*\{[^}]*text-transform/);
+    });
+
+    it('names the new profile when it switches while the tab is open', async () => {
+      const fake = makeHass({ initialSchedule: schedule, active: 'home' });
+      const el = await tab(fake.hass);
+      expect(el.shadowRoot!.querySelector('.header')!.textContent!.trim()).toBe('Schedule: home');
+      fake.hass.states['select.comfort_band_profiles_active_profile'] = {
+        ...fake.hass.states['select.comfort_band_profiles_active_profile'],
+        state: 'Holiday',
+      };
+      el.hass = { ...fake.hass };
+      await new Promise((r) => setTimeout(r, 0));
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('.header')!.textContent!.trim()).toBe(
+        'Schedule: Holiday',
+      );
+    });
+
+    // Not "follows": with no schedule of its own in the active profile, a
+    // room follows the default profile's.
+    it("says whose schedule it shows, by the profile's name as typed", async () => {
+      const { hass } = makeHass({ initialSchedule: schedule, active: 'away' });
+      const el = await tab(hass);
+      expect(el.shadowRoot!.querySelector('.header')!.textContent!.trim()).toBe('Schedule: away');
+      expect(shownWords(el.shadowRoot!)).not.toMatch(/follow/i);
+    });
+
+    it.each(['unavailable', 'unknown'])(
+      'names no profile while the profile select is %s',
+      async (state) => {
+        const { hass } = makeHass({ initialSchedule: schedule, active: state });
+        const el = await tab(hass);
+        expect(el.shadowRoot!.querySelector('.header')).toBeNull();
+      },
+    );
+
+    // A change can be saved at 18.25; it's shown, and read, to the tenth.
+    it('reads a range as it shows it, to the tenth', async () => {
+      const { hass } = makeHass({
+        initialSchedule: { baseline: [{ at: '06:00', low: 18.25, high: 21.75 }], current: [] },
+      });
+      const el = await tab(hass);
+      const row = el.shadowRoot!.querySelector('li.row')!;
+      expect(row.querySelector('.band')!.textContent!.trim()).toBe('18.3–21.8°');
+      expect(row.getAttribute('aria-label')).toBe('Edit the 06:00 change, 18.3 to 21.8 degrees');
+    });
+
+    // Without a profile manager the schedule is the zone's own.
+    it("doesn't mention profiles where none are set up", async () => {
+      const { hass } = makeHass({ initialSchedule: schedule });
+      hass.devices = {};
+      hass.entities = {};
+      const el = await tab(hass);
+      expect(el.shadowRoot!.querySelector('.header')).toBeNull();
+      expect(shownWords(el.shadowRoot!)).not.toMatch(/profile/i);
+      // The zone's own schedule still loads.
+      expect(el.shadowRoot!.querySelectorAll('li.row')).toHaveLength(2);
+    });
+
+    it("lists each change at a time in HA's 12/24-hour setting, with its range", async () => {
+      const { hass } = makeHass({ initialSchedule: schedule });
+      hass.locale = { language: 'en-US', time_format: '12' };
+      const el = await tab(hass);
+      const rows = Array.from(el.shadowRoot!.querySelectorAll('li.row'));
+      expect(rows.map((r) => r.querySelector('.at')!.textContent!.trim())).toEqual([
+        '6 AM',
+        '10:30 PM',
+      ]);
+      expect(rows.map((r) => r.querySelector('.band')!.textContent!.trim())).toEqual([
+        '20–23°',
+        '18.5–21°',
+      ]);
+      expect(rows[1].getAttribute('aria-label')).toBe(
+        'Edit the 10:30 PM change, 18.5 to 21 degrees',
+      );
+      const buttons = rows[1].querySelectorAll('button');
+      expect(Array.from(buttons).map((b) => b.getAttribute('aria-label'))).toEqual([
+        'Edit the 10:30 PM change',
+        'Delete the 10:30 PM change',
+      ]);
+      expect(el.shadowRoot!.querySelector('.list-toolbar button')!.textContent!.trim()).toBe(
+        '+ Add a change',
+      );
+    });
+
+    it("asks before deleting a change, naming its time in HA's setting", async () => {
+      const { hass } = makeHass({ initialSchedule: schedule });
+      hass.locale = { language: 'en-US', time_format: '12' };
+      const el = await tab(hass);
+      const row = el.shadowRoot!.querySelectorAll('li.row')[1];
+      row.querySelector<HTMLButtonElement>('button.danger')!.click();
+      await el.updateComplete;
+      const confirm = el.shadowRoot!.querySelector('li.row.confirm')!;
+      expect(confirm.querySelector('.confirm-text')!.textContent).toBe(
+        'Delete the 10:30 PM change?',
+      );
+      expect(confirm.getAttribute('aria-label')).toBe('Delete the 10:30 PM change?');
+    });
+
+    it('never says "transition"', async () => {
+      const { hass } = makeHass({ initialSchedule: schedule });
+      const el = await tab(hass);
+      expect(shownWords(el.shadowRoot!)).not.toMatch(/transition/i);
+    });
   });
 });

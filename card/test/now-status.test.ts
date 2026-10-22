@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   bandText,
+  formatClock,
   formatTime,
   headlineTemperature,
   rangePosition,
@@ -149,14 +150,14 @@ describe('statusLine', () => {
     expect(line({ action: 'cooling', temperature: 17 }).text).toBe('Cooling · 18–23° until T+60m');
   });
 
-  it('says "idle" for a room outside its range that is not being heated or cooled', () => {
+  it('says "a bit cool" or "a bit warm" for a room outside its range that is not being heated or cooled', () => {
     expect(line({ temperature: 17.5 })).toEqual({
       kind: 'below',
-      text: 'Idle · 18–23° until T+60m',
+      text: 'A bit cool · 18–23° until T+60m',
     });
     expect(line({ temperature: 23.5 })).toEqual({
       kind: 'above',
-      text: 'Idle · 18–23° until T+60m',
+      text: 'A bit warm · 18–23° until T+60m',
     });
   });
 
@@ -208,8 +209,9 @@ describe('statusLine', () => {
     });
   });
 
-  it("doesn't call a room with no reading comfortable", () => {
-    expect(line({ temperature: NaN }).kind).toBe('idle');
+  // No word it could say truly: "Idle" was the controller's.
+  it("doesn't call a room with no reading comfortable, nor idle", () => {
+    expect(line({ temperature: NaN })).toEqual({ kind: 'idle', text: '18–23° until T+60m' });
   });
 
   it('says a paused room is not being controlled', () => {
@@ -363,5 +365,29 @@ describe('formatTime', () => {
   it("follows the language's own clock when no preference is set", () => {
     expect(formatTime(at(21, 0), { locale: { language: 'en-GB' } })).toBe('21:00');
     expect(formatTime(at(21, 0), { locale: { language: 'en-US' } })).toBe('9 PM');
+  });
+});
+
+describe('formatClock', () => {
+  const locale = (time_format: '12' | '24', language = 'en-US') => ({
+    locale: { language, time_format },
+  });
+
+  it("writes a schedule's time of day as formatTime does", () => {
+    expect(formatClock('07:00', locale('12'))).toBe('7 AM');
+    expect(formatClock('16:30', locale('12'))).toBe('4:30 PM');
+    expect(formatClock('07:00', locale('24', 'en-GB'))).toBe('07:00');
+    expect(formatClock('0:05', locale('24', 'en-GB'))).toBe('00:05');
+    expect(formatClock('12:00', locale('12', 'en-GB'))).toBe('12 pm');
+    expect(formatClock('23:59', locale('12'))).toBe('11:59 PM');
+  });
+
+  it("leaves anything that isn't a time of day as it is", () => {
+    expect(formatClock('24:00', locale('12'))).toBe('24:00');
+    expect(formatClock('07:60', locale('12'))).toBe('07:60');
+    expect(formatClock('7am', locale('12'))).toBe('7am');
+    expect(formatClock('07:00:00', locale('12'))).toBe('07:00:00');
+    expect(formatClock('at 07:00', locale('12'))).toBe('at 07:00');
+    expect(formatClock('', locale('12'))).toBe('');
   });
 });

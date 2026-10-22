@@ -558,7 +558,7 @@ describe('comfort-band-now-tab', () => {
 
     it("doesn't call a room outside its range comfortable", async () => {
       const el = await nowTab(scheduledHass(null, { 'sensor.gym_room_temperature': '18.0' }));
-      expect(statusText(el)).toBe('Idle · 19.5–22.5°');
+      expect(statusText(el)).toBe('A bit cool · 19.5–22.5°');
     });
 
     // With apparent temperature in use, "comfortable" is about how it feels.
@@ -685,6 +685,24 @@ describe('comfort-band-now-tab', () => {
         action: string;
       };
       expect(live.action).toBe('heating');
+    });
+
+    // #29: everyday surfaces don't use the controller's words.
+    it('says nothing in engineering terms', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(NOW);
+      const el = await nowTab(
+        scheduledHass(NOW + 5 * HOUR, {
+          'binary_sensor.gym_override_active': 'on',
+          'sensor.gym_override_ends': new Date(NOW + 2 * HOUR).toISOString(),
+          'sensor.gym_room_temperature': '18.0',
+        }),
+      );
+      const shown = Array.from(el.shadowRoot!.querySelectorAll('*:not(style)'))
+        .map((n) => `${n.textContent} ${n.getAttribute('aria-label') ?? ''}`)
+        .join(' ');
+      expect(shown).toContain('A bit cool · adjusted to');
+      expect(shown).not.toMatch(/\bband\b|override|driving decisions|\bidle\b/i);
     });
 
     it('is a polite live region', async () => {
@@ -900,7 +918,7 @@ describe('comfort-band-now-tab', () => {
       expect(statusText(el)).toBe('Adjusting to 30.5–35°');
       await tap(el, 'cooler');
       // Back where it started: nothing pending (the room, at 21°, is below it).
-      expect(statusText(el)).toBe('Idle · 30–34.5°');
+      expect(statusText(el)).toBe('A bit cool · 30–34.5°');
     });
 
     // Rounded first, as shown: from 30.37–34.83 the top can rise 0.2 to 35.

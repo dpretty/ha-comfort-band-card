@@ -18,17 +18,25 @@ describe('transition-edit-dialog', () => {
     expect(inputs[2].value).toBe('23.5');
   });
 
-  it('shows "Add transition" header when isNew is true', async () => {
+  it('names its fields in plain words', async () => {
     const el = await dialog({ isNew: true });
-    expect(el.shadowRoot!.querySelector('h3')!.textContent).toContain('Add');
+    const labels = Array.from(el.shadowRoot!.querySelectorAll('label')).map((l) =>
+      l.textContent!.trim(),
+    );
+    expect(labels).toEqual(['Time (HH:MM)', 'Lowest (°C)', 'Highest (°C)']);
   });
 
-  it('shows "Edit transition" + Delete button when isNew is false', async () => {
+  it('shows "Add a change" header when isNew is true', async () => {
+    const el = await dialog({ isNew: true });
+    expect(el.shadowRoot!.querySelector('h3')!.textContent).toBe('Add a change');
+  });
+
+  it('shows "Edit this change" + Delete button when isNew is false', async () => {
     const el = await dialog({
       transition: { at: '06:00', low: 19, high: 22 },
       isNew: false,
     });
-    expect(el.shadowRoot!.querySelector('h3')!.textContent).toContain('Edit');
+    expect(el.shadowRoot!.querySelector('h3')!.textContent).toBe('Edit this change');
     expect(el.shadowRoot!.querySelector('.button.danger')).not.toBeNull();
   });
 
@@ -41,6 +49,18 @@ describe('transition-edit-dialog', () => {
     expect(fire.mock.calls[0][0].detail.transition).toEqual({ at: '06:00', low: 19, high: 22 });
   });
 
+  it('says lowest and highest must be numbers', async () => {
+    const el = await dialog({ transition: { at: '06:00', low: 19, high: 22 }, isNew: false });
+    const low = el.shadowRoot!.querySelectorAll<HTMLInputElement>('input')[1];
+    low.value = '';
+    low.dispatchEvent(new Event('input'));
+    (el.shadowRoot!.querySelector('.button.primary') as HTMLButtonElement).click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('.error')!.textContent).toBe(
+      'Lowest and highest must be numbers.',
+    );
+  });
+
   it('blocks save and surfaces an error when low >= high', async () => {
     const el = await dialog({
       transition: { at: '06:00', low: 22, high: 22 },
@@ -51,7 +71,9 @@ describe('transition-edit-dialog', () => {
     (el.shadowRoot!.querySelector('.button.primary') as HTMLButtonElement).click();
     await el.updateComplete;
     expect(fire).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector('.error')!.textContent).toContain('less than high');
+    expect(el.shadowRoot!.querySelector('.error')!.textContent).toBe(
+      'Lowest must be below highest.',
+    );
   });
 
   it('blocks save and surfaces an error for invalid time format', async () => {

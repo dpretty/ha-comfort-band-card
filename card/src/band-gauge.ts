@@ -6,7 +6,7 @@
  * reflects `current_action` (red=heating, blue=cooling, grey=idle/unknown).
  */
 
-import { LitElement, html, css, svg } from 'lit';
+import { LitElement, html, css, svg, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { tokens, actionColorVar, asAction } from './styles.js';
 
@@ -27,6 +27,11 @@ export class BandGauge extends LitElement {
   @property({ type: Number }) public room = NaN;
   /** What the marker's temperature is, for screen readers. */
   @property({ type: String }) public roomLabel = 'room';
+  /** Hidden from screen readers, for a gauge inside something that says it in
+   *  words (the tile's status sentence). On the svg itself: Chromium
+   *  reads a label inside this shadow root into the name of a button around
+   *  it, even under an aria-hidden wrapper. */
+  @property({ type: Boolean }) public decorative = false;
   @property({ type: String }) public action: string | null = 'unknown';
 
   public static override styles = [
@@ -76,10 +81,17 @@ export class BandGauge extends LitElement {
 
     const fmt = (t: number) => (Number.isFinite(t) ? `${t.toFixed(1)}°` : '—');
 
-    const aria = `Comfort band gauge: low ${fmt(this.low)}, ${this.roomLabel} ${fmt(this.room)}, high ${fmt(this.high)}, action ${action}`;
+    const doing = action === 'heating' || action === 'cooling' ? `, ${action}` : '';
+    const aria = `Comfortable range ${fmt(this.low)} to ${fmt(this.high)}, ${this.roomLabel} ${fmt(this.room)}${doing}`;
 
     return html`
-      <svg viewBox="0 0 100 24" preserveAspectRatio="none" role="img" aria-label=${aria}>
+      <svg
+        viewBox="0 0 100 24"
+        preserveAspectRatio="none"
+        role=${this.decorative ? nothing : 'img'}
+        aria-label=${this.decorative ? nothing : aria}
+        aria-hidden=${this.decorative ? 'true' : nothing}
+      >
         ${svg`<rect class="track" x="0" y="10" width="100" height="4" rx="2"></rect>`}
         ${lowKnown && highKnown
           ? svg`<rect class="band" x=${bandX} y="9" width=${bandWidth} height="6" rx="3" fill=${color}></rect>`

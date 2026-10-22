@@ -8,7 +8,7 @@
  * opens the modal in response.
  */
 
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import './band-gauge.js';
 import type { ComfortBandCardVariant } from './types.js';
@@ -21,7 +21,8 @@ export class ComfortBandTile extends LitElement {
   @property({ type: String }) public zoneName = '';
   /** The temperature that drives control. */
   @property({ type: Number }) public temperature = NaN;
-  /** Whether `temperature` is "feels like", for the gauge's label. */
+  /** Whether `temperature` is "feels like": the tile's name and the chip's
+   *  label and tooltip say so. */
   @property({ type: Boolean }) public feelsLike = false;
   @property({ type: Number }) public low = NaN;
   @property({ type: Number }) public high = NaN;
@@ -145,6 +146,15 @@ export class ComfortBandTile extends LitElement {
         line-height: 1;
         min-width: 70px;
       }
+      /* Read by screen readers, not shown. */
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
       .gauge-wrap {
         flex: 1;
         min-width: 0;
@@ -199,13 +209,22 @@ export class ComfortBandTile extends LitElement {
           <div class="zone-name">${this.zoneName || '—'}</div>
         </div>
         <div class="body">
-          <div class="room-temp">${this._renderTemperature()}</div>
-          <div class="gauge-wrap">
+          <!-- The tile is named from what it shows, in order: "Bedroom feels
+               like 18.6°. Heating · …". "feels like" and the full stop are for
+               screen readers only. The gauge is decorative here: the status
+               sentence gives the range, except for a paused room or one on
+               hold, where it isn't being kept to. -->
+          <div class="room-temp">
+            ${this.feelsLike
+              ? html`<span class="sr-only"> feels like </span>`
+              : nothing}${this._renderTemperature()}<span class="sr-only">. </span>
+          </div>
+          <div class="gauge-wrap" aria-hidden="true">
             <band-gauge
+              decorative
               .low=${this.low}
               .high=${this.high}
               .room=${this.temperature}
-              .roomLabel=${this.feelsLike ? 'feels like' : 'room'}
               .action=${this.action}
             ></band-gauge>
           </div>
@@ -220,6 +239,13 @@ export class ComfortBandTile extends LitElement {
     `;
   }
 
+  /** The chip's name for screen readers, and its tooltip: the zone, the
+   *  temperature and the status sentence. The chip shows only the number. */
+  private _label(): string {
+    const name = `${this.zoneName || 'Zone'}${this.feelsLike ? ', feels like' : ''} ${this._renderTemperature()}`;
+    return this.statusText ? `${name}. ${this.statusText}` : name;
+  }
+
   private _renderMini() {
     // The tint repeats what the heating or cooling icon already says.
     const tint = this.badges.includes('heating')
@@ -228,8 +254,7 @@ export class ComfortBandTile extends LitElement {
         ? 'cooling'
         : null;
     const style = tint ? `--cb-mini-bg:${actionColorVar(tint)}` : '';
-    const name = `${this.zoneName || 'Zone'} ${this._renderTemperature()}`;
-    const label = this.statusText ? `${name}. ${this.statusText}` : name;
+    const label = this._label();
     return html`
       <div
         class="mini ${this.noExpand ? 'no-expand' : ''} ${tint ? 'tinted' : ''}"

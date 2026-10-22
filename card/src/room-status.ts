@@ -139,7 +139,7 @@ export const BADGE_ICONS: Record<Badge, string> = {
  * so anything unusual stands out. A paused room shows only that it's paused,
  * and a room on hold only its sensor trouble; otherwise sensor trouble, then
  * heating or cooling (or, when it's doing neither, which side of its range
- * it's on), then whether someone has adjusted it.
+ * it's on), then whether someone has adjusted it for a while.
  */
 export function roomBadges(r: RoomReadings): Badge[] {
   if (!r.enabled) return ['paused'];
@@ -152,7 +152,9 @@ export function roomBadges(r: RoomReadings): Badge[] {
     const position = rangePosition(r.temperature, r.band);
     if (position === 'below' || position === 'above') badges.push(position);
   }
-  if (r.overrideActive) badges.push('adjusted');
+  // With no schedule, an adjustment's range stays when it "ends", so there's
+  // nothing temporary to flag.
+  if (r.overrideActive && r.scheduled !== false) badges.push('adjusted');
   return badges;
 }
 

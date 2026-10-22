@@ -24,6 +24,25 @@ function rule(css: string, selector: string): string {
   return match[1];
 }
 
+/** The text a screen reader takes from an element's content: everything not
+ *  under aria-hidden, in order, whitespace collapsed. */
+function readable(root: Element): string {
+  const parts: string[] = [];
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) parts.push(node.textContent ?? '');
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const element = node as Element;
+    if (element.getAttribute('aria-hidden') === 'true') return;
+    if (element.tagName === 'STYLE') return;
+    // Block-level boxes are separate words.
+    parts.push(' ');
+    element.childNodes.forEach(walk);
+    parts.push(' ');
+  };
+  root.childNodes.forEach(walk);
+  return parts.join('').replace(/\s+/g, ' ').replace(/ \./g, '.').trim();
+}
+
 function badgesOf(el: ComfortBandTile): Array<{ badge: string | null; icon: string | null }> {
   return Array.from(el.shadowRoot!.querySelectorAll('.mini ha-icon')).map((i) => ({
     badge: i.getAttribute('data-badge'),
@@ -134,12 +153,53 @@ describe('comfort-band-tile', () => {
     expect(gauge.action).toBe('cooling');
   });
 
-  it('labels the gauge\'s marker "feels like" when that is the temperature shown', async () => {
-    const el = await tile({ temperature: 22.4, feelsLike: true });
+  // Named from its content, in the order shown. jsdom computes no names, so
+  // this walks what a screen reader would take: text not under aria-hidden.
+  // Checked in Chromium and WebKit's accessibility trees as well.
+  it('is named "zone, feels like temperature. status", in the order shown', async () => {
+    const el = await tile({
+      zoneName: 'Lounge',
+      temperature: 23.7,
+      feelsLike: true,
+      statusKind: 'above',
+      statusText: 'A bit warm · 19–23°',
+    });
+    const t = el.shadowRoot!.querySelector('.tile')!;
+    expect(t.hasAttribute('aria-label')).toBe(false);
+    expect(readable(t)).toBe('Lounge feels like 23.7°. A bit warm · 19–23°');
+    teardown();
+    const room = await tile({
+      zoneName: 'Gym',
+      temperature: 21,
+      statusText: 'Comfortable · 19–23°',
+    });
+    expect(readable(room.shadowRoot!.querySelector('.tile')!)).toBe(
+      'Gym 21.0°. Comfortable · 19–23°',
+    );
+  });
+
+  it('shows "feels like" only to screen readers', async () => {
+    const el = await tile({ temperature: 23.7, feelsLike: true });
+    const hidden = Array.from(el.shadowRoot!.querySelectorAll('.room-temp .sr-only'));
+    expect(hidden.map((n) => n.textContent)).toEqual([' feels like ', '. ']);
+    expect(rule(tileCss(), '.sr-only')).toMatch(/clip-path:\s*inset\(50%\)/);
+    expect(rule(tileCss(), '.sr-only')).toMatch(/position:\s*absolute/);
+  });
+
+  // The status sentence gives the range; and Chromium reads a label inside
+  // the gauge's shadow root into the tile's name even under aria-hidden.
+  it('makes its gauge decorative', async () => {
+    const el = await tile({ temperature: 21, low: 19, high: 23 });
     const gauge = el.shadowRoot!.querySelector('band-gauge') as HTMLElement & {
-      roomLabel: string;
+      decorative: boolean;
+      updateComplete: Promise<boolean>;
     };
-    expect(gauge.roomLabel).toBe('feels like');
+    expect(gauge.decorative).toBe(true);
+    expect(el.shadowRoot!.querySelector('.gauge-wrap')!.getAttribute('aria-hidden')).toBe('true');
+    await gauge.updateComplete;
+    const svg = gauge.shadowRoot!.querySelector('svg')!;
+    expect(svg.getAttribute('aria-hidden')).toBe('true');
+    expect(svg.hasAttribute('aria-label')).toBe(false);
   });
 
   describe('mini variant', () => {
@@ -258,6 +318,20 @@ describe('comfort-band-tile', () => {
         'Gym 21.4°. Heating · adjusted to 20–23° until 4:30 pm',
       );
       expect(mini.getAttribute('title')).toBe(mini.getAttribute('aria-label'));
+    });
+
+    it('says "feels like" in its label and tooltip, but not on the chip', async () => {
+      const el = await tile({
+        variant: 'mini',
+        zoneName: 'Gym',
+        temperature: 23.7,
+        feelsLike: true,
+        statusText: 'Comfortable · 19.5–24°',
+      });
+      const mini = el.shadowRoot!.querySelector('.mini')!;
+      expect(mini.getAttribute('aria-label')).toBe('Gym, feels like 23.7°. Comfortable · 19.5–24°');
+      expect(mini.getAttribute('title')).toBe(mini.getAttribute('aria-label'));
+      expect(mini.textContent!.trim()).toBe('23.7°');
     });
 
     it('says just the zone and temperature until there is a status', async () => {
