@@ -31,10 +31,14 @@ function makeHass(zone: string): HomeAssistant {
     name: null,
   });
 
-  const state = (entityId: string, value: string): HassEntity => ({
+  const state = (
+    entityId: string,
+    value: string,
+    attributes: Record<string, unknown> = {},
+  ): HassEntity => ({
     entity_id: entityId,
     state: value,
-    attributes: {},
+    attributes,
     last_changed: new Date().toISOString(),
     last_updated: new Date().toISOString(),
   });
@@ -46,6 +50,11 @@ function makeHass(zone: string): HomeAssistant {
     entity('current_action', `sensor.${zone}_current_action`),
     entity('override_active', `binary_sensor.${zone}_override_active`),
     entity('override_ends', `sensor.${zone}_override_ends`),
+    entity('apparent_temperature', `sensor.${zone}_apparent_temperature`),
+    entity('use_apparent_temperature', `switch.${zone}_use_apparent_temperature`),
+    entity('enabled', `switch.${zone}_enabled`),
+    entity('room_sensor_unavailable', `binary_sensor.${zone}_room_sensor_unavailable`),
+    entity('next_band_change', `sensor.${zone}_next_band_change`),
   ];
 
   return {
@@ -59,6 +68,16 @@ function makeHass(zone: string): HomeAssistant {
         'off',
       ),
       [`sensor.${zone}_override_ends`]: state(`sensor.${zone}_override_ends`, 'unknown'),
+      [`sensor.${zone}_apparent_temperature`]: state(`sensor.${zone}_apparent_temperature`, '22.4'),
+      [`switch.${zone}_use_apparent_temperature`]: state(
+        `switch.${zone}_use_apparent_temperature`,
+        'off',
+      ),
+      [`switch.${zone}_enabled`]: state(`switch.${zone}_enabled`, 'on'),
+      [`binary_sensor.${zone}_room_sensor_unavailable`]: state(
+        `binary_sensor.${zone}_room_sensor_unavailable`,
+        'off',
+      ),
     },
     devices: { [device.id]: device },
     entities: Object.fromEntries(entities.map((e) => [e.entity_id, e])),
@@ -77,6 +96,22 @@ async function card(zone: string, hass: HomeAssistant): Promise<ComfortBandCard>
 }
 
 type TileProbe = HTMLElement & { zoneName: string };
+
+type TileProps = HTMLElement & {
+  zoneName: string;
+  temperature: number;
+  feelsLike: boolean;
+  low: number;
+  high: number;
+  action: string;
+  statusKind: string;
+  statusText: string;
+  badges: string[];
+};
+
+function tileOf(el: ComfortBandCard): TileProps {
+  return el.shadowRoot!.querySelector('comfort-band-tile') as TileProps;
+}
 
 async function cardWith(
   config: { zone: string; name?: unknown },
@@ -210,19 +245,81 @@ describe('comfort-band-card', () => {
   it('renders a tile populated from live entity states', async () => {
     const hass = makeHass('gym');
     const el = await card('gym', hass);
-    const tile = el.shadowRoot!.querySelector('comfort-band-tile') as HTMLElement & {
-      zoneName: string;
-      roomTemp: number;
-      low: number;
-      high: number;
-      action: string;
-    };
-    expect(tile).not.toBeNull();
-    expect(tile.zoneName).toBe('Gym');
-    expect(tile.roomTemp).toBeCloseTo(21.3, 1);
-    expect(tile.low).toBeCloseTo(19.5, 1);
-    expect(tile.high).toBeCloseTo(22.5, 1);
-    expect(tile.action).toBe('idle');
+    const t = tileOf(el);
+    expect(t).not.toBeNull();
+    expect(t.zoneName).toBe('Gym');
+    expect(t.temperature).toBe(21.3);
+    expect(t.feelsLike).toBe(false);
+    expect(t.low).toBe(19.5);
+    expect(t.high).toBe(22.5);
+    expect(t.action).toBe('idle');
+    expect(t.statusKind).toBe('comfortable');
+    expect(t.statusText).toBe('Comfortable · 19.5–22.5°');
+    expect(t.badges).toEqual([]);
+  });
+
+  // The tile shows what the Now tab shows large.
+  it('gives the tile the temperature that drives control', async () => {
+    const hass = makeHass('gym');
+    hass.states['switch.gym_use_apparent_temperature'].state = 'on';
+    const el = await card('gym', hass);
+    expect(tileOf(el).temperature).toBe(22.4);
+    expect(tileOf(el).feelsLike).toBe(true);
+  });
+
+  it("tells the tile when the schedule next changes the room's range", async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 22, 10, 0));
+    try {
+      const hass = makeHass('gym');
+      hass.locale = { language: 'en-GB', time_format: '24' };
+      hass.states['sensor.gym_next_band_change'] = {
+        entity_id: 'sensor.gym_next_band_change',
+        state: new Date(2026, 9, 22, 17, 0).toISOString(),
+        attributes: { scheduled: true },
+        last_changed: '',
+        last_updated: '',
+      };
+      const el = await card('gym', hass);
+      expect(tileOf(el).statusText).toBe('Comfortable · 19.5–22.5° until 17:00');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A paused zone still works out what it would do, but doesn't do it.
+  it("doesn't colour a paused room as heating", async () => {
+    const hass = makeHass('gym');
+    hass.states['switch.gym_enabled'].state = 'off';
+    hass.states['sensor.gym_current_action'].state = 'heating';
+    const el = await card('gym', hass);
+    expect(tileOf(el).action).toBe('unknown');
+    expect(tileOf(el).statusKind).toBe('paused');
+    expect(tileOf(el).badges).toEqual(['paused']);
+  });
+
+  it('flags a room sensor that is offline while a stand-in drives control', async () => {
+    const hass = makeHass('gym');
+    hass.states['binary_sensor.gym_room_sensor_unavailable'].state = 'on';
+    hass.states['sensor.gym_room_temperature'].attributes = { source: 'climate' };
+    hass.states['sensor.gym_current_action'].state = 'heating';
+    const el = await card('gym', hass);
+    expect(tileOf(el).action).toBe('heating');
+    expect(tileOf(el).statusKind).toBe('sensor');
+    expect(tileOf(el).statusText).toBe('Room sensor offline · Heating · 19.5–22.5°');
+    expect(tileOf(el).badges).toEqual(['sensor', 'heating']);
+  });
+
+  it('says control is on hold when the room sensor is offline with nothing standing in', async () => {
+    const hass = makeHass('gym');
+    hass.states['binary_sensor.gym_room_sensor_unavailable'].state = 'on';
+    hass.states['sensor.gym_room_temperature'].state = 'unknown';
+    hass.states['sensor.gym_current_action'].state = 'heating';
+    const el = await card('gym', hass);
+    expect(tileOf(el).temperature).toBeNaN();
+    expect(tileOf(el).action).toBe('unknown');
+    expect(tileOf(el).statusText).toBe('On hold: the room sensor is offline');
+    expect(tileOf(el).badges).toEqual(['sensor']);
   });
 
   it('shows a placeholder when the zone device is not registered', async () => {
@@ -252,18 +349,12 @@ describe('comfort-band-card', () => {
     expect(el.getCardSize()).toBe(1);
   });
 
-  it('forwards override state from binary_sensor + sensor pair', async () => {
+  it('says a room is adjusted, and marks it on the chip', async () => {
     const hass = makeHass('gym');
-    const future = new Date(Date.now() + 60 * 60_000).toISOString();
     hass.states['binary_sensor.gym_override_active'].state = 'on';
-    hass.states['sensor.gym_override_ends'].state = future;
-
+    hass.states['sensor.gym_current_action'].state = 'cooling';
     const el = await card('gym', hass);
-    const tile = el.shadowRoot!.querySelector('comfort-band-tile') as HTMLElement & {
-      overrideActive: boolean;
-      overrideEnds: string | null;
-    };
-    expect(tile.overrideActive).toBe(true);
-    expect(tile.overrideEnds).toBe(future);
+    expect(tileOf(el).statusText).toBe('Cooling · adjusted to 19.5–22.5°');
+    expect(tileOf(el).badges).toEqual(['cooling', 'adjusted']);
   });
 });

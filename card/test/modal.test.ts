@@ -36,6 +36,7 @@ function makeEntities(zone = 'gym'): ZoneEntities {
     nextBandChange: `sensor.${zone}_next_band_change`,
     currentAction: `sensor.${zone}_current_action`,
     overrideActive: `binary_sensor.${zone}_override_active`,
+    roomSensorUnavailable: `binary_sensor.${zone}_room_sensor_unavailable`,
     manualLow: `number.${zone}_manual_low`,
     manualHigh: `number.${zone}_manual_high`,
     overrideHours: `number.${zone}_override_hours`,

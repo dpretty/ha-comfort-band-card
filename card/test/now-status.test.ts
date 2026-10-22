@@ -3,6 +3,7 @@ import {
   bandText,
   formatTime,
   headlineTemperature,
+  rangePosition,
   shiftBand,
   statusLine,
   type StatusInput,
@@ -106,6 +107,7 @@ describe('statusLine', () => {
   const NOW = Date.parse('2026-10-22T10:00:00Z');
   const base: StatusInput = {
     enabled: true,
+    sensor: 'ok',
     action: 'idle',
     temperature: 20,
     band: { low: 18, high: 23 },
@@ -126,7 +128,14 @@ describe('statusLine', () => {
   it('counts the range ends as inside it', () => {
     expect(line({ temperature: 18 }).kind).toBe('comfortable');
     expect(line({ temperature: 23 }).kind).toBe('comfortable');
-    expect(line({ temperature: 23.1 }).kind).toBe('idle');
+    expect(line({ temperature: 23.1 }).kind).toBe('above');
+  });
+
+  // 23.04 is shown as 23.0, inside an 18–23° range.
+  it('judges comfort in the tenths shown', () => {
+    expect(line({ temperature: 23.04 }).kind).toBe('comfortable');
+    expect(line({ temperature: 17.96 }).kind).toBe('comfortable');
+    expect(line({ temperature: 23.06 }).kind).toBe('above');
   });
 
   it('names heating and cooling whatever the temperature', () => {
@@ -136,7 +145,11 @@ describe('statusLine', () => {
 
   it('says "idle" for a room outside its range that is not being heated or cooled', () => {
     expect(line({ temperature: 17.5 })).toEqual({
-      kind: 'idle',
+      kind: 'below',
+      text: 'Idle · 18–23° until T+60m',
+    });
+    expect(line({ temperature: 23.5 })).toEqual({
+      kind: 'above',
       text: 'Idle · 18–23° until T+60m',
     });
   });
@@ -198,6 +211,34 @@ describe('statusLine', () => {
       kind: 'paused',
       text: 'Paused: not controlling this room',
     });
+    expect(line({ enabled: false, sensor: 'offline' }).kind).toBe('paused');
+  });
+
+  it('leads with the sensor while a stand-in reading drives control', () => {
+    expect(line({ sensor: 'stand-in', action: 'heating' })).toEqual({
+      kind: 'sensor',
+      text: 'Room sensor offline · Heating · 18–23° until T+60m',
+    });
+    expect(line({ sensor: 'stand-in', action: 'unknown', overrideActive: true }).text).toBe(
+      'Room sensor offline · Adjusted to 18–23°',
+    );
+  });
+
+  it('says control is on hold with no room reading', () => {
+    expect(line({ sensor: 'offline', temperature: NaN, action: 'heating' })).toEqual({
+      kind: 'sensor',
+      text: 'On hold: the room sensor is offline',
+    });
+    expect(line({ sensor: 'no-reading', temperature: NaN })).toEqual({
+      kind: 'sensor',
+      text: 'On hold: no room temperature reading',
+    });
+    // Before the range: it's the reading that's missing.
+    expect(line({ sensor: 'offline', band: { low: NaN, high: NaN } }).kind).toBe('sensor');
+  });
+
+  it('puts a change made on the card before sensor trouble', () => {
+    expect(line({ sensor: 'offline', doing: 'Going back to the schedule' }).kind).toBe('adjusting');
   });
 
   it("says when the range can't be read", () => {
@@ -206,6 +247,25 @@ describe('statusLine', () => {
       text: "Can't read this room's range",
     });
     expect(line({ band: { low: 18, high: NaN } }).text).toBe("Can't read this room's range");
+  });
+});
+
+describe('rangePosition', () => {
+  const band = { low: 18, high: 23 };
+
+  it('says which side of the range a temperature is, in the tenths shown', () => {
+    expect(rangePosition(17.9, band)).toBe('below');
+    expect(rangePosition(17.96, band)).toBe('in');
+    expect(rangePosition(18, band)).toBe('in');
+    expect(rangePosition(23, band)).toBe('in');
+    expect(rangePosition(23.04, band)).toBe('in');
+    expect(rangePosition(23.05, band)).toBe('above');
+  });
+
+  it("is null when the temperature or either end can't be read", () => {
+    expect(rangePosition(NaN, band)).toBeNull();
+    expect(rangePosition(20, { low: NaN, high: 23 })).toBeNull();
+    expect(rangePosition(20, { low: 18, high: NaN })).toBeNull();
   });
 });
 

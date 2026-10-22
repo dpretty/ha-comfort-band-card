@@ -74,8 +74,3 @@ export function asAction(value: unknown): ComfortBandAction {
   if (value === 'heating' || value === 'cooling' || value === 'idle') return value;
   return 'unknown';
 }
-
-/** Display label for an action (used in chips and a11y). */
-export function actionLabel(action: ComfortBandAction): string {
-  return action.charAt(0).toUpperCase() + action.slice(1);
-}
