@@ -8,7 +8,9 @@ import type { HomeAssistant } from './types.js';
 
 /** One tap of Warmer or Cooler moves the whole range by this much. */
 export const SHIFT_STEP = 0.5;
-/** The schedule editor's limits; Warmer and Cooler stop at them. */
+/** The schedule editor's limits. Warmer and Cooler stop at them: neither
+ *  takes a range past one, and neither moves a range already past one any
+ *  further that way. */
 export const SHIFT_MIN_LOW = 10;
 export const SHIFT_MAX_HIGH = 35;
 
@@ -29,13 +31,14 @@ function degrees(value: number): string {
 
 /**
  * The range moved `steps` taps warmer (positive) or cooler (negative), keeping
- * its width, and stopping at the schedule editor's limits rather than passing
- * them.
+ * its width. Warmer stops where the top reaches 35, Cooler where the bottom
+ * reaches 10; only ever in the direction tapped, so a range already past a
+ * limit (a frost-protection 7°, say) stays where it is rather than jumping.
  */
 export function shiftBand(base: Band, steps: number): Band {
   let delta = steps * SHIFT_STEP;
-  delta = Math.min(delta, SHIFT_MAX_HIGH - base.high);
-  delta = Math.max(delta, SHIFT_MIN_LOW - base.low);
+  if (delta > 0) delta = Math.max(0, Math.min(delta, SHIFT_MAX_HIGH - base.high));
+  if (delta < 0) delta = Math.min(0, Math.max(delta, SHIFT_MIN_LOW - base.low));
   return { low: round1(base.low + delta), high: round1(base.high + delta) };
 }
 
@@ -54,8 +57,11 @@ export function headlineTemperature(opts: {
   useApparent: boolean;
 }): { value: number; note: string } {
   const { room, apparent, useApparent } = opts;
+  // Compared in the tenths both are shown in, so 19.8 and 19.9 differ.
   const differ =
-    Number.isFinite(room) && Number.isFinite(apparent) && Math.abs(apparent - room) >= 0.1;
+    Number.isFinite(room) &&
+    Number.isFinite(apparent) &&
+    Math.round(apparent * 10) !== Math.round(room * 10);
   if (useApparent && Number.isFinite(apparent)) {
     return {
       value: apparent,
@@ -97,8 +103,8 @@ export interface StatusInput {
   scheduled: boolean | null;
   /** When the schedule next changes the band, in ms, or null. */
   nextChange: number | null;
-  /** A change made on the card that hasn't shown up yet. */
-  pending: Band | null;
+  /** What a change made on the card is doing, until it has gone through. */
+  doing: string | null;
   now: number;
   formatTime: (ms: number) => string;
 }
@@ -110,7 +116,7 @@ export interface StatusInput {
  * zone's band from then on, so it doesn't end.
  */
 export function statusLine(s: StatusInput): { kind: StatusKind; text: string } {
-  if (s.pending) return { kind: 'adjusting', text: `Adjusting to ${bandText(s.pending)}` };
+  if (s.doing) return { kind: 'adjusting', text: s.doing };
   if (!s.enabled) return { kind: 'paused', text: 'Paused: not controlling this room' };
   if (!Number.isFinite(s.band.low) || !Number.isFinite(s.band.high)) {
     return { kind: 'none', text: "Can't read this room's range" };
@@ -158,7 +164,8 @@ export function formatTime(ms: number, hass?: Pick<HomeAssistant, 'locale'>): st
   const options: Intl.DateTimeFormatOptions = { hour: 'numeric' };
   if (pref === '12') options.hour12 = true;
   if (pref === '24') options.hour12 = false;
-  const language = hass?.locale?.language;
+  // 'system' follows the browser's own locale, as HA's frontend does.
+  const language = pref === 'system' ? undefined : hass?.locale?.language;
   const cycle = new Intl.DateTimeFormat(language, options).resolvedOptions().hourCycle;
   const twelveHour = cycle === 'h11' || cycle === 'h12';
   if (!twelveHour) options.hour = '2-digit';

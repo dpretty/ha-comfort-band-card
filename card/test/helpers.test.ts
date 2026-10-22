@@ -50,6 +50,7 @@ const ALL_KEYS = [
   'effective_high',
   'room_temperature',
   'override_ends',
+  'next_band_change',
   'current_action',
   'override_active',
   'manual_low',
@@ -77,6 +78,7 @@ describe('findZoneEntities', () => {
     expect(out.manualLow).toBe('sensor.gym_manual_low');
     expect(out.cancelOverride).toBe('sensor.gym_cancel_override');
     expect(out.enabled).toBe('sensor.gym_enabled');
+    expect(out.nextBandChange).toBe('sensor.gym_next_band_change');
   });
 
   it('resolves entities even when entity_ids have collision suffixes (`_2`)', () => {

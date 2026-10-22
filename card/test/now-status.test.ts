@@ -30,6 +30,22 @@ describe('shiftBand', () => {
     expect(shiftBand({ low: 10.5, high: 15 }, -3)).toEqual({ low: 10, high: 14.5 });
   });
 
+  // A frost-protection or away band can sit past a limit; a tap must never
+  // move it the other way, nor further past the limit.
+  it('never moves a range against the tap, nor further past a limit', () => {
+    expect(shiftBand({ low: 7, high: 32 }, -1)).toEqual({ low: 7, high: 32 });
+    expect(shiftBand({ low: 7, high: 32 }, 1)).toEqual({ low: 7.5, high: 32.5 });
+    expect(shiftBand({ low: 20, high: 37 }, 1)).toEqual({ low: 20, high: 37 });
+    expect(shiftBand({ low: 20, high: 37 }, -1)).toEqual({ low: 19.5, high: 36.5 });
+    // Wider than the limits allow: each direction still only goes its way.
+    expect(shiftBand({ low: 8, high: 34 }, -1)).toEqual({ low: 8, high: 34 });
+    expect(shiftBand({ low: 8, high: 34 }, 3)).toEqual({ low: 9, high: 35 });
+  });
+
+  it('rounds a range clamped from a fractional base to the tenth', () => {
+    expect(shiftBand({ low: 30.37, high: 34.83 }, 1)).toEqual({ low: 30.5, high: 35 });
+  });
+
   it('keeps a fractional band to the tenth', () => {
     expect(shiftBand({ low: 18.4, high: 22.8 }, 1)).toEqual({ low: 18.9, high: 23.3 });
   });
@@ -43,11 +59,15 @@ describe('headlineTemperature', () => {
     });
   });
 
-  it('notes "feels like" when it differs by a tenth or more', () => {
+  it('notes "feels like" when it differs in the tenths shown', () => {
     expect(headlineTemperature({ room: 21, apparent: 21.1, useApparent: false }).note).toBe(
       'Feels like 21.1°',
     );
-    expect(headlineTemperature({ room: 21, apparent: 21.05, useApparent: false }).note).toBe('');
+    // 19.9 - 19.8 is just under 0.1 in floating point; shown, they differ.
+    expect(headlineTemperature({ room: 19.8, apparent: 19.9, useApparent: false }).note).toBe(
+      'Feels like 19.9°',
+    );
+    expect(headlineTemperature({ room: 21, apparent: 21.04, useApparent: false }).note).toBe('');
   });
 
   it('shows "feels like" when it drives control', () => {
@@ -82,7 +102,7 @@ describe('statusLine', () => {
     overrideEnds: null,
     scheduled: true,
     nextChange: NOW + 3_600_000,
-    pending: null,
+    doing: null,
     now: NOW,
     formatTime: (ms) => `T+${(ms - NOW) / 60_000}m`,
   };
@@ -147,10 +167,14 @@ describe('statusLine', () => {
   });
 
   it('shows a change made on the card before anything else', () => {
-    expect(line({ pending: { low: 19, high: 24 }, enabled: false })).toEqual({
+    expect(line({ doing: 'Adjusting to 19–24°', enabled: false })).toEqual({
       kind: 'adjusting',
       text: 'Adjusting to 19–24°',
     });
+  });
+
+  it("doesn't call a room with no reading comfortable", () => {
+    expect(line({ temperature: NaN }).kind).toBe('idle');
   });
 
   it('says a paused room is not being controlled', () => {
@@ -187,6 +211,20 @@ describe('formatTime', () => {
   it("follows HA's 12/24-hour setting over the language's own clock", () => {
     expect(formatTime(at(21, 0), locale('12', 'en-GB'))).toBe('9 pm');
     expect(formatTime(at(21, 0), locale('24', 'en-US'))).toBe('21:00');
+  });
+
+  it("follows the browser's own clock for HA's 'system' setting", () => {
+    // A language whose clock differs from the browser's, so following it
+    // would show.
+    const cycle = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions()
+      .hourCycle;
+    const browser12 = cycle === 'h11' || cycle === 'h12';
+    const other = browser12 ? 'en-GB' : 'en-US';
+    const expected = formatTime(at(21, 0));
+    expect(formatTime(at(21, 0), { locale: { language: other, time_format: 'system' } })).toBe(
+      expected,
+    );
+    expect(formatTime(at(21, 0), { locale: { language: other } })).not.toBe(expected);
   });
 
   it("follows the language's own clock when no preference is set", () => {
