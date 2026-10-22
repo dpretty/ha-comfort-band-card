@@ -89,7 +89,7 @@ describe('comfort-band-settings-tab', () => {
     const comfort = await settingsTab(hass);
     const comfortToggles = comfort.shadowRoot!.querySelectorAll('button[role="switch"]');
     expect(Array.from(comfortToggles).map((t) => t.getAttribute('aria-label'))).toEqual([
-      'Use "feels like"',
+      'Use “feels like”',
     ]);
     expect(comfortToggles[0].getAttribute('aria-checked')).toBe('false');
     comfort.remove();
@@ -204,6 +204,26 @@ describe('comfort-band-settings-tab', () => {
     expect(await text(withSensor(null))).toBe('sensor.gym_humidity');
   });
 
+  it('formats the humidity reading as HA does, where the frontend can', async () => {
+    const hass = makeHass({
+      states: {
+        'sensor.gym_room_temperature': {
+          state: '21.0',
+          attributes: { humidity_sensor: 'sensor.gym_humidity' },
+        },
+        'sensor.gym_humidity': {
+          state: '54.29999923706055',
+          attributes: { friendly_name: 'Gym humidity', unit_of_measurement: '%' },
+        },
+      },
+    });
+    hass.formatEntityState = (s) => `${Number(s.state).toFixed(1)}%`;
+    const el = await settingsTab(hass);
+    expect(el.shadowRoot!.querySelector('.info-value')!.textContent!.trim()).toBe(
+      'Gym humidity · 54.3%',
+    );
+  });
+
   it('shows a "Not configured" hint when no humidity sensor is set', async () => {
     const el = await settingsTab(makeHass());
     const info = el.shadowRoot!.querySelector('.info-value');
@@ -280,12 +300,32 @@ describe('comfort-band-settings-tab', () => {
       learningEnabled: null,
       useApparentTemperature: null,
     });
-    for (const section of ['comfort', 'automation'] as const) {
+    for (const [section, subject] of [
+      ['comfort', '“Feels like”'],
+      ['automation', 'Learning'],
+    ] as const) {
       const el = await settingsTab(makeHass(), entities, 'gym', section);
       expect(el.shadowRoot!.querySelector('button[role="switch"]')).toBeNull();
-      expect(el.shadowRoot!.querySelector('.upgrade-hint')!.textContent).toContain('v0.4.0');
+      expect(
+        el.shadowRoot!.querySelector('.upgrade-hint')!.textContent!.replace(/\s+/g, ' ').trim(),
+      ).toBe(`${subject} needs the comfort_band integration v0.4.0 or later.`);
       el.remove();
     }
+  });
+
+  // Each section needs only its own switch: one disabled entity mustn't
+  // hide the other, nor hand a null entity to switch.turn_on.
+  it('shows each section by its own switch alone', async () => {
+    const noLearning = makeEntities('gym', { learningEnabled: null });
+    const comfort = await settingsTab(makeHass(), noLearning, 'gym', 'comfort');
+    expect(comfort.shadowRoot!.querySelectorAll('button[role="switch"]')).toHaveLength(1);
+    comfort.remove();
+    const automation = await settingsTab(makeHass(), noLearning, 'gym', 'automation');
+    expect(automation.shadowRoot!.querySelector('button[role="switch"]')).toBeNull();
+    automation.remove();
+    const noApparent = makeEntities('gym', { useApparentTemperature: null });
+    const learning = await settingsTab(makeHass(), noApparent, 'gym', 'automation');
+    expect(learning.shadowRoot!.querySelectorAll('button[role="switch"]')).toHaveLength(1);
   });
 
   // The integration gates the predictor (and MPC) on `learning_enabled`. The

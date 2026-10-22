@@ -115,7 +115,7 @@ describe('comfort-band-advanced-tab', () => {
   it('folds its sections away, each with a summary of what is inside', async () => {
     const el = await advancedTab();
     expect(sections(el)).toEqual([
-      { id: 'comfort', name: 'Comfort', summary: 'Going by “feels like”', open: false },
+      { id: 'comfort', name: 'Comfort', summary: '“Feels like” on', open: false },
       { id: 'automation', name: 'Automation', summary: 'Learning off', open: false },
       { id: 'schedules', name: 'Schedules', summary: 'No profiles set up', open: false },
       { id: 'history', name: 'History', summary: 'Last 24 hours', open: false },
@@ -130,11 +130,16 @@ describe('comfort-band-advanced-tab', () => {
       ),
     );
     expect(sections(el).map((s) => s.summary)).toEqual([
-      'Going by the room’s reading',
+      '“Feels like” off',
       'Learning on',
       'Profile: home',
       'Last 24 hours',
     ]);
+  });
+
+  it("doesn't name a profile while the select says unknown", async () => {
+    const el = await advancedTab(makeHass({}, { profile: 'unknown' }));
+    expect(sections(el)[2].summary).toBeNull();
   });
 
   it("says nothing it can't read", async () => {
@@ -169,6 +174,27 @@ describe('comfort-band-advanced-tab', () => {
     expect(section(el, 'schedules').querySelector('comfort-band-profiles-tab')).not.toBeNull();
   });
 
+  // Without these, a section is blank or the slider silently sends nothing.
+  it('hands each section what it needs', async () => {
+    const hass = makeHass();
+    const el = await advancedTab(hass);
+    const entities = (el as unknown as { entities: ZoneEntities }).entities;
+    type Child = HTMLElement & { hass?: HomeAssistant; zone?: string; entities?: ZoneEntities };
+    for (const selector of [
+      'details[data-section="comfort"] comfort-band-settings-tab',
+      'details[data-section="comfort"] comfort-band-exact-range',
+      'details[data-section="automation"] comfort-band-settings-tab',
+    ]) {
+      const child = el.shadowRoot!.querySelector(selector) as Child;
+      expect([child.hass, child.zone, child.entities], selector).toEqual([hass, 'gym', entities]);
+    }
+    const profiles = el.shadowRoot!.querySelector('comfort-band-profiles-tab') as Child;
+    expect(profiles.hass).toBe(hass);
+    await setOpen(el, 'history', true);
+    const charts = el.shadowRoot!.querySelector('comfort-band-insights-tab') as Child;
+    expect([charts.hass, charts.entities]).toEqual([hass, entities]);
+  });
+
   // The charts subscribe to HA's history.
   it('loads the history charts only while History is open', async () => {
     const el = await advancedTab();
@@ -190,6 +216,20 @@ describe('comfort-band-advanced-tab', () => {
       .map((s) => s.cssText)
       .join('\n');
     expect(css).toMatch(/summary\s*\{[^}]*min-height:\s*44px/);
+  });
+
+  // A long summary wraps beside the chevron, under the section's name.
+  it('wraps a long summary with the name, beside the chevron', () => {
+    const css = (
+      customElements.get('comfort-band-advanced-tab') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((s) => s.cssText)
+      .join('\n');
+    expect(css).toMatch(/\.label\s*\{[^}]*flex-wrap:\s*wrap/);
+    expect(css).toMatch(/\.summary\s*\{[^}]*overflow-wrap:\s*anywhere/);
   });
 
   // A flex summary loses the browser's own marker.

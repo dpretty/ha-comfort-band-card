@@ -118,11 +118,18 @@ describe('comfort-band-modal tab a11y', () => {
     expect(panel.getAttribute('aria-labelledby')).toBe('cb-tab-now');
   });
 
-  it('shows the Advanced tab', async () => {
+  it('shows the Advanced tab, with what it needs', async () => {
     const el = await openModal();
     el.selectTab('advanced');
     await el.updateComplete;
-    expect(getPanel(el).querySelector('comfort-band-advanced-tab')).not.toBeNull();
+    const tab = getPanel(el).querySelector('comfort-band-advanced-tab') as HTMLElement & {
+      hass: unknown;
+      zone: string;
+      entities: unknown;
+    };
+    expect(tab).not.toBeNull();
+    expect([tab.hass, tab.zone, tab.entities]).toEqual([el.hass, el.zone, el.entities]);
+    expect(tab.zone).not.toBe('');
   });
 
   it('updates aria-labelledby when the active tab changes', async () => {

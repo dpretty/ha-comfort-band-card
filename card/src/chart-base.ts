@@ -1,5 +1,5 @@
 /**
- * Base class for the Insights tab's uPlot chart
+ * Base class for the History section's uPlot chart
  * (`<comfort-band-history-chart>`). v0.8.2 collapsed the two-chart
  * design into one. The base now has a single concrete consumer but
  * stays in its own file so the non-trivial lifecycle plumbing
@@ -19,7 +19,7 @@ import { tokens } from './styles.js';
 import type { UnsubscribeFunc } from './types.js';
 
 /**
- * Shared styles for the Insights-tab chart. Lit's `static styles` is
+ * Shared styles for the history chart. Lit's `static styles` is
  * inheritable: declaring this on the base class makes it available to
  * every subclass without each one having to re-import uPlot's CSS,
  * re-declare the `.status` / `.legend` / `.chart-host` rules, or repeat

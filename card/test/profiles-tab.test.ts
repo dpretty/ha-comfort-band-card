@@ -121,6 +121,58 @@ describe('comfort-band-profiles-tab', () => {
     expect(text).not.toMatch(/registered/);
   });
 
+  it("says profiles aren't available, not how to set them up, where a manager exists but can't be read", async () => {
+    const hass = makeHass({});
+    // Registered, but its select has no state (still starting, failed to
+    // load, or disabled): the integration won't offer to set one up again.
+    hass.states = {};
+    const el = await profilesTab(hass);
+    const text = el.shadowRoot!.querySelector('.empty')!.textContent!.replace(/\s+/g, ' ').trim();
+    expect(text).toBe(
+      "Profiles aren't available right now. If the Comfort Band Profiles entry or its active profile entity is disabled, turn it back on under Settings → Devices & Services.",
+    );
+  });
+
+  // Enter or Space on the ⋮ button or a menu item bubbles to the row, which
+  // used to switch every room to that row's profile.
+  it("doesn't switch profile for a key pressed on the ⋮ button or a menu item", async () => {
+    const hass = makeHass({ options: ['home', 'away'] });
+    const el = await profilesTab(hass);
+    const row = el.shadowRoot!.querySelectorAll<HTMLLIElement>('li')[1];
+    const overflow = row.querySelector<HTMLButtonElement>('.overflow')!;
+    for (const key of ['Enter', ' ']) {
+      const event = new KeyboardEvent('keydown', {
+        key,
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      });
+      overflow.dispatchEvent(event);
+      // The button's own activation isn't blocked.
+      expect(event.defaultPrevented).toBe(false);
+    }
+    overflow.click();
+    await el.updateComplete;
+    const item = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      '.menu button[role="menuitem"]:not([disabled])',
+    )!;
+    item.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }),
+    );
+    expect(hass.callService).not.toHaveBeenCalledWith(
+      'comfort_band',
+      'set_profile',
+      expect.anything(),
+    );
+    // A key on the row itself still picks it.
+    row.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }),
+    );
+    expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'set_profile', {
+      profile: 'away',
+    });
+  });
+
   it('renders a no-profiles message when options is empty', async () => {
     const el = await profilesTab(makeHass({ options: [] }));
     expect(el.shadowRoot!.textContent).toContain('No profiles');

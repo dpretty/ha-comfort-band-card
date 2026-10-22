@@ -44,9 +44,7 @@ export class ComfortBandAdvancedTab extends LitElement {
       }
       summary {
         display: flex;
-        align-items: baseline;
-        flex-wrap: wrap;
-        gap: 0 var(--cb-gap-sm);
+        align-items: center;
         padding: 10px 0;
         /* WCAG 2.5.5: 44px touch target. */
         min-height: 44px;
@@ -80,12 +78,22 @@ export class ComfortBandAdvancedTab extends LitElement {
         outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
         outline-offset: 1px;
       }
+      /* The name and summary wrap together, beside the chevron. */
+      .label {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 0 var(--cb-gap-sm);
+        min-width: 0;
+      }
       .name {
         font-size: 15px;
         font-weight: 500;
         color: var(--cb-text-primary);
       }
       .summary {
+        min-width: 0;
+        overflow-wrap: anywhere;
         font-size: 13px;
         color: var(--cb-text-secondary);
       }
@@ -101,8 +109,8 @@ export class ComfortBandAdvancedTab extends LitElement {
 
   private _comfortSummary(): string {
     const state = this._state(this.entities?.useApparentTemperature ?? null);
-    if (state === 'on') return 'Going by “feels like”';
-    if (state === 'off') return 'Going by the room’s reading';
+    if (state === 'on') return '“Feels like” on';
+    if (state === 'off') return '“Feels like” off';
     return '';
   }
 
@@ -137,8 +145,10 @@ export class ComfortBandAdvancedTab extends LitElement {
           : nothing}
       >
         <summary>
-          <span class="name">${name}</span>
-          ${summary ? html`<span class="summary">${summary}</span>` : nothing}
+          <span class="label">
+            <span class="name">${name}</span>
+            ${summary ? html`<span class="summary">${summary}</span>` : nothing}
+          </span>
         </summary>
         <div class="content">${content}</div>
       </details>

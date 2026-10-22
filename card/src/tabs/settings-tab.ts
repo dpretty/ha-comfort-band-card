@@ -9,9 +9,8 @@
  * service call, and rolls back on rejection. Matches the schedule-tab
  * `_writeSchedule` pattern.
  *
- * Graceful degradation: when the new entities don't exist (pre-v0.4
- * integration), the tab renders an upgrade hint instead — mirrors the
- * Profiles-tab `crudAvailable` gate.
+ * Graceful degradation: when its switch doesn't exist (pre-v0.4
+ * integration), a section shows an upgrade hint instead.
  */
 
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
@@ -105,6 +104,9 @@ export class ComfortBandSettingsTab extends LitElement {
         cursor: not-allowed;
       }
       .info-value {
+        /* A long name or ID wraps rather than squeezing the label out. */
+        max-width: 55%;
+        overflow-wrap: anywhere;
         font-size: 13px;
         color: var(--cb-text-primary);
         text-align: right;
@@ -172,7 +174,8 @@ export class ComfortBandSettingsTab extends LitElement {
         : this.entities.learningEnabled;
     if (entityId === null) {
       return html`<div class="upgrade-hint">
-        Needs the <code>comfort_band</code> integration v0.4.0 or later.
+        ${this.section === 'comfort' ? '“Feels like”' : 'Learning'} needs the
+        <code>comfort_band</code> integration v0.4.0 or later.
       </div>`;
     }
     return html`
@@ -188,7 +191,7 @@ export class ComfortBandSettingsTab extends LitElement {
     return html`
       ${this._renderToggle({
         entityId: useApparent,
-        title: 'Use "feels like"',
+        title: 'Use “feels like”',
         desc: html`When on, heating and cooling go by the humidity-adjusted "feels like" temperature
         instead of the room's own reading. Falls back to the room's reading automatically if the
         humidity sensor is unavailable.`,
@@ -207,7 +210,8 @@ export class ComfortBandSettingsTab extends LitElement {
     `;
   }
 
-  /** "Bedroom humidity · 54 %": the sensor's own name and reading, not its ID. */
+  /** "Bedroom humidity · 54%": the sensor's own name and reading, not its
+   *  ID, the reading as HA formats it where the frontend can. */
   private _sensorText(entityId: string): string {
     const s = this.hass!.states[entityId];
     if (!s) return entityId;
@@ -217,6 +221,7 @@ export class ComfortBandSettingsTab extends LitElement {
         : entityId;
     const value = Number.parseFloat(s.state);
     if (!Number.isFinite(value)) return `${name} · no reading`;
+    if (this.hass!.formatEntityState) return `${name} · ${this.hass!.formatEntityState(s)}`;
     const unit =
       typeof s.attributes.unit_of_measurement === 'string' ? s.attributes.unit_of_measurement : '';
     return `${name} · ${s.state}${unit ? ` ${unit}` : ''}`;

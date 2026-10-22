@@ -5,8 +5,8 @@
  *
  * Releasing a handle sends `comfort_band.start_override` with the range for
  * three hours, the Now tab's default length. With no schedule, the range
- * then stays until it's changed again. A failed call is reported by HA's
- * own toast.
+ * then stays until it's changed again. Calls go one after another, so they
+ * land in the order made. A failed call is reported by HA's own toast.
  */
 
 import { LitElement, html, css, nothing } from 'lit';
@@ -37,6 +37,8 @@ export class ComfortBandExactRange extends LitElement {
    *  release, so the track doesn't rescale under the finger if the band in
    *  force changes meanwhile. */
   private _heldRange: { min: number; max: number } | null = null;
+  /** Releases go one after another, as they did from the Now tab. */
+  private _chain: Promise<unknown> = Promise.resolve();
 
   public static override styles = [
     tokens,
@@ -67,15 +69,16 @@ export class ComfortBandExactRange extends LitElement {
     this._pendingLow = null;
     this._pendingHigh = null;
     if (!this.hass || !this.zone) return;
-    void startOverride(this.hass, {
+    const hass = this.hass;
+    const data = {
       zone: this.zone,
       low: event.detail.low,
       high: event.detail.high,
       hours: EXACT_RANGE_HOURS,
-    }).catch(() => {
-      // HA's own toast says the call failed; the slider goes back to the
-      // range in force on the next render.
-    });
+    };
+    // HA's own toast says a call failed. The slider shows what it was moved
+    // to until the range in force changes.
+    this._chain = this._chain.then(() => startOverride(hass, data)).catch(() => undefined);
   };
 
   protected override render() {
@@ -106,17 +109,19 @@ export class ComfortBandExactRange extends LitElement {
           ? `Sets this room’s range for ${EXACT_RANGE_HOURS} hours, then the schedule takes over again.`
           : `Sets this room’s range for ${EXACT_RANGE_HOURS} hours.`;
     return html`
-      <div class="title">Set an exact range</div>
-      <div class="desc">${lasts}</div>
-      <dual-handle-slider
-        .min=${range.min}
-        .max=${range.max}
-        .step=${SLIDER_STEP}
-        .low=${low}
-        .high=${high}
-        @input=${this._onInput}
-        @change=${this._onChange}
-      ></dual-handle-slider>
+      <div role="group" aria-labelledby="exact-range-title" aria-describedby="exact-range-desc">
+        <div class="title" id="exact-range-title">Set an exact range</div>
+        <div class="desc" id="exact-range-desc">${lasts}</div>
+        <dual-handle-slider
+          .min=${range.min}
+          .max=${range.max}
+          .step=${SLIDER_STEP}
+          .low=${low}
+          .high=${high}
+          @input=${this._onInput}
+          @change=${this._onChange}
+        ></dual-handle-slider>
+      </div>
     `;
   }
 }

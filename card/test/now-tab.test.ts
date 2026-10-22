@@ -234,6 +234,13 @@ describe('comfort-band-now-tab', () => {
 
   // ----- v0.10.0: comfort feedback pills -----
 
+  // It moved to the Advanced tab's Comfort section.
+  it('has no exact-range slider', async () => {
+    const el = await nowTab(makeHass());
+    expect(el.shadowRoot!.querySelector('dual-handle-slider')).toBeNull();
+    expect(el.shadowRoot!.querySelector('details')).toBeNull();
+  });
+
   it('renders three comfort-feedback pills below the gauge', async () => {
     const el = await nowTab(makeHass());
     const pills = el.shadowRoot!.querySelectorAll('.feedback-pill');

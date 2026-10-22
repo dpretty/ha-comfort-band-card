@@ -282,13 +282,61 @@ describe('comfort-band-exact-range', () => {
     expect(hass.callService).not.toHaveBeenCalled();
   });
 
-  // HA's own toast reports it; nothing is left unhandled.
+  // HA's own toast reports it; nothing is left unhandled, and the next
+  // release still goes.
   it('lets a rejected call go', async () => {
+    const unhandled = vi.fn();
+    // Node's own process; the project has no Node types.
+    const proc = (
+      globalThis as unknown as {
+        process: {
+          on(event: string, listener: (...args: unknown[]) => void): void;
+          off(event: string, listener: (...args: unknown[]) => void): void;
+        };
+      }
+    ).process;
+    proc.on('unhandledRejection', unhandled);
+    try {
+      const hass = makeHass();
+      (hass.callService as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('nope'));
+      const el = await exactRange(hass);
+      await release(el, 20, 23);
+      await new Promise((r) => setTimeout(r, 0));
+      await release(el, 20.5, 23);
+      await new Promise((r) => setTimeout(r, 0));
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(hass.callService).toHaveBeenCalledTimes(2);
+    } finally {
+      proc.off('unhandledRejection', unhandled);
+    }
+  });
+
+  // As they were from the Now tab, so the last release is the one in force.
+  it('sends releases one after another, in the order made', async () => {
     const hass = makeHass();
-    (hass.callService as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('nope'));
+    let finish = () => {};
+    (hass.callService as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      () => new Promise<void>((resolve) => (finish = resolve)),
+    );
     const el = await exactRange(hass);
     await release(el, 20, 23);
-    await flush(el);
+    await release(el, 21, 24);
     expect(hass.callService).toHaveBeenCalledTimes(1);
+    finish();
+    await flush(el);
+    expect((hass.callService as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[2])).toEqual([
+      { zone: 'gym', low: 20, high: 23, hours: 3 },
+      { zone: 'gym', low: 21, high: 24, hours: 3 },
+    ]);
+  });
+
+  it('names its sliders as one group, with what it does', async () => {
+    const el = await exactRange(makeHass());
+    const group = el.shadowRoot!.querySelector('[role="group"]')!;
+    const title = el.shadowRoot!.getElementById(group.getAttribute('aria-labelledby')!)!;
+    const desc = el.shadowRoot!.getElementById(group.getAttribute('aria-describedby')!)!;
+    expect(title.textContent!.trim()).toBe('Set an exact range');
+    expect(desc.textContent!.trim()).toBe('Sets this room’s range for 3 hours.');
+    expect(group.querySelector('dual-handle-slider')).not.toBeNull();
   });
 });

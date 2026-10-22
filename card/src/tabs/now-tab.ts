@@ -92,12 +92,9 @@ export class ComfortBandNowTab extends LitElement {
   @state() private _burst: Burst | null = null;
   private _burstTimer: ReturnType<typeof setTimeout> | null = null;
   /** What a call from this tab is doing while it goes through, such as
-   *  "Going back to the schedule"; the controls ignore presses meanwhile. */
+   *  "Going back to the schedule"; the controls ignore presses meanwhile, so
+   *  no call from this tab starts while another is going through. */
   @state() private _busy: string | null = null;
-  private _busySeq = 0;
-  /** Service calls from this tab (not feedback) go one after another, so
-   *  they land in the order made. */
-  private _chain: Promise<unknown> = Promise.resolve();
 
   public static override styles = [
     tokens,
@@ -284,19 +281,16 @@ export class ComfortBandNowTab extends LitElement {
     return this._length ?? DEFAULT_HOURS;
   }
 
-  /** Runs a call after the ones before it from this tab, saying what it's
-   *  doing meanwhile. A failed call is reported by HA's own toast. */
+  /** Runs a call, saying what it's doing meanwhile. A failed call is
+   *  reported by HA's own toast. */
   private async _run(doing: string, call: () => Promise<unknown>): Promise<void> {
-    const seq = ++this._busySeq;
     this._busy = doing;
-    const sent = this._chain.then(call);
-    this._chain = sent.catch(() => undefined);
     try {
-      await sent;
+      await call();
     } catch {
       // The status falls back to what is actually in force.
     } finally {
-      if (seq === this._busySeq) this._busy = null;
+      this._busy = null;
     }
   }
 

@@ -1,5 +1,5 @@
 /**
- * `<comfort-band-history-chart>` — the single Insights-tab chart.
+ * `<comfort-band-history-chart>` — the History section's single chart.
  *
  * Always renders: room temperature, the effective low + high band edges
  * (as linear lines so v0.10.0's band-ramp smoothing displays as the

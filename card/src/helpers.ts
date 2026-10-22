@@ -159,6 +159,12 @@ export function findZoneEntities(hass: HomeAssistant, zoneSlug: string): ZoneEnt
 }
 
 /** Resolve the singleton `select.{...}_active_profile` entity_id, if registered. */
+/** Whether a Comfort Band profile manager is registered, whether or not its
+ *  entities can be read. */
+export function profileManagerExists(hass: HomeAssistant): boolean {
+  return findDeviceByIdentifier(hass, [DOMAIN, 'profile_manager']) !== null;
+}
+
 export function findActiveProfileEntity(hass: HomeAssistant): string | null {
   const device = findDeviceByIdentifier(hass, [DOMAIN, 'profile_manager']);
   if (device === null) return null;
