@@ -171,6 +171,13 @@ describe('comfort-band-advanced-tab', () => {
     expect(summaryOf(el2, 'schedules')).toBe('Not available right now');
   });
 
+  it('sums up learning alone where control can’t be read', async () => {
+    const el = await advancedTab(
+      makeHass({ 'switch.gym_enabled': 'unavailable', 'switch.gym_learning_enabled': 'on' }),
+    );
+    expect(summaryOf(el, 'automation')).toBe('Learning on');
+  });
+
   it("doesn't name a profile while the select says unknown", async () => {
     const el = await advancedTab(makeHass({}, { profile: 'unknown' }));
     expect(summaryOf(el, 'schedules')).toBeNull();

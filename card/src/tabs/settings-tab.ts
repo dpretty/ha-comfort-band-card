@@ -187,10 +187,9 @@ export const SETTINGS: Record<SettingsSection, { main: Setting[]; fine?: Setting
 };
 
 /** The integration version each section's settings arrived in, for the note
- *  when none of them is there. */
-const SECTION_SINCE: Record<SettingsSection, string> = {
-  comfort: 'v0.4.0',
-  automation: 'v0.6.0',
+ *  when none of them is there. Comfort's and automation's first ones came
+ *  with v0.1.0, as far back as the card goes: there, none means turned off. */
+const SECTION_SINCE: Partial<Record<SettingsSection, string>> = {
   fan: 'v0.13.0',
   peak: 'v0.24.0',
   schedules: 'v0.14.0',
@@ -491,11 +490,10 @@ export class ComfortBandSettingsTab extends LitElement {
     const min = attrNumber(s.attributes.min) ?? -Infinity;
     const max = attrNumber(s.attributes.max) ?? Infinity;
     const shown = this._pending[entityId];
+    // Its buttons don't call this at a limit, or with no value to step from.
     const current = typeof shown === 'number' ? shown : Number.parseFloat(s.state);
-    if (!Number.isFinite(current)) return;
     const decimals = stepDecimals(step);
     const next = Number(Math.min(max, Math.max(min, current + direction * step)).toFixed(decimals));
-    if (next === current) return;
     this._pending = { ...this._pending, [entityId]: next };
     this._error = null;
     const timer = this._timers.get(entityId);
@@ -523,6 +521,7 @@ export class ComfortBandSettingsTab extends LitElement {
     const shownFine = present(fine);
     const missing = main.length + fine.length - shownMain.length - shownFine.length;
     const none = shownMain.length + shownFine.length === 0;
+    const since = SECTION_SINCE[this.section];
     return html`
       ${this._error ? html`<div class="error" role="alert">${this._error}</div>` : nothing}
       ${shownMain.map((s) => this._renderSetting(s))}
@@ -535,8 +534,11 @@ export class ComfortBandSettingsTab extends LitElement {
         : nothing}
       ${none
         ? html`<div class="upgrade-hint">
-            These settings need the <code>comfort_band</code> integration
-            ${SECTION_SINCE[this.section]} or later, with their entities turned on.
+            ${since
+              ? html`These settings need the <code>comfort_band</code> integration ${since} or
+                  later, with their entities turned on.`
+              : html`These settings’ entities are turned off. Turn them on from this room’s device
+                page, under Settings → Devices &amp; Services.`}
           </div>`
         : missing > 0
           ? html`<div class="note">

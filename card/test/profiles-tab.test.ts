@@ -178,6 +178,25 @@ describe('comfort-band-profiles-tab', () => {
     expect(el.shadowRoot!.querySelector('.menu')).toBeNull();
   });
 
+  // With no menu open, Escape on ⋮ is the dialog's, to close it.
+  it('leaves Escape on ⋮ to the dialog while its menu is closed', async () => {
+    const el = await profilesTab(makeHass({ options: ['home', 'away'] }));
+    const overflow = el
+      .shadowRoot!.querySelectorAll<HTMLLIElement>('li')[1]
+      .querySelector<HTMLButtonElement>('.overflow')!;
+    const outer = vi.fn();
+    el.addEventListener('keydown', outer);
+    const esc = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    overflow.dispatchEvent(esc);
+    expect(esc.defaultPrevented).toBe(false);
+    expect(outer).toHaveBeenCalledTimes(1);
+  });
+
   // Enter or Space on the ⋮ button or a menu item bubbles to the row, which
   // used to switch every room to that row's profile.
   it("doesn't switch profile for a key pressed on the ⋮ button or a menu item", async () => {
