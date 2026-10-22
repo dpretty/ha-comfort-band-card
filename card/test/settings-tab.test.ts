@@ -476,6 +476,24 @@ describe('comfort-band-settings-tab switches', () => {
     expect(row(el, 'mpcEnabled').querySelector('button[role="switch"]')).not.toBeNull();
   });
 
+  it('says so if a switch becomes unavailable while its call goes through', async () => {
+    let finish: () => void = () => {};
+    const slow = vi.fn().mockImplementationOnce(() => new Promise<void>((r) => (finish = r)));
+    const el = await settingsTab(makeHass({ callServiceImpl: slow }));
+    row(el, 'useApparentTemperature')
+      .querySelector<HTMLButtonElement>('button[role="switch"]')!
+      .click();
+    el.hass = makeHass({
+      states: { 'switch.gym_use_apparent_temperature': { state: 'unavailable' } },
+      callServiceImpl: slow,
+    });
+    await el.updateComplete;
+    expect(
+      row(el, 'useApparentTemperature').querySelector('.info-value')!.textContent!.trim(),
+    ).toBe('Unavailable');
+    finish();
+  });
+
   it('reflects a new state from HA', async () => {
     const el = await settingsTab(makeHass());
     el.hass = makeHass({ states: { 'switch.gym_use_apparent_temperature': { state: 'on' } } });
@@ -742,6 +760,21 @@ describe('comfort-band-settings-tab steppers', () => {
     expect(await at('less')).toBe(0.2);
   });
 
+  // Steps of 0.1 from 0.05 are 0.05, 0.15, 0.25...
+  it('keeps the bottom limit’s decimals', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const hass = makeHass({
+      states: { 'number.gym_passive_tolerance': number('0.05', 0.05, 2, 0.1, '°C') },
+    });
+    const el = await settingsTab(hass, 'automation');
+    stepButtons(el, 'passiveTolerance').more.click();
+    await el.updateComplete;
+    expect(shown(el, 'passiveTolerance')).toBe('0.15 °C');
+    vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    expect((calls(hass)[0][2] as { value: number }).value).toBe(0.15);
+  });
+
   // As HA's own slider: steps of 10 from a bottom limit of 5 are 5, 15, 25...
   it('counts steps from the bottom limit', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -859,6 +892,33 @@ describe('comfort-band-settings-tab choices', () => {
       expect(s.options[s.selectedIndex].textContent!.trim()).toBe('Unavailable');
       el.remove();
     }
+  });
+
+  it('says a choice HA has no state for is unavailable', async () => {
+    const hass = makeHass();
+    delete hass.states['select.gym_idle_fan_mode'];
+    const el = await settingsTab(hass, 'fan');
+    const s = select(el, 'idleFanMode');
+    expect(s.disabled).toBe(true);
+    expect(s.options[s.selectedIndex].textContent!.trim()).toBe('Unavailable');
+  });
+
+  // A shared schedule can be named anything, "unavailable" included.
+  it('shows unavailable, not a schedule named "unavailable", while unavailable', async () => {
+    const el = await settingsTab(
+      makeHass({
+        states: {
+          'select.gym_schedule_assignment': {
+            state: 'unavailable',
+            attributes: { options: ['Own schedule', 'unavailable'] },
+          },
+        },
+      }),
+      'schedules',
+    );
+    const s = select(el, 'scheduleAssignment');
+    expect(s.disabled).toBe(true);
+    expect(s.options[s.selectedIndex].textContent!.trim()).toBe('Unavailable');
   });
 
   // The integration reads "unknown" for a stored fan mode the unit no

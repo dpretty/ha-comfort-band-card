@@ -2767,7 +2767,7 @@ let pi = class extends Ce {
     `;
   }
   _renderSelect(e, t) {
-    const i = this.hass.states[e], n = Array.isArray(i?.attributes.options) ? i.attributes.options.filter((g) => typeof g == "string") : [], o = this._pending[e], r = typeof o == "string" ? o : i?.state ?? "", a = `t-${t.field}`, u = !i || i.state === "unavailable" || n.length === 0, d = n.includes(r), f = t.label ?? xl;
+    const i = this.hass.states[e], n = Array.isArray(i?.attributes.options) ? i.attributes.options.filter((g) => typeof g == "string") : [], o = this._pending[e], r = typeof o == "string" ? o : i?.state ?? "", a = `t-${t.field}`, u = i?.state === "unavailable" || n.length === 0, d = n.includes(r), f = t.label ?? xl;
     return y`
       <div class="row pick" data-setting=${t.field}>
         <div class="row-label">
@@ -2794,7 +2794,7 @@ let pi = class extends Ce {
   }
   _renderToggle(e) {
     const t = this._isOn(e.entityId), i = this._pending[e.entityId] !== void 0, n = this.hass.states[e.entityId]?.state;
-    return !i && n !== "on" && n !== "off" ? y`
+    return n !== "on" && n !== "off" ? y`
         <div class="row" data-setting=${e.field}>
           <div class="row-label">
             <div class="title">${e.title}</div>

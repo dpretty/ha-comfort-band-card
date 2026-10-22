@@ -785,7 +785,8 @@ export class ComfortBandSettingsTab extends LitElement {
     const shown = this._pending[entityId];
     const value = typeof shown === 'string' ? shown : (s?.state ?? '');
     const titleId = `t-${setting.field}`;
-    const unavailable = !s || s.state === 'unavailable' || options.length === 0;
+    // No options: missing from HA, or a fanless unit's fan select.
+    const unavailable = s?.state === 'unavailable' || options.length === 0;
     // A value that isn't one of the options (a fan mode the unit no longer
     // offers reads "unknown") shows a dash, and a choice can still be made.
     const listed = options.includes(value);
@@ -831,7 +832,7 @@ export class ComfortBandSettingsTab extends LitElement {
     // Neither on nor off: HA says so rather than the switch looking off. HA
     // skips an unavailable entity in a call without an error.
     const state = this.hass!.states[opts.entityId]?.state;
-    if (!pending && state !== 'on' && state !== 'off') {
+    if (state !== 'on' && state !== 'off') {
       return html`
         <div class="row" data-setting=${opts.field}>
           <div class="row-label">
