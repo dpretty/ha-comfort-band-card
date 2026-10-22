@@ -611,6 +611,23 @@ describe('comfort-band-settings-tab steppers', () => {
     ]);
   });
 
+  // A top limit off the step's grid, and a value a hair above the bottom one.
+  it('stops at a limit the steps don’t land on', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const hass = makeHass({
+      states: {
+        'number.gym_peak_heat_offset': number('4.6', 0, 4.8, 0.5, '°C'),
+        'number.gym_peak_cool_offset': number('0.00000000001', 0, 5, 0.5, '°C'),
+      },
+    });
+    const el = await settingsTab(hass, 'peak');
+    stepButtons(el, 'peakHeatOffset').more.click();
+    stepButtons(el, 'peakCoolOffset').less.click();
+    vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    expect(calls(hass).map((c) => (c[2] as { value: number }).value)).toEqual([4.8, 0]);
+  });
+
   // 0.2 + 0.1 is 0.30000000000000004 in floating point.
   it('sends the value to the step, without floating-point error', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
