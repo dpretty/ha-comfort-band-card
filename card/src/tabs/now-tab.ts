@@ -155,6 +155,8 @@ export class ComfortBandNowTab extends LitElement {
       }
       .status ha-icon {
         --mdc-icon-size: 20px;
+        /* Not a theme's --icon-primary-color: the colours below. */
+        --icon-primary-color: currentColor;
         color: var(--cb-text-secondary);
       }
       .status.heating ha-icon {

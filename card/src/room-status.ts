@@ -76,10 +76,13 @@ export function readRoom(hass: HomeAssistant, entities: ZoneEntities): RoomReadi
   // The room temperature entity mirrors whichever reading drives control,
   // a stand-in's included, so a reading there with the sensor offline is a
   // stand-in's. "Feels like" is worked out from that reading, so it counts
-  // too, in case the room temperature entity is disabled.
-  const offline = stateOf(hass, entities.roomSensorUnavailable)?.state === 'on';
-  const reading = Number.isFinite(room) || Number.isFinite(apparent);
+  // too, in case the room temperature entity is disabled. A stand-in only
+  // drives control while the room sensor is offline, so its `source` says so
+  // too, in case the sensor-offline entity is disabled.
   const source = stateOf(hass, entities.roomTemperature)?.attributes.source;
+  const standIn = source === 'climate' || source === 'fallback_sensor' ? source : null;
+  const offline = stateOf(hass, entities.roomSensorUnavailable)?.state === 'on' || standIn !== null;
+  const reading = Number.isFinite(room) || Number.isFinite(apparent);
   return {
     enabled: stateOf(hass, entities.enabled)?.state !== 'off',
     action: stateOf(hass, entities.currentAction)?.state ?? 'unknown',
@@ -96,7 +99,7 @@ export function readRoom(hass: HomeAssistant, entities: ZoneEntities): RoomReadi
     overrideEnds: Number.isNaN(ends) ? null : ends,
     ...readSchedule(hass, entities),
     sensor: offline ? (reading ? 'stand-in' : 'offline') : reading ? 'ok' : 'no-reading',
-    standIn: source === 'climate' || source === 'fallback_sensor' ? source : null,
+    standIn,
   };
 }
 
@@ -154,7 +157,7 @@ export function roomBadges(r: RoomReadings): Badge[] {
 }
 
 /**
- * One sentence for the Now tab on what sensor trouble means and what to do,
+ * A sentence or two for the Now tab on what sensor trouble means and what to do,
  * or null when there is none. A paused zone isn't controlled either way, so
  * it only says the sensor needs looking at.
  */

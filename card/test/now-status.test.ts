@@ -228,6 +228,10 @@ describe('statusLine', () => {
     expect(line({ sensor: 'stand-in', action: 'unknown', overrideActive: true }).text).toBe(
       'Room sensor offline · Adjusted to 18–23°',
     );
+    expect(line({ sensor: 'stand-in', band: { low: NaN, high: 23 } })).toEqual({
+      kind: 'sensor',
+      text: "Room sensor offline · Can't read this room's range",
+    });
   });
 
   it('says control is on hold with no room reading', () => {
@@ -284,6 +288,15 @@ describe('rangePosition', () => {
     expect(rangePosition(19.95, { low: 20, high: 23 })).toBe('below');
     expect(rangePosition(20.45, { low: 20.5, high: 23 })).toBe('below');
     expect(rangePosition(22.55, { low: 18, high: 22.5 })).toBe('above');
+  });
+
+  // bandText writes a 17.45 low as "17.5", so 17.4 is below it, even
+  // though the temperature itself would show 17.45 as 17.4.
+  it('compares a range end as bandText writes it, not as a temperature is shown', () => {
+    expect(bandText({ low: 17.45, high: 23 })).toBe('17.5–23°');
+    expect(rangePosition(17.4, { low: 17.45, high: 23 })).toBe('below');
+    expect(bandText({ low: 18, high: 22.45 })).toBe('18–22.5°');
+    expect(rangePosition(22.5, { low: 18, high: 22.45 })).toBe('in');
   });
 
   // Mid-ramp, a range end can sit between tenths; it's shown rounded.

@@ -169,6 +169,15 @@ export function statusLine(s: StatusInput): { kind: StatusKind; text: string } {
   if (s.sensor === 'no-reading') {
     return { kind: 'sensor', text: 'On hold: no room temperature reading' };
   }
+  const line = inForce(s);
+  if (s.sensor === 'stand-in')
+    return { kind: 'sensor', text: `Room sensor offline · ${line.text}` };
+  return line;
+}
+
+/** The status of a room being controlled from a reading: what it's doing,
+ *  the range in force, and until when. */
+function inForce(s: StatusInput): { kind: StatusKind; text: string } {
   if (!Number.isFinite(s.band.low) || !Number.isFinite(s.band.high)) {
     return { kind: 'none', text: "Can't read this room's range" };
   }
@@ -201,7 +210,6 @@ export function statusLine(s: StatusInput): { kind: StatusKind; text: string } {
     rest = `${bandText(s.band)}${until}`;
   }
   const text = word ? `${word} · ${rest}` : rest.charAt(0).toUpperCase() + rest.slice(1);
-  if (s.sensor === 'stand-in') return { kind: 'sensor', text: `Room sensor offline · ${text}` };
   return { kind, text };
 }
 

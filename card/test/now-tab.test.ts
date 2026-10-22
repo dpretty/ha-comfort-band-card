@@ -642,6 +642,31 @@ describe('comfort-band-now-tab', () => {
       expect(gauge.action).toBe('unknown');
     });
 
+    it('says only that the sensor needs looking at in a paused room', async () => {
+      const el = await nowTab(
+        makeHass(
+          { 'switch.gym_enabled': 'off', 'binary_sensor.gym_room_sensor_unavailable': 'on' },
+          { 'sensor.gym_room_temperature': { source: 'climate' } },
+        ),
+      );
+      expect(statusText(el)).toBe('Paused: not controlling this room');
+      expect(el.shadowRoot!.querySelector('.notice')!.textContent!.trim()).toBe(
+        'The room sensor is offline. Check its battery or connection.',
+      );
+    });
+
+    // The words carry the meaning; the colours repeat it.
+    it('colours the status icon for sensor trouble, whatever the theme', () => {
+      const css = (
+        customElements.get('comfort-band-now-tab') as unknown as typeof ComfortBandNowTab
+      ).styles
+        .flat()
+        .map((s) => (s as { cssText: string }).cssText)
+        .join('\n');
+      expect(css).toMatch(/\.status\.sensor ha-icon\s*\{[^}]*var\(--warning-color/);
+      expect(css).toMatch(/\.status ha-icon\s*\{[^}]*--icon-primary-color:\s*currentColor/);
+    });
+
     it('has no sensor notice while the room sensor reports', async () => {
       const el = await nowTab(makeHass({ 'binary_sensor.gym_room_sensor_unavailable': 'off' }));
       expect(el.shadowRoot!.querySelector('.notice')).toBeNull();

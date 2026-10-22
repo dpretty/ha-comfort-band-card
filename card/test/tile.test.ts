@@ -73,6 +73,14 @@ describe('comfort-band-tile', () => {
     expect(rule(css, '.status.heating ha-icon')).toMatch(/var\(--cb-action-heating\)/);
     expect(rule(css, '.status.cooling ha-icon')).toMatch(/var\(--cb-action-cooling\)/);
     expect(rule(css, '.status.sensor ha-icon')).toMatch(/var\(--warning-color/);
+    expect(rule(css, '.status ha-icon')).toMatch(/--icon-primary-color:\s*currentColor/);
+  });
+
+  it("says when the range can't be read", async () => {
+    const el = await tile({ statusKind: 'none', statusText: "Can't read this room's range" });
+    const status = el.shadowRoot!.querySelector('.status')!;
+    expect(status.textContent!.trim()).toBe("Can't read this room's range");
+    expect(status.querySelector('ha-icon')!.getAttribute('icon')).toBe('mdi:thermometer');
   });
 
   it('leaves the status out until there is one', async () => {
@@ -199,17 +207,26 @@ describe('comfort-band-tile', () => {
       expect(coolEl.getAttribute('style')).toContain('--cb-action-cooling');
     });
 
-    // The badges already leave heating out for a paused room.
-    it("doesn't tint for anything else, the action included", async () => {
-      const el = await tile({
-        variant: 'mini',
-        temperature: 22,
-        action: 'heating',
-        badges: ['paused'],
-      });
-      const mini = el.shadowRoot!.querySelector('.mini') as HTMLElement;
-      expect(mini.classList.contains('tinted')).toBe(false);
-      expect(mini.getAttribute('style')).toBe('');
+    // The badges already leave heating out for a paused room. Red for a room
+    // that's cold but not heating would say it's heating.
+    it.each([[['paused']], [['below']], [['above']], [['sensor', 'adjusted']]] as const)(
+      "doesn't tint for %j, whatever the action",
+      async (badges) => {
+        const el = await tile({
+          variant: 'mini',
+          temperature: 22,
+          action: 'heating',
+          badges: [...badges],
+        });
+        const mini = el.shadowRoot!.querySelector('.mini') as HTMLElement;
+        expect(mini.classList.contains('tinted')).toBe(false);
+        expect(mini.getAttribute('style')).toBe('');
+      },
+    );
+
+    it('shows an em-dash for an unknown temperature', async () => {
+      const el = await tile({ variant: 'mini', temperature: NaN, badges: ['sensor'] });
+      expect(el.shadowRoot!.querySelector('.mini .value')!.textContent).toBe('—');
     });
 
     it('fires comfort-band-tile-tap on click', async () => {
@@ -260,6 +277,8 @@ describe('comfort-band-tile', () => {
       expect(area).toMatch(/left:\s*50%/);
       expect(area).toMatch(/top:\s*50%/);
       expect(area).toMatch(/transform:\s*translate\(-50%,\s*-50%\)/);
+      // Taps have to land on it.
+      expect(area).not.toMatch(/pointer-events/);
       expect(rule(css, '.mini')).toMatch(/position:\s*relative/);
       // A compact chip doesn't open, so it doesn't take taps from around it.
       expect(css).not.toMatch(/\.mini::before/);
@@ -267,6 +286,8 @@ describe('comfort-band-tile', () => {
 
     it('keeps its icons small', () => {
       expect(rule(tileCss(), '.mini ha-icon')).toMatch(/--mdc-icon-size:\s*16px/);
+      // A theme's --icon-primary-color mustn't recolour them against the tint.
+      expect(rule(tileCss(), '.mini ha-icon')).toMatch(/--icon-primary-color:\s*currentColor/);
     });
   });
 });

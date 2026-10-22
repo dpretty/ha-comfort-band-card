@@ -104,8 +104,11 @@ export class ComfortBandTile extends LitElement {
         height: max(100%, 44px);
         transform: translate(-50%, -50%);
       }
+      /* HA's icon fills with --icon-primary-color when a theme sets it; keep
+         these the chip's own colour. */
       .mini ha-icon {
         --mdc-icon-size: 16px;
+        --icon-primary-color: currentColor;
       }
       .mini.tinted {
         --cb-mini-fg: var(--cb-text-on-action, #ffffff);
@@ -155,6 +158,7 @@ export class ComfortBandTile extends LitElement {
       }
       .status ha-icon {
         --mdc-icon-size: 18px;
+        --icon-primary-color: currentColor;
         flex: none;
         color: var(--cb-text-secondary);
       }

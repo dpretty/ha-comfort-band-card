@@ -137,6 +137,24 @@ describe('readRoom', () => {
     expect([other.sensor, other.standIn]).toEqual(['stand-in', null]);
   });
 
+  // Only a room sensor that's offline lets a stand-in drive control.
+  it('takes a stand-in as the room sensor being offline when the sensor-offline entity is missing', () => {
+    const attributes = { 'sensor.gym_room_temperature': { source: 'climate' } };
+    const missing = readRoom(hassWith(HEALTHY, attributes), {
+      ...ENTITIES,
+      roomSensorUnavailable: null,
+    });
+    expect([missing.sensor, missing.standIn]).toEqual(['stand-in', 'climate']);
+    const primary = readRoom(
+      hassWith(HEALTHY, { 'sensor.gym_room_temperature': { source: 'primary' } }),
+      {
+        ...ENTITIES,
+        roomSensorUnavailable: null,
+      },
+    );
+    expect(primary.sensor).toBe('ok');
+  });
+
   it('says the sensor is offline when nothing stands in', () => {
     const r = read({
       'binary_sensor.gym_room_sensor_unavailable': 'on',
