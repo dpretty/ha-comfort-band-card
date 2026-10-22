@@ -167,11 +167,11 @@ export class TransitionEditDialog extends LitElement {
       return false;
     }
     if (Number.isNaN(this._low) || Number.isNaN(this._high)) {
-      this._error = 'Low and high must be numbers.';
+      this._error = 'Lowest and highest must be numbers.';
       return false;
     }
     if (this._low >= this._high) {
-      this._error = 'Low must be less than high.';
+      this._error = 'Lowest must be below highest.';
       return false;
     }
     if (this._low < 10 || this._high > 35) {
@@ -184,7 +184,7 @@ export class TransitionEditDialog extends LitElement {
 
   protected override render() {
     return html`
-      <h3>${this.isNew ? 'Add transition' : 'Edit transition'}</h3>
+      <h3>${this.isNew ? 'Add a change' : 'Edit this change'}</h3>
       <label>
         Time (HH:MM)
         <input
@@ -196,7 +196,7 @@ export class TransitionEditDialog extends LitElement {
         />
       </label>
       <label>
-        Low (°C)
+        Lowest (°C)
         <input
           name="low"
           type="number"
@@ -208,7 +208,7 @@ export class TransitionEditDialog extends LitElement {
         />
       </label>
       <label>
-        High (°C)
+        Highest (°C)
         <input
           name="high"
           type="number"

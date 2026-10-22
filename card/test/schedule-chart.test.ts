@@ -66,4 +66,11 @@ describe('comfort-band-schedule-chart', () => {
     expect(parseTime('23:45')).toBe(23 * 60 + 45);
     expect(parseTime('garbage')).toBe(0);
   });
+
+  it('describes itself in plain words', async () => {
+    const el = await chart();
+    const svg = el.shadowRoot!.querySelector('svg')!;
+    expect(svg.getAttribute('aria-label')).toBe('The comfortable range through the day');
+    expect(svg.querySelector('title')!.textContent).toBe('The comfortable range through the day');
+  });
 });

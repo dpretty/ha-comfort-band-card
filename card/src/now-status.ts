@@ -122,8 +122,8 @@ const STATUS_WORDS: Partial<Record<StatusKind, string>> = {
   heating: 'Heating',
   cooling: 'Cooling',
   comfortable: 'Comfortable',
-  below: 'Idle',
-  above: 'Idle',
+  below: 'A bit cool',
+  above: 'A bit warm',
   idle: 'Idle',
 };
 
@@ -242,4 +242,15 @@ export function formatTime(ms: number, hass?: Pick<HomeAssistant, 'locale'>): st
   };
   if (!twelveHour || date.getMinutes() !== 0) options.minute = '2-digit';
   return new Intl.DateTimeFormat(language, options).format(date);
+}
+
+/** A schedule's "HH:MM" as `formatTime` writes a time of day ("7 am",
+ *  "07:00"); anything else as it is. */
+export function formatClock(at: string, hass?: Pick<HomeAssistant, 'locale'>): string {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(at);
+  if (!match) return at;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return at;
+  return formatTime(new Date(2000, 0, 1, hours, minutes).getTime(), hass);
 }

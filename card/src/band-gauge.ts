@@ -76,7 +76,8 @@ export class BandGauge extends LitElement {
 
     const fmt = (t: number) => (Number.isFinite(t) ? `${t.toFixed(1)}°` : '—');
 
-    const aria = `Comfort band gauge: low ${fmt(this.low)}, ${this.roomLabel} ${fmt(this.room)}, high ${fmt(this.high)}, action ${action}`;
+    const doing = action === 'heating' || action === 'cooling' ? `, ${action}` : '';
+    const aria = `Comfortable range ${fmt(this.low)} to ${fmt(this.high)}, ${this.roomLabel} ${fmt(this.room)}${doing}`;
 
     return html`
       <svg viewBox="0 0 100 24" preserveAspectRatio="none" role="img" aria-label=${aria}>

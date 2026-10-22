@@ -137,13 +137,19 @@ export class ComfortBandTile extends LitElement {
         align-items: center;
         gap: var(--cb-gap-md);
       }
+      .reading {
+        min-width: 70px;
+      }
       .room-temp {
         font-size: 32px;
         font-weight: 300;
         color: var(--cb-text-primary);
         font-variant-numeric: tabular-nums;
         line-height: 1;
-        min-width: 70px;
+      }
+      .feels {
+        font-size: 11px;
+        color: var(--cb-text-secondary);
       }
       .gauge-wrap {
         flex: 1;
@@ -199,7 +205,10 @@ export class ComfortBandTile extends LitElement {
           <div class="zone-name">${this.zoneName || '—'}</div>
         </div>
         <div class="body">
-          <div class="room-temp">${this._renderTemperature()}</div>
+          <div class="reading">
+            <div class="room-temp">${this._renderTemperature()}</div>
+            ${this.feelsLike ? html`<div class="feels">feels like</div>` : null}
+          </div>
           <div class="gauge-wrap">
             <band-gauge
               .low=${this.low}
@@ -228,7 +237,7 @@ export class ComfortBandTile extends LitElement {
         ? 'cooling'
         : null;
     const style = tint ? `--cb-mini-bg:${actionColorVar(tint)}` : '';
-    const name = `${this.zoneName || 'Zone'} ${this._renderTemperature()}`;
+    const name = `${this.zoneName || 'Zone'}${this.feelsLike ? ', feels like' : ''} ${this._renderTemperature()}`;
     const label = this.statusText ? `${name}. ${this.statusText}` : name;
     return html`
       <div

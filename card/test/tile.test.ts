@@ -134,6 +134,16 @@ describe('comfort-band-tile', () => {
     expect(gauge.action).toBe('cooling');
   });
 
+  it('says "feels like" beside the temperature when that is what it shows', async () => {
+    const feels = await tile({ temperature: 22.4, feelsLike: true });
+    expect(feels.shadowRoot!.querySelector('.reading .feels')!.textContent!.trim()).toBe(
+      'feels like',
+    );
+    teardown();
+    const room = await tile({ temperature: 21.4 });
+    expect(room.shadowRoot!.querySelector('.feels')).toBeNull();
+  });
+
   it('labels the gauge\'s marker "feels like" when that is the temperature shown', async () => {
     const el = await tile({ temperature: 22.4, feelsLike: true });
     const gauge = el.shadowRoot!.querySelector('band-gauge') as HTMLElement & {
@@ -258,6 +268,20 @@ describe('comfort-band-tile', () => {
         'Gym 21.4°. Heating · adjusted to 20–23° until 4:30 pm',
       );
       expect(mini.getAttribute('title')).toBe(mini.getAttribute('aria-label'));
+    });
+
+    it('says "feels like" in its label and tooltip, but not on the chip', async () => {
+      const el = await tile({
+        variant: 'mini',
+        zoneName: 'Gym',
+        temperature: 23.7,
+        feelsLike: true,
+        statusText: 'Comfortable · 19.5–24°',
+      });
+      const mini = el.shadowRoot!.querySelector('.mini')!;
+      expect(mini.getAttribute('aria-label')).toBe('Gym, feels like 23.7°. Comfortable · 19.5–24°');
+      expect(mini.getAttribute('title')).toBe(mini.getAttribute('aria-label'));
+      expect(mini.textContent!.trim()).toBe('23.7°');
     });
 
     it('says just the zone and temperature until there is a status', async () => {

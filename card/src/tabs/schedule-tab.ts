@@ -29,6 +29,7 @@ import '../transition-edit-dialog.js';
 import { findActiveProfileEntity } from '../helpers.js';
 import { parseTime } from '../schedule-chart.js';
 import { setSchedule, subscribeSchedule } from '../services.js';
+import { bandText, formatClock } from '../now-status.js';
 import type { HomeAssistant, Transition, UnsubscribeFunc } from '../types.js';
 import { tokens } from '../styles.js';
 
@@ -121,16 +122,8 @@ export class ComfortBandScheduleTab extends LitElement {
         margin-bottom: var(--cb-gap-sm);
       }
       .profile-label {
-        font-size: 12px;
+        font-size: 13px;
         color: var(--cb-text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
-      .profile-value {
-        font-size: 14px;
-        font-weight: 500;
-        text-transform: capitalize;
-        color: var(--cb-text-primary);
       }
       .loading,
       .error {
@@ -564,10 +557,11 @@ export class ComfortBandScheduleTab extends LitElement {
     }
 
     return html`
-      <div class="header">
-        <span class="profile-label">Active profile</span>
-        <span class="profile-value">${this._profile || '—'}</span>
-      </div>
+      ${readActiveProfile(this.hass) !== null && this._profile
+        ? html`<div class="header">
+            <span class="profile-label">Following the ${titleCase(this._profile)} schedule</span>
+          </div>`
+        : nothing}
       ${this._loading
         ? html`<div class="loading">Loading schedule…</div>`
         : this._error
@@ -577,9 +571,7 @@ export class ComfortBandScheduleTab extends LitElement {
                 .transitions=${this._transitions}
               ></comfort-band-schedule-chart>
               <div class="list-toolbar">
-                <button class="button primary" @click=${this._onAddClicked}>
-                  + Add transition
-                </button>
+                <button class="button primary" @click=${this._onAddClicked}>+ Add a change</button>
               </div>
               ${this._renderList()}
             `}
@@ -588,7 +580,7 @@ export class ComfortBandScheduleTab extends LitElement {
 
   private _renderList() {
     if (this._transitions.length === 0) {
-      return html`<div class="empty">No transitions yet. Use “Add transition” to create one.</div>`;
+      return html`<div class="empty">No changes yet. Use “Add a change” to create one.</div>`;
     }
     return html`
       <ul class="list" role="list">
@@ -600,9 +592,8 @@ export class ComfortBandScheduleTab extends LitElement {
   }
 
   private _renderRow(t: Transition) {
-    const ariaLabel = `Edit transition at ${t.at}, ${t.low.toFixed(1)} to ${t.high.toFixed(
-      1,
-    )} degrees`;
+    const at = formatClock(t.at, this.hass);
+    const ariaLabel = `Edit the ${at} change, ${t.low} to ${t.high} degrees`;
     return html`
       <li
         class="row"
@@ -613,19 +604,19 @@ export class ComfortBandScheduleTab extends LitElement {
         @click=${this._onRowClicked(t)}
         @keydown=${this._onRowKeydown(t)}
       >
-        <span class="at">${t.at}</span>
-        <span class="band">${t.low.toFixed(1)}° – ${t.high.toFixed(1)}°</span>
+        <span class="at">${at}</span>
+        <span class="band">${bandText(t)}</span>
         <span class="actions">
           <button
             class="button secondary"
-            aria-label="Edit transition at ${t.at}"
+            aria-label="Edit the ${at} change"
             @click=${this._onEditClicked(t)}
           >
             Edit
           </button>
           <button
             class="button danger"
-            aria-label="Delete transition at ${t.at}"
+            aria-label="Delete the ${at} change"
             @click=${this._onDeleteClicked(t)}
           >
             Delete
@@ -636,14 +627,15 @@ export class ComfortBandScheduleTab extends LitElement {
   }
 
   private _renderConfirmRow(t: Transition) {
+    const question = `Delete the ${formatClock(t.at, this.hass)} change?`;
     return html`
       <li
         class="row confirm"
         role="alertdialog"
-        aria-label="Delete transition at ${t.at}?"
+        aria-label=${question}
         @keydown=${this._onConfirmKeydown}
       >
-        <span class="confirm-text">Delete transition at ${t.at}?</span>
+        <span class="confirm-text">${question}</span>
         <span class="actions">
           <button class="button secondary" @click=${this._onCancelDelete}>Cancel</button>
           <button class="button danger" @click=${this._onConfirmDelete}>Delete</button>
@@ -657,6 +649,11 @@ function readActiveProfile(hass: HomeAssistant): string | null {
   const entity = findActiveProfileEntity(hass);
   if (!entity) return null;
   return hass.states[entity]?.state ?? null;
+}
+
+/** "home" → "Home". */
+function titleCase(name: string): string {
+  return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 function defaultLow(transitions: Transition[]): number {

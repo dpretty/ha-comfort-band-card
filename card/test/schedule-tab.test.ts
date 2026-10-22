@@ -94,6 +94,8 @@ function makeHass(opts: FakeHassOptions = {}): FakeHass {
     },
     callService,
     callWS: vi.fn(),
+    // Times as "06:00", whatever the machine's own clock.
+    locale: { language: 'en-GB', time_format: '24' },
   };
   return {
     hass,
@@ -394,7 +396,8 @@ describe('comfort-band-schedule-tab', () => {
 
     const confirm = el.shadowRoot!.querySelector('li.row.confirm');
     expect(confirm).not.toBeNull();
-    expect(confirm!.textContent).toContain('Delete transition at 06:00?');
+    expect(confirm!.textContent).toContain('Delete the 06:00 change?');
+    expect(confirm!.getAttribute('aria-label')).toBe('Delete the 06:00 change?');
     expect(confirm!.getAttribute('role')).toBe('alertdialog');
 
     // Cancel restores the regular row; no write happened.
@@ -468,7 +471,7 @@ describe('comfort-band-schedule-tab', () => {
     const el = await tab(hass);
     const empty = el.shadowRoot!.querySelector('.empty');
     expect(empty).not.toBeNull();
-    expect(empty!.textContent).toContain('Add transition');
+    expect(empty!.textContent!.trim()).toBe('No changes yet. Use “Add a change” to create one.');
     // The Add button stays visible regardless.
     expect(el.shadowRoot!.querySelector('.list-toolbar button.primary')).not.toBeNull();
   });
@@ -910,5 +913,73 @@ describe('comfort-band-schedule-tab', () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(firstUnsub).toHaveBeenCalledTimes(1);
+  });
+
+  describe('in plain words', () => {
+    /** Text and labels a person meets: not the tab's own CSS. */
+    const shownWords = (root: ParentNode) =>
+      Array.from(root.querySelectorAll('*:not(style)'))
+        .map((n) => `${n.textContent} ${n.getAttribute('aria-label') ?? ''}`)
+        .join(' ');
+
+    const schedule = {
+      baseline: [
+        { at: '06:00', low: 20, high: 23 },
+        { at: '22:30', low: 18.5, high: 21 },
+      ],
+      current: [],
+    };
+
+    it('says which profile it follows, by name', async () => {
+      const { hass } = makeHass({ initialSchedule: schedule, active: 'away' });
+      const el = await tab(hass);
+      expect(el.shadowRoot!.querySelector('.header')!.textContent!.trim()).toBe(
+        'Following the Away schedule',
+      );
+    });
+
+    // Without a profile manager the schedule is the zone's own.
+    it("doesn't mention profiles where none are set up", async () => {
+      const { hass } = makeHass({ initialSchedule: schedule });
+      hass.devices = {};
+      hass.entities = {};
+      const el = await tab(hass);
+      expect(el.shadowRoot!.querySelector('.header')).toBeNull();
+      expect(shownWords(el.shadowRoot!)).not.toMatch(/profile/i);
+      // The zone's own schedule still loads.
+      expect(el.shadowRoot!.querySelectorAll('li.row')).toHaveLength(2);
+    });
+
+    it("lists each change at a time in HA's 12/24-hour setting, with its range", async () => {
+      const { hass } = makeHass({ initialSchedule: schedule });
+      hass.locale = { language: 'en-US', time_format: '12' };
+      const el = await tab(hass);
+      const rows = Array.from(el.shadowRoot!.querySelectorAll('li.row'));
+      expect(rows.map((r) => r.querySelector('.at')!.textContent!.trim())).toEqual([
+        '6 AM',
+        '10:30 PM',
+      ]);
+      expect(rows.map((r) => r.querySelector('.band')!.textContent!.trim())).toEqual([
+        '20–23°',
+        '18.5–21°',
+      ]);
+      expect(rows[1].getAttribute('aria-label')).toBe(
+        'Edit the 10:30 PM change, 18.5 to 21 degrees',
+      );
+      const buttons = rows[1].querySelectorAll('button');
+      expect(Array.from(buttons).map((b) => b.getAttribute('aria-label'))).toEqual([
+        'Edit the 10:30 PM change',
+        'Delete the 10:30 PM change',
+      ]);
+      expect(el.shadowRoot!.querySelector('.list-toolbar button')!.textContent!.trim()).toBe(
+        '+ Add a change',
+      );
+    });
+
+    it('never says "transition"', async () => {
+      const { hass } = makeHass({ initialSchedule: schedule });
+      const el = await tab(hass);
+      expect(shownWords(el.shadowRoot!)).not.toMatch(/transition/i);
+    });
   });
 });

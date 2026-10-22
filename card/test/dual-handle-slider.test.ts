@@ -22,6 +22,15 @@ function getThumbs(el: DualHandleSlider): { low: HTMLElement; high: HTMLElement 
 }
 
 describe('dual-handle-slider', () => {
+  it('names the thumbs as the ends of the range', async () => {
+    const el = await slider();
+    const thumbs = el.shadowRoot!.querySelectorAll('[role="slider"]');
+    expect(Array.from(thumbs).map((t) => t.getAttribute('aria-label'))).toEqual([
+      'Bottom of the range',
+      'Top of the range',
+    ]);
+  });
+
   it('renders two thumbs with role=slider and the right aria values', async () => {
     const el = await slider();
     const { low, high } = getThumbs(el);

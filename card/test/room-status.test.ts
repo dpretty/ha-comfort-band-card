@@ -257,6 +257,14 @@ describe('roomBadges', () => {
     expect(roomBadges(room({ action: 'cooling', temperature: 23.5 }))).toEqual(['cooling']);
   });
 
+  // With no schedule an adjustment's range stays: nothing temporary to flag.
+  it("doesn't flag an adjustment in a room with no schedule", () => {
+    expect(roomBadges(room({ overrideActive: true, scheduled: false }))).toEqual([]);
+    expect(roomBadges(room({ overrideActive: true, scheduled: true }))).toEqual(['adjusted']);
+    // An integration that doesn't say.
+    expect(roomBadges(room({ overrideActive: true, scheduled: null }))).toEqual(['adjusted']);
+  });
+
   it('shows an adjustment, after what the room is doing', () => {
     expect(roomBadges(room({ overrideActive: true }))).toEqual(['adjusted']);
     expect(roomBadges(room({ overrideActive: true, action: 'heating' }))).toEqual([
