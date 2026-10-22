@@ -38,9 +38,9 @@ export class ComfortBandInsightsTab extends LitElement {
   public static override styles = [
     tokens,
     css`
+      /* Inside the Advanced tab's section, which does the padding. */
       :host {
         display: block;
-        padding: var(--cb-gap-md);
       }
       .empty {
         padding: var(--cb-gap-lg);
@@ -126,7 +126,8 @@ export class ComfortBandInsightsTab extends LitElement {
       // above passed) — the hint adds humidity to the picture, not
       // both at once.
       return html`<div class="hint">
-        Configure a humidity sensor in the Settings tab to also add humidity to the chart.
+        Set up a humidity sensor under Settings → Devices &amp; Services → Comfort Band → Configure
+        to add humidity to the chart.
       </div>`;
     }
     return nothing;

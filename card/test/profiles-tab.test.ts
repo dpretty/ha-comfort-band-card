@@ -111,9 +111,14 @@ describe('comfort-band-profiles-tab', () => {
     });
   });
 
-  it('renders a friendly empty state when the profile manager is not yet registered', async () => {
+  // #32: no developer message; what profiles are and how to turn them on.
+  it('says what profiles are and how to set them up, where none are', async () => {
     const el = await profilesTab(makeHass({ selectEntity: null }));
-    expect(el.shadowRoot!.textContent).toContain('not registered');
+    const text = el.shadowRoot!.querySelector('.empty')!.textContent!.replace(/\s+/g, ' ').trim();
+    expect(text).toBe(
+      'No profiles set up. Profiles are named sets of schedules, such as Home and Away, that every room switches between together. To use them, add Comfort Band again under Settings → Devices & Services and choose “Set up profile manager”.',
+    );
+    expect(text).not.toMatch(/registered/);
   });
 
   it('renders a no-profiles message when options is empty', async () => {

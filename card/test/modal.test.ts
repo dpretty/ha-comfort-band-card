@@ -97,14 +97,9 @@ describe('comfort-band-modal tab a11y', () => {
   it('wires every tab button with id, role, aria-controls, and a roving tabindex', async () => {
     const el = await openModal();
     const tabs = getTabs(el);
-    expect(tabs.length).toBe(5); // now / schedule / profiles / settings / insights
-    const expectedIds = [
-      'cb-tab-now',
-      'cb-tab-schedule',
-      'cb-tab-profiles',
-      'cb-tab-settings',
-      'cb-tab-insights',
-    ];
+    expect(tabs.length).toBe(3);
+    expect(tabs.map((t) => t.textContent!.trim())).toEqual(['Now', 'Schedule', 'Advanced']);
+    const expectedIds = ['cb-tab-now', 'cb-tab-schedule', 'cb-tab-advanced'];
     tabs.forEach((tab, i) => {
       expect(tab.id).toBe(expectedIds[i]);
       expect(tab.getAttribute('aria-controls')).toBe('cb-panel');
@@ -121,6 +116,13 @@ describe('comfort-band-modal tab a11y', () => {
     const panel = getPanel(el);
     expect(panel.id).toBe('cb-panel');
     expect(panel.getAttribute('aria-labelledby')).toBe('cb-tab-now');
+  });
+
+  it('shows the Advanced tab', async () => {
+    const el = await openModal();
+    el.selectTab('advanced');
+    await el.updateComplete;
+    expect(getPanel(el).querySelector('comfort-band-advanced-tab')).not.toBeNull();
   });
 
   it('updates aria-labelledby when the active tab changes', async () => {
@@ -152,7 +154,7 @@ describe('comfort-band-modal tab a11y', () => {
 
   it('ArrowRight on the last tab wraps to the first', async () => {
     const el = await openModal();
-    el.selectTab('insights');
+    el.selectTab('advanced');
     await el.updateComplete;
     await pressKey(el, 'ArrowRight');
     const tabs = getTabs(el);
@@ -162,7 +164,7 @@ describe('comfort-band-modal tab a11y', () => {
 
   it('Home jumps to the first tab', async () => {
     const el = await openModal();
-    el.selectTab('insights');
+    el.selectTab('advanced');
     await el.updateComplete;
     await pressKey(el, 'Home');
     expect(getTabs(el)[0].getAttribute('aria-selected')).toBe('true');

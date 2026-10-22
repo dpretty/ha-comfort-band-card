@@ -178,7 +178,7 @@ export function findActiveProfileEntity(hass: HomeAssistant): string | null {
  * pushed yet, or no humidity sensor has been configured.
  *
  * Centralised so the cast and attribute key live in one place — both
- * the Settings tab and the Insights tab need this lookup.
+ * the Advanced tab's Comfort and History sections need this lookup.
  */
 export function readHumiditySensor(
   hass: HomeAssistant | undefined,

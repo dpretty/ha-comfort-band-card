@@ -122,15 +122,14 @@ export class ComfortBandProfilesTab extends LitElement {
   public static override styles = [
     tokens,
     css`
+      /* Inside the Advanced tab's section, which does the padding. */
       :host {
         display: block;
-        padding: var(--cb-gap-md);
       }
       .empty {
         color: var(--cb-text-secondary);
         font-size: 13px;
-        text-align: center;
-        padding: var(--cb-gap-lg);
+        line-height: 1.4;
       }
       .upgrade-hint {
         margin: var(--cb-gap-md) 0 0;
@@ -556,7 +555,11 @@ export class ComfortBandProfilesTab extends LitElement {
     if (!this.hass) return nothing;
     const state = this._readState();
     if (state === null) {
-      return html`<div class="empty">Profile manager not registered yet.</div>`;
+      return html`<div class="empty">
+        No profiles set up. Profiles are named sets of schedules, such as Home and Away, that every
+        room switches between together. To use them, add Comfort Band again under Settings → Devices
+        &amp; Services and choose “Set up profile manager”.
+      </div>`;
     }
     const { options, active, defaultProfile, descriptions, crudAvailable } = state;
 
