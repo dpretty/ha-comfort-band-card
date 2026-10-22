@@ -976,6 +976,20 @@ describe('comfort-band-schedule-tab', () => {
       );
     });
 
+    it("asks before deleting a change, naming its time in HA's setting", async () => {
+      const { hass } = makeHass({ initialSchedule: schedule });
+      hass.locale = { language: 'en-US', time_format: '12' };
+      const el = await tab(hass);
+      const row = el.shadowRoot!.querySelectorAll('li.row')[1];
+      row.querySelector<HTMLButtonElement>('button.danger')!.click();
+      await el.updateComplete;
+      const confirm = el.shadowRoot!.querySelector('li.row.confirm')!;
+      expect(confirm.querySelector('.confirm-text')!.textContent).toBe(
+        'Delete the 10:30 PM change?',
+      );
+      expect(confirm.getAttribute('aria-label')).toBe('Delete the 10:30 PM change?');
+    });
+
     it('never says "transition"', async () => {
       const { hass } = makeHass({ initialSchedule: schedule });
       const el = await tab(hass);

@@ -49,6 +49,18 @@ describe('transition-edit-dialog', () => {
     expect(fire.mock.calls[0][0].detail.transition).toEqual({ at: '06:00', low: 19, high: 22 });
   });
 
+  it('says lowest and highest must be numbers', async () => {
+    const el = await dialog({ transition: { at: '06:00', low: 19, high: 22 }, isNew: false });
+    const low = el.shadowRoot!.querySelectorAll<HTMLInputElement>('input')[1];
+    low.value = '';
+    low.dispatchEvent(new Event('input'));
+    (el.shadowRoot!.querySelector('.button.primary') as HTMLButtonElement).click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('.error')!.textContent).toBe(
+      'Lowest and highest must be numbers.',
+    );
+  });
+
   it('blocks save and surfaces an error when low >= high', async () => {
     const el = await dialog({
       transition: { at: '06:00', low: 22, high: 22 },

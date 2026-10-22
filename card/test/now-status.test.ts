@@ -384,6 +384,8 @@ describe('formatClock', () => {
     expect(formatClock('24:00', locale('12'))).toBe('24:00');
     expect(formatClock('07:60', locale('12'))).toBe('07:60');
     expect(formatClock('7am', locale('12'))).toBe('7am');
+    expect(formatClock('07:00:00', locale('12'))).toBe('07:00:00');
+    expect(formatClock('at 07:00', locale('12'))).toBe('at 07:00');
     expect(formatClock('', locale('12'))).toBe('');
   });
 });
