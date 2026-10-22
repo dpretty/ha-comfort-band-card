@@ -79,12 +79,12 @@ export const SETTINGS: Record<SettingsSection, { main: Setting[]; fine?: Setting
       num(
         'deadbandBelow',
         'Heating starts below the range by',
-        'How far below the range the room may drop before heating starts. Heating stops once it’s back at the bottom of the range. Not used while predictive control is planning: it decides when to start and stop, and heats towards the top of the range.',
+        'How far below the range the room may drop before heating starts; heating stops at the bottom of the range. Learning can start or stop it early, or hold off. Predictive control, while it’s planning, doesn’t use this, and heats towards the top of the range.',
       ),
       num(
         'deadbandAbove',
         'Cooling starts above the range by',
-        'How far above the range the room may rise before cooling starts. Cooling stops once it’s back at the top of the range. Not used while predictive control is planning: it decides when to start and stop, and cools towards the bottom of the range.',
+        'How far above the range the room may rise before cooling starts; cooling stops at the top of the range. Learning can start or stop it early, or hold off. Predictive control, while it’s planning, doesn’t use this, and cools towards the bottom of the range.',
       ),
       num(
         'bandRampMinutes',
@@ -113,7 +113,7 @@ export const SETTINGS: Record<SettingsSection, { main: Setting[]; fine?: Setting
       sw(
         'mpcEnabled',
         'Predictive control',
-        'Plans whole heating and cooling cycles ahead, from what the room has learned and the schedule coming up. Needs Learning on. It plans only while it has recent enough readings of how this room warms and cools, usually after a few hours of normal running, and not during a peak or on a stand-in sensor; otherwise heating and cooling start and stop as set under Comfort.',
+        'Plans heating and cooling ahead, from what the room has learned and the schedule coming up. Needs Learning on. It plans only while it has recent enough readings of how this room warms and cools, usually after a few hours of normal running, and not during a peak or on a stand-in sensor.',
       ),
     ],
     fine: [
@@ -140,7 +140,7 @@ export const SETTINGS: Record<SettingsSection, { main: Setting[]; fine?: Setting
       num(
         'crossModeMinMinutes',
         'Switch between heating and cooling no sooner than',
-        'The least time after heating stops before cooling may start, or the other way round.',
+        'The least time between heating and then cooling, or the other way round.',
       ),
     ],
   },
@@ -154,7 +154,7 @@ export const SETTINGS: Record<SettingsSection, { main: Setting[]; fine?: Setting
       pick(
         'activeFanMode',
         'Fan while heating or cooling',
-        'The fan speed while the unit is working.',
+        'The fan speed while the unit is working. With peak saving on, it’s left as it is during a peak.',
         optionLabel,
       ),
       pick(
@@ -370,11 +370,19 @@ export class ComfortBandSettingsTab extends LitElement {
         font-family: ui-monospace, SFMono-Regular, monospace;
         font-size: 11px;
       }
+      /* A stepper too wide to leave its title room goes below it. */
+      .row.num {
+        flex-wrap: wrap;
+      }
+      .row.num .row-label {
+        flex: 1 1 12em;
+      }
       .stepper {
         display: flex;
         align-items: center;
         flex: 0 0 auto;
         gap: 2px;
+        margin-left: auto;
       }
       /* WCAG 2.5.5: 44x44 targets on the steppers too. */
       .step {
@@ -439,6 +447,8 @@ export class ComfortBandSettingsTab extends LitElement {
         font: inherit;
         font-size: 14px;
         text-overflow: ellipsis;
+        /* With its own look, WebKit lets a long option's text out of the box. */
+        overflow: hidden;
       }
       .choice:disabled {
         opacity: 0.6;
@@ -526,15 +536,27 @@ export class ComfortBandSettingsTab extends LitElement {
     const hass = this.hass;
     if (!hass) return;
     const current = () => this._pending[entityId] === value && !this._timers.has(entityId);
+    let before: HassEntity | undefined;
     this._chain = this._chain
-      .then(() => hass.callService(domain, service, { entity_id: entityId, ...data }))
+      .then(() => {
+        before = this.hass?.states[entityId];
+        return hass.callService(domain, service, { entity_id: entityId, ...data });
+      })
       .then(
         () => {
           if (this._error?.entityId === entityId) this._error = null;
           if (!current()) return;
-          // Taken off the page (its taps sent as it went), it waits for nothing.
-          if (this._reported(entityId, value) || !this.isConnected) this._drop(entityId);
-          else this._settle(entityId);
+          // HA has reported it, or reported something else meanwhile. Taken
+          // off the page (its taps sent as it went), it waits for nothing.
+          if (
+            this._reported(entityId, value) ||
+            this.hass?.states[entityId] !== before ||
+            !this.isConnected
+          ) {
+            this._drop(entityId);
+          } else {
+            this._settle(entityId);
+          }
         },
         (err: unknown) => {
           this._error = { entityId, message: errorText(err) };
@@ -607,7 +629,8 @@ export class ComfortBandSettingsTab extends LitElement {
     const steps = (current - base) / step;
     const k = direction > 0 ? Math.floor(steps + 1e-9) + 1 : Math.ceil(steps - 1e-9) - 1;
     const decimals = Math.max(stepDecimals(step), stepDecimals(base));
-    const next = Number(Math.min(max, Math.max(min, base + k * step)).toFixed(decimals));
+    // Rounded, then held to the limits, which needn't be on the grid.
+    const next = Math.min(max, Math.max(min, Number((base + k * step).toFixed(decimals))));
     this._pending = { ...this._pending, [entityId]: next };
     this._error = null;
     this._stopSettling(entityId);
@@ -747,7 +770,7 @@ export class ComfortBandSettingsTab extends LitElement {
     const atMin = !readable || (min !== null && value <= min);
     const atMax = !readable || (max !== null && value >= max);
     return html`
-      <div class="row" data-setting=${setting.field}>
+      <div class="row num" data-setting=${setting.field}>
         <div class="row-label">
           <div class="title" id=${titleId}>${setting.title}</div>
           <div class="desc">${setting.desc}</div>

@@ -248,16 +248,71 @@ describe('comfort-band-settings-tab sections', () => {
   });
 
   // Predictive control never reads the deadbands, and heats to the top.
-  it('says the deadbands aren’t used while predictive control plans', async () => {
+  // Learning moves the start and stop; predictive control ignores them.
+  it('says what else decides when heating and cooling start and stop', async () => {
     const el = await settingsTab(makeHass());
     for (const [setting, edge] of [
       ['deadbandBelow', 'heats towards the top'],
       ['deadbandAbove', 'cools towards the bottom'],
     ]) {
-      expect(row(el, setting).querySelector('.desc')!.textContent).toContain(
-        `Not used while predictive control is planning: it decides when to start and stop, and ${edge} of the range.`,
+      const desc = row(el, setting).querySelector('.desc')!.textContent!;
+      expect(desc).toContain('Learning can start or stop it early, or hold off.');
+      expect(desc).toContain(
+        `Predictive control, while it’s planning, doesn’t use this, and ${edge} of the range.`,
       );
     }
+  });
+
+  // When it isn't planning, Learning decides, not only the Comfort settings.
+  it('says when predictive control plans, without saying what happens otherwise', async () => {
+    const el = await settingsTab(makeHass(), 'automation');
+    const desc = (setting: string) => row(el, setting).querySelector('.desc')!.textContent!;
+    expect(desc('mpcEnabled')).toBe(
+      'Plans heating and cooling ahead, from what the room has learned and the schedule coming up. Needs Learning on. It plans only while it has recent enough readings of how this room warms and cools, usually after a few hours of normal running, and not during a peak or on a stand-in sensor.',
+    );
+    expect(desc('crossModeMinMinutes')).toBe(
+      'The least time between heating and then cooling, or the other way round.',
+    );
+  });
+
+  // A heat or cool cycle in a peak leaves the fan where it is.
+  it('says the fan isn’t boosted during a peak', async () => {
+    const el = await settingsTab(makeHass(), 'fan');
+    expect(row(el, 'activeFanMode').querySelector('.desc')!.textContent).toContain(
+      'With peak saving on, it’s left as it is during a peak.',
+    );
+  });
+
+  it('names every stepper and choice by its own title', async () => {
+    for (const section of ['comfort', 'automation', 'fan', 'peak', 'schedules'] as const) {
+      const el = await settingsTab(makeHass(), section);
+      for (const control of el.shadowRoot!.querySelectorAll('.stepper, select')) {
+        const r = control.closest('.row')!;
+        const named = el.shadowRoot!.getElementById(control.getAttribute('aria-labelledby')!)!;
+        expect(named, r.getAttribute('data-setting')!).toBe(r.querySelector('.title'));
+      }
+      el.remove();
+    }
+  });
+
+  it('has "Fine-tuning" only where there’s fine-tuning to show', async () => {
+    for (const section of ['comfort', 'fan', 'peak', 'schedules'] as const) {
+      const el = await settingsTab(makeHass(), section);
+      expect(el.shadowRoot!.querySelector('details.fine'), section).toBeNull();
+      el.remove();
+    }
+    const el = await settingsTab(
+      makeHass(),
+      'automation',
+      makeEntities('gym', {
+        lookaheadMinutes: null,
+        passiveTolerance: null,
+        mpcHorizonMinutes: null,
+        minCycleMinutes: null,
+        crossModeMinMinutes: null,
+      }),
+    );
+    expect(el.shadowRoot!.querySelector('details.fine')).toBeNull();
   });
 
   // In a peak a cycle still starts past the relaxed edge by the deadband.
@@ -626,6 +681,24 @@ describe('comfort-band-settings-tab steppers', () => {
     vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
     await flush(el);
     expect(calls(hass).map((c) => (c[2] as { value: number }).value)).toEqual([4.8, 0]);
+  });
+
+  // Rounded to the step's decimals, 2.25 would go past it.
+  it('stops on a top limit with more decimals than its step', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const hass = makeHass({
+      states: { 'number.gym_deadband_below': number('2.2', 0.1, 2.25, 0.1, '°C') },
+    });
+    const el = await settingsTab(hass);
+    stepButtons(el, 'deadbandBelow').more.click();
+    vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    expect((calls(hass)[0][2] as { value: number }).value).toBe(2.25);
+  });
+
+  it('puts a stepper below its title when they don’t fit side by side', () => {
+    expect(css()).toMatch(/\.row\.num\s*\{[^}]*flex-wrap:\s*wrap/);
+    expect(css()).toMatch(/\.stepper\s*\{[^}]*margin-left:\s*auto/);
   });
 
   // 0.2 + 0.1 is 0.30000000000000004 in floating point.
@@ -1011,6 +1084,11 @@ describe('comfort-band-settings-tab choices', () => {
     expect(css()).toMatch(/\.choice\s*\{[^}]*min-height:\s*44px/);
     expect(css()).toMatch(/\.choice\s*\{[^}]*[^-]appearance:\s*none/);
     expect(css()).toMatch(/\.choice\s*\{[^}]*-webkit-appearance:\s*none/);
+  });
+
+  // WebKit lets the text of a drop-down drawn this way out of its box.
+  it('keeps a long option inside the drop-down', () => {
+    expect(css()).toMatch(/\.choice\s*\{[^}]*overflow:\s*hidden/);
   });
 
   it('puts a choice below its title when they don’t fit side by side', () => {
@@ -1449,7 +1527,7 @@ describe('comfort-band-settings-tab once a call has gone through', () => {
       expect(toggle().getAttribute('aria-disabled')).toBe('false');
     });
 
-    it("doesn't take an entity HA has dropped for one that reported the value", async () => {
+    it('shows a dash, without waiting, for an entity HA drops meanwhile', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const ref: { el?: ComfortBandSettingsTab } = {};
       const hass = makeHass({
@@ -1463,7 +1541,20 @@ describe('comfort-band-settings-tab once a call has gone through', () => {
       stepButtons(el, 'deadbandBelow').more.click();
       vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
       await flush(el);
-      expect(vi.getTimerCount()).toBe(1);
+      expect(shown(el, 'deadbandBelow')).toBe('—');
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    // Someone else's change, or HA's own take on the value.
+    it('shows what HA reports instead, without waiting', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const r = reporting({ 'number.gym_peak_heat_offset': number('2.0', 0, 5, 0.5, '°C') });
+      const el = r.set(await settingsTab(r.hass, 'peak'));
+      stepButtons(el, 'peakHeatOffset').more.click();
+      vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+      await flush(el);
+      expect(shown(el, 'peakHeatOffset')).toBe('2.0 °C');
+      expect(vi.getTimerCount()).toBe(0);
     });
 
     it('stops waiting for a number or a choice at once', async () => {
