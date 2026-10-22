@@ -760,6 +760,36 @@ describe('comfort-band-settings-tab steppers', () => {
     expect(await at('less')).toBe(0.2);
   });
 
+  it('steps onto the grid from past halfway between two points of it', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const at = async (direction: 'less' | 'more') => {
+      const hass = makeHass({
+        states: { 'number.gym_deadband_below': number('0.28', 0.1, 2, 0.1, '°C') },
+      });
+      const el = await settingsTab(hass);
+      stepButtons(el, 'deadbandBelow')[direction].click();
+      vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+      await flush(el);
+      el.remove();
+      return (calls(hass)[0][2] as { value: number }).value;
+    };
+    expect(await at('more')).toBe(0.3);
+    expect(await at('less')).toBe(0.2);
+  });
+
+  // (0.4 − 0.1) / 0.1 is 3.0000000000000004 in floating point.
+  it('steps down from a value floating point puts just past a step', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const hass = makeHass({
+      states: { 'number.gym_deadband_below': number('0.4', 0.1, 2, 0.1, '°C') },
+    });
+    const el = await settingsTab(hass);
+    stepButtons(el, 'deadbandBelow').less.click();
+    vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    expect((calls(hass)[0][2] as { value: number }).value).toBe(0.3);
+  });
+
   // Steps of 0.1 from 0.05 are 0.05, 0.15, 0.25...
   it('keeps the bottom limit’s decimals', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -1493,13 +1523,16 @@ describe('comfort-band-settings-tab errors', () => {
   });
 
   it('says something even with no message', async () => {
-    const el = await settingsTab(
-      makeHass({ callServiceImpl: vi.fn().mockRejectedValueOnce('nope') }),
-      'fan',
-    );
-    toggle(el, 'fanControlEnabled').click();
-    await flush(el);
-    expect(alert(el)!.textContent).toBe('That setting couldn’t be changed.');
+    for (const reason of ['nope', { code: 'x', message: '' }]) {
+      const el = await settingsTab(
+        makeHass({ callServiceImpl: vi.fn().mockRejectedValueOnce(reason) }),
+        'fan',
+      );
+      toggle(el, 'fanControlEnabled').click();
+      await flush(el);
+      expect(alert(el)!.textContent).toBe('That setting couldn’t be changed.');
+      el.remove();
+    }
   });
 
   // A newer value for the same setting, tapped while the refused one was
