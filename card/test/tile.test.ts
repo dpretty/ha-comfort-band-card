@@ -202,14 +202,6 @@ describe('comfort-band-tile', () => {
     expect(svg.hasAttribute('aria-label')).toBe(false);
   });
 
-  it('labels the gauge\'s marker "feels like" when that is the temperature shown', async () => {
-    const el = await tile({ temperature: 22.4, feelsLike: true });
-    const gauge = el.shadowRoot!.querySelector('band-gauge') as HTMLElement & {
-      roomLabel: string;
-    };
-    expect(gauge.roomLabel).toBe('feels like');
-  });
-
   describe('mini variant', () => {
     it('renders only the temperature, with no zone name, gauge or status line', async () => {
       const el = await tile({

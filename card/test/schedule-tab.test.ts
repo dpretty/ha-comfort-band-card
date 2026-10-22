@@ -930,6 +930,42 @@ describe('comfort-band-schedule-tab', () => {
       current: [],
     };
 
+    it("keeps a profile's name as typed, capitals included", async () => {
+      for (const name of ['home', 'Holiday house']) {
+        const { hass } = makeHass({ initialSchedule: schedule, active: name });
+        const el = await tab(hass);
+        expect(el.shadowRoot!.querySelector('.header')!.textContent!.trim()).toBe(
+          `Schedule: ${name}`,
+        );
+        el.remove();
+      }
+      const css = (
+        customElements.get('comfort-band-schedule-tab') as unknown as {
+          styles: Array<{ cssText: string }>;
+        }
+      ).styles
+        .flat()
+        .map((s) => s.cssText)
+        .join('\n');
+      expect(css).not.toMatch(/\.profile-label\s*\{[^}]*text-transform/);
+    });
+
+    it('names the new profile when it switches while the tab is open', async () => {
+      const fake = makeHass({ initialSchedule: schedule, active: 'home' });
+      const el = await tab(fake.hass);
+      expect(el.shadowRoot!.querySelector('.header')!.textContent!.trim()).toBe('Schedule: home');
+      fake.hass.states['select.comfort_band_profiles_active_profile'] = {
+        ...fake.hass.states['select.comfort_band_profiles_active_profile'],
+        state: 'Holiday',
+      };
+      el.hass = { ...fake.hass };
+      await new Promise((r) => setTimeout(r, 0));
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('.header')!.textContent!.trim()).toBe(
+        'Schedule: Holiday',
+      );
+    });
+
     // Not "follows": with no schedule of its own in the active profile, a
     // room follows the default profile's.
     it("says whose schedule it shows, by the profile's name as typed", async () => {

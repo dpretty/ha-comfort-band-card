@@ -865,8 +865,9 @@ let nt = class extends ze {
         <div class="body">
           <!-- The tile is named from what it shows, in order: "Bedroom feels
                like 18.6°. Heating · …". "feels like" and the full stop are for
-               screen readers only; the status sentence gives the range, so
-               the gauge is decorative here. -->
+               screen readers only. The gauge is decorative here: the status
+               sentence gives the range, except for a paused room or one on
+               hold, where it isn't being kept to. -->
           <div class="room-temp">
             ${this.feelsLike ? w`<span class="sr-only"> feels like </span>` : B}${this._renderTemperature()}<span class="sr-only">. </span>
           </div>
@@ -876,7 +877,6 @@ let nt = class extends ze {
               .low=${this.low}
               .high=${this.high}
               .room=${this.temperature}
-              .roomLabel=${this.feelsLike ? "feels like" : "room"}
               .action=${this.action}
             ></band-gauge>
           </div>

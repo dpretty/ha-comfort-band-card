@@ -27,8 +27,8 @@ export class BandGauge extends LitElement {
   @property({ type: Number }) public room = NaN;
   /** What the marker's temperature is, for screen readers. */
   @property({ type: String }) public roomLabel = 'room';
-  /** Hidden from screen readers, for a gauge inside something that says the
-   *  same in words (the tile's status sentence). On the svg itself: Chromium
+  /** Hidden from screen readers, for a gauge inside something that says it in
+   *  words (the tile's status sentence). On the svg itself: Chromium
    *  reads a label inside this shadow root into the name of a button around
    *  it, even under an aria-hidden wrapper. */
   @property({ type: Boolean }) public decorative = false;
