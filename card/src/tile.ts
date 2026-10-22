@@ -8,7 +8,7 @@
  * opens the modal in response.
  */
 
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import './band-gauge.js';
 import type { ComfortBandCardVariant } from './types.js';
@@ -138,9 +138,6 @@ export class ComfortBandTile extends LitElement {
         gap: var(--cb-gap-md);
       }
       .reading {
-        display: flex;
-        align-items: baseline;
-        gap: var(--cb-gap-xs);
         min-width: 70px;
       }
       .room-temp {
@@ -150,9 +147,17 @@ export class ComfortBandTile extends LitElement {
         font-variant-numeric: tabular-nums;
         line-height: 1;
       }
+      /* Under the temperature, not beside it: beside, it took the gauge's
+         width on a narrow tile. Every tile keeps the line, so tiles with and
+         without it line up. */
       .feels {
         font-size: 11px;
+        line-height: 14px;
+        white-space: nowrap;
         color: var(--cb-text-secondary);
+      }
+      .feels.placeholder {
+        visibility: hidden;
       }
       .gauge-wrap {
         flex: 1;
@@ -200,7 +205,6 @@ export class ComfortBandTile extends LitElement {
       <div
         class="tile ${this.noExpand ? 'no-expand' : ''}"
         role="${this.noExpand ? 'group' : 'button'}"
-        aria-label=${this._label()}
         tabindex="${this.noExpand ? -1 : 0}"
         @click=${this._onTap}
         @keydown=${this._onTap}
@@ -211,9 +215,16 @@ export class ComfortBandTile extends LitElement {
         <div class="body">
           <div class="reading">
             <div class="room-temp">${this._renderTemperature()}</div>
-            ${this.feelsLike ? html`<div class="feels">feels like</div>` : null}
+            <div
+              class="feels ${this.feelsLike ? '' : 'placeholder'}"
+              aria-hidden=${this.feelsLike ? nothing : 'true'}
+            >
+              feels like
+            </div>
           </div>
-          <div class="gauge-wrap">
+          <!-- Named from what it shows, in order; the status sentence gives
+               the range, so the gauge's own label would only repeat it. -->
+          <div class="gauge-wrap" aria-hidden="true">
             <band-gauge
               .low=${this.low}
               .high=${this.high}
@@ -233,9 +244,8 @@ export class ComfortBandTile extends LitElement {
     `;
   }
 
-  /** What the tile and the chip are called by screen readers, and the chip's
-   *  tooltip: the zone, the temperature and the status sentence. Explicit, so
-   *  the gauge's own label isn't run into it. */
+  /** The chip's name for screen readers, and its tooltip: the zone, the
+   *  temperature and the status sentence. The chip shows only the number. */
   private _label(): string {
     const name = `${this.zoneName || 'Zone'}${this.feelsLike ? ', feels like' : ''} ${this._renderTemperature()}`;
     return this.statusText ? `${name}. ${this.statusText}` : name;

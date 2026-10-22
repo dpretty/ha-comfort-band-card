@@ -134,36 +134,47 @@ describe('comfort-band-tile', () => {
     expect(gauge.action).toBe('cooling');
   });
 
-  // Its own content would run the gauge's label into it.
-  it('is named by the zone, the temperature and the status sentence', async () => {
+  // Named from its content, in the order shown; the gauge's own label would
+  // only repeat the range the sentence gives.
+  it('is named by what it shows, without the gauge', async () => {
     const el = await tile({
       zoneName: 'Lounge',
       temperature: 23.7,
       feelsLike: true,
       statusText: 'A bit warm · 19–23°',
     });
-    expect(el.shadowRoot!.querySelector('.tile')!.getAttribute('aria-label')).toBe(
-      'Lounge, feels like 23.7°. A bit warm · 19–23°',
-    );
+    const t = el.shadowRoot!.querySelector('.tile')!;
+    expect(t.hasAttribute('aria-label')).toBe(false);
+    expect(t.querySelector('.gauge-wrap')!.getAttribute('aria-hidden')).toBe('true');
     teardown();
     const compact = await tile({ zoneName: 'Gym', temperature: 21, noExpand: true });
-    expect(compact.shadowRoot!.querySelector('.tile')!.getAttribute('aria-label')).toBe(
-      'Gym 21.0°',
-    );
+    expect(compact.shadowRoot!.querySelector('.tile')!.hasAttribute('aria-label')).toBe(false);
   });
 
-  it('puts "feels like" on the same line as the temperature', () => {
-    expect(rule(tileCss(), '.reading')).toMatch(/display:\s*flex/);
+  // Beside the number it took the gauge's width on a narrow tile.
+  it('keeps a line under the temperature for "feels like" on every tile', () => {
+    const css = tileCss();
+    expect(rule(css, '.reading')).not.toMatch(/display:\s*flex/);
+    expect(rule(css, '.reading')).toMatch(/min-width:\s*70px/);
+    expect(rule(css, '.feels')).toMatch(/white-space:\s*nowrap/);
+    expect(rule(css, '.feels.placeholder')).toMatch(/visibility:\s*hidden/);
   });
 
-  it('says "feels like" beside the temperature when that is what it shows', async () => {
+  it('says "feels like" under the temperature when that is what it shows', async () => {
     const feels = await tile({ temperature: 22.4, feelsLike: true });
     expect(feels.shadowRoot!.querySelector('.reading .feels')!.textContent!.trim()).toBe(
       'feels like',
     );
+    expect(feels.shadowRoot!.querySelector('.feels')!.classList.contains('placeholder')).toBe(
+      false,
+    );
+    expect(feels.shadowRoot!.querySelector('.feels')!.hasAttribute('aria-hidden')).toBe(false);
     teardown();
+    // The line is kept, unseen and unread, so tiles line up.
     const room = await tile({ temperature: 21.4 });
-    expect(room.shadowRoot!.querySelector('.feels')).toBeNull();
+    const placeholder = room.shadowRoot!.querySelector('.feels')!;
+    expect(placeholder.classList.contains('placeholder')).toBe(true);
+    expect(placeholder.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('labels the gauge\'s marker "feels like" when that is the temperature shown', async () => {

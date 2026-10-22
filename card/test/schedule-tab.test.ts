@@ -1011,6 +1011,19 @@ describe('comfort-band-schedule-tab', () => {
       expect(confirm.getAttribute('aria-label')).toBe('Delete the 10:30 PM change?');
     });
 
+    // jsdom has no layout; measured in Chromium, ranges line up on 12-hour rows.
+    it('leaves room in the time column for "10:30 PM"', () => {
+      const css = (
+        customElements.get('comfort-band-schedule-tab') as unknown as {
+          styles: Array<{ cssText: string }>;
+        }
+      ).styles
+        .flat()
+        .map((s) => s.cssText)
+        .join('\n');
+      expect(css).toMatch(/\.row \.at\s*\{[^}]*min-width:\s*5\.5em/);
+    });
+
     it('never says "transition"', async () => {
       const { hass } = makeHass({ initialSchedule: schedule });
       const el = await tab(hass);

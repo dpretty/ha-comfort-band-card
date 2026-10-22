@@ -54,6 +54,12 @@ describe('band-gauge', () => {
       'Comfortable range 19.0° to 23.0°, feels like 21.4°',
     );
     teardown();
+    // Paused or on hold: no word for what it isn't doing.
+    const unknown = await mount('band-gauge', { low: 19, high: 23, room: 21, action: 'unknown' });
+    expect(unknown.shadowRoot!.querySelector('svg')!.getAttribute('aria-label')).toBe(
+      'Comfortable range 19.0° to 23.0°, room 21.0°',
+    );
+    teardown();
     const cooling = await mount('band-gauge', { low: 19, high: 23, room: 23.4, action: 'cooling' });
     expect(cooling.shadowRoot!.querySelector('svg')!.getAttribute('aria-label')).toBe(
       'Comfortable range 19.0° to 23.0°, room 23.4°, cooling',
