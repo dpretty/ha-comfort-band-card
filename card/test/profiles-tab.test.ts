@@ -111,9 +111,75 @@ describe('comfort-band-profiles-tab', () => {
     });
   });
 
-  it('renders a friendly empty state when the profile manager is not yet registered', async () => {
+  // #32: no developer message; what profiles are and how to turn them on.
+  it('says what profiles are and how to set them up, where none are', async () => {
     const el = await profilesTab(makeHass({ selectEntity: null }));
-    expect(el.shadowRoot!.textContent).toContain('not registered');
+    const text = el.shadowRoot!.querySelector('.empty')!.textContent!.replace(/\s+/g, ' ').trim();
+    expect(text).toBe(
+      'No profiles set up. Profiles are named sets of schedules, such as Home and Away, that every room switches between together. To use them, add Comfort Band again under Settings → Devices & Services and choose “Set up profile manager”.',
+    );
+    expect(text).not.toMatch(/registered/);
+  });
+
+  it("says profiles aren't available, not how to set them up, where a manager exists but can't be read", async () => {
+    // Registered, but its select has no state (still starting, failed to
+    // load): the integration won't offer to set one up again.
+    const unloaded = makeHass({});
+    unloaded.states = {};
+    // Its select disabled: it drops out of hass.entities; the device stays.
+    const disabled = makeHass({});
+    disabled.entities = {};
+    // Its entry failed to load or is reloading: the select is "unavailable",
+    // keeping only its last options.
+    const failed = makeHass({ active: 'unavailable', defaultProfile: '' });
+    for (const hass of [unloaded, disabled, failed]) {
+      const el = await profilesTab(hass);
+      const text = el.shadowRoot!.querySelector('.empty')!.textContent!.replace(/\s+/g, ' ').trim();
+      expect(text).toBe(
+        "Profiles aren't available right now. If the Comfort Band Profiles entry or its active profile entity is disabled, turn it back on under Settings → Devices & Services.",
+      );
+      el.remove();
+    }
+  });
+
+  // Enter or Space on the ⋮ button or a menu item bubbles to the row, which
+  // used to switch every room to that row's profile.
+  it("doesn't switch profile for a key pressed on the ⋮ button or a menu item", async () => {
+    const hass = makeHass({ options: ['home', 'away'] });
+    const el = await profilesTab(hass);
+    const row = el.shadowRoot!.querySelectorAll<HTMLLIElement>('li')[1];
+    const overflow = row.querySelector<HTMLButtonElement>('.overflow')!;
+    for (const key of ['Enter', ' ']) {
+      const event = new KeyboardEvent('keydown', {
+        key,
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      });
+      overflow.dispatchEvent(event);
+      // The button's own activation isn't blocked.
+      expect(event.defaultPrevented).toBe(false);
+    }
+    overflow.click();
+    await el.updateComplete;
+    const item = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      '.menu button[role="menuitem"]:not([disabled])',
+    )!;
+    item.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }),
+    );
+    expect(hass.callService).not.toHaveBeenCalledWith(
+      'comfort_band',
+      'set_profile',
+      expect.anything(),
+    );
+    // A key on the row itself still picks it.
+    row.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }),
+    );
+    expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'set_profile', {
+      profile: 'away',
+    });
   });
 
   it('renders a no-profiles message when options is empty', async () => {

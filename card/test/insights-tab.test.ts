@@ -135,7 +135,7 @@ describe('comfort-band-insights-tab', () => {
   it('renders the configure-humidity hint and passes empty humidityEntity when no humidity sensor', async () => {
     // Chart still renders (room + bands + apparent overlay), but the
     // humidity overlay is skipped because `humidityEntity=''`. Hint
-    // banner sits below, pointing at the Settings tab to configure one.
+    // banner sits below, saying where to set one up.
     const hass = makeHass({
       'sensor.gym_room_temperature': {
         state: '21.0',
@@ -155,7 +155,9 @@ describe('comfort-band-insights-tab', () => {
     expect(chart.humidityEntity).toBe('');
     const hint = el.shadowRoot!.querySelector('.hint');
     expect(hint).not.toBeNull();
-    expect(hint!.textContent).toContain('Settings tab');
+    expect(hint!.textContent!.replace(/\s+/g, ' ')).toContain(
+      'Set up a humidity sensor under Settings → Devices & Services → Comfort Band → Configure',
+    );
     // Not the pre-v0.4 upgrade copy (which would say "Upgrade...integration").
     expect(hint!.textContent).not.toContain('v0.4.0');
   });
@@ -188,6 +190,6 @@ describe('comfort-band-insights-tab', () => {
     const hint = el.shadowRoot!.querySelector('.hint');
     expect(hint).not.toBeNull();
     expect(hint!.textContent).toContain('v0.4.0');
-    expect(hint!.textContent).not.toContain('Settings tab');
+    expect(hint!.textContent).not.toContain('humidity sensor');
   });
 });

@@ -1,6 +1,6 @@
 /**
- * Shared history-fetch + series-shaping utilities for the Insights tab
- * chart. Pure functions, framework-free — `history-chart.ts` consumes
+ * Shared history-fetch + series-shaping utilities for the History
+ * section's chart. Pure functions, framework-free — `history-chart.ts` consumes
  * these. Extracted as a standalone module so the WS plumbing and the
  * sparse-series forward-fill stay testable independent of any
  * particular chart's visual config, and so a future second uPlot chart

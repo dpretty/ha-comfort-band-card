@@ -158,6 +158,13 @@ export function findZoneEntities(hass: HomeAssistant, zoneSlug: string): ZoneEnt
   return result;
 }
 
+/** Whether a Comfort Band profile manager is registered, whether or not its
+ *  entities can be read: a disabled entity drops out of `hass.entities`, but
+ *  its device stays in `hass.devices`. */
+export function profileManagerExists(hass: HomeAssistant): boolean {
+  return findDeviceByIdentifier(hass, [DOMAIN, 'profile_manager']) !== null;
+}
+
 /** Resolve the singleton `select.{...}_active_profile` entity_id, if registered. */
 export function findActiveProfileEntity(hass: HomeAssistant): string | null {
   const device = findDeviceByIdentifier(hass, [DOMAIN, 'profile_manager']);
@@ -178,7 +185,7 @@ export function findActiveProfileEntity(hass: HomeAssistant): string | null {
  * pushed yet, or no humidity sensor has been configured.
  *
  * Centralised so the cast and attribute key live in one place — both
- * the Settings tab and the Insights tab need this lookup.
+ * the Advanced tab's Comfort and History sections need this lookup.
  */
 export function readHumiditySensor(
   hass: HomeAssistant | undefined,

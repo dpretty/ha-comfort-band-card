@@ -1,5 +1,6 @@
 /**
- * `<comfort-band-insights-tab>` — Insights tab content.
+ * `<comfort-band-insights-tab>` — the Advanced tab's History section (the
+ * Insights tab before v0.15.0).
  *
  * Renders the unified `<comfort-band-history-chart>`: room temperature,
  * effective low/high band edges (linear, so v0.10.0 backend band-ramp
@@ -20,7 +21,7 @@
  * The humidity sensor entity_id isn't a first-class `ZoneEntities`
  * field — the backend exposes it as a `humidity_sensor` attribute on
  * `RoomTemperatureSensor`, so we read it from there. Same path the
- * Settings tab uses.
+ * Comfort section's humidity sensor row uses.
  */
 
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
@@ -38,9 +39,9 @@ export class ComfortBandInsightsTab extends LitElement {
   public static override styles = [
     tokens,
     css`
+      /* Inside the Advanced tab's section, which does the padding. */
       :host {
         display: block;
-        padding: var(--cb-gap-md);
       }
       .empty {
         padding: var(--cb-gap-lg);
@@ -53,8 +54,8 @@ export class ComfortBandInsightsTab extends LitElement {
          cases — "upgrade integration" AND "configure humidity sensor".
          The latter is a configuration nudge, not an upgrade gate, so
          the more general name is the right call. Also visually
-         different: the Insights tab uses a top border to separate the
-         hint from the band chart sitting above it. */
+         different: a top border separates the hint from the chart
+         above it. */
       .hint {
         margin-top: var(--cb-gap-lg);
         padding: var(--cb-gap-md);
@@ -108,9 +109,9 @@ export class ComfortBandInsightsTab extends LitElement {
    *  `_renderApparentSection` pre-v0.8.2, which chose between rendering
    *  the standalone apparent chart OR a hint; the v0.8.2 merge removed
    *  the chart branch and renamed accordingly). Priority order: apparent
-   *  missing first (pre-v0.4 backend — pointing at Settings would chain
-   *  to a second upgrade hint), then humidity (configurable via Settings
-   *  → OptionsFlow). Both present → no hint. */
+   *  missing first (pre-v0.4 backend — a humidity nudge would only lead
+   *  to a second upgrade hint), then humidity (set up in HA's Configure
+   *  dialog for the zone). Both present → no hint. */
   private _renderOverlayHint(
     apparent: string | null | undefined,
     humidity: string | null,
@@ -126,7 +127,8 @@ export class ComfortBandInsightsTab extends LitElement {
       // above passed) — the hint adds humidity to the picture, not
       // both at once.
       return html`<div class="hint">
-        Configure a humidity sensor in the Settings tab to also add humidity to the chart.
+        Set up a humidity sensor under Settings → Devices &amp; Services → Comfort Band → Configure
+        to add humidity to the chart.
       </div>`;
     }
     return nothing;

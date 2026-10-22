@@ -72,6 +72,9 @@ export interface HomeAssistant {
   areas?: Record<string, AreaRegistryEntry>;
   /** The user's language and 12/24-hour preference; optional in test fixtures. */
   locale?: { language: string; time_format?: 'language' | 'system' | '12' | '24' };
+  /** HA's own formatting of a state, with its display precision and unit
+   *  (HA 2023.9+); optional in test fixtures and older frontends. */
+  formatEntityState?: (stateObj: HassEntity, state?: string) => string;
   connection: HassConnection;
   callService(
     domain: string,

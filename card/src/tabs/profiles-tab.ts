@@ -1,5 +1,6 @@
 /**
- * `<comfort-band-profiles-tab>` — Profiles tab content.
+ * `<comfort-band-profiles-tab>` — the Advanced tab's Schedules section (the
+ * Profiles tab before v0.15.0).
  *
  * Reads the profile list, active profile, default profile, and per-profile
  * descriptions from the singleton
@@ -31,7 +32,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import '../profile-edit-dialog.js';
-import { findActiveProfileEntity } from '../helpers.js';
+import { findActiveProfileEntity, profileManagerExists } from '../helpers.js';
 import {
   cloneProfile,
   createProfile,
@@ -122,15 +123,14 @@ export class ComfortBandProfilesTab extends LitElement {
   public static override styles = [
     tokens,
     css`
+      /* Inside the Advanced tab's section, which does the padding. */
       :host {
         display: block;
-        padding: var(--cb-gap-md);
       }
       .empty {
         color: var(--cb-text-secondary);
         font-size: 13px;
-        text-align: center;
-        padding: var(--cb-gap-lg);
+        line-height: 1.4;
       }
       .upgrade-hint {
         margin: var(--cb-gap-md) 0 0;
@@ -350,7 +350,9 @@ export class ComfortBandProfilesTab extends LitElement {
     const entityId = findActiveProfileEntity(this.hass);
     if (entityId === null) return null;
     const state = this.hass.states[entityId];
-    if (!state) return null;
+    // An entry that failed to load or is reloading leaves its select
+    // "unavailable", with only the last known options: not one to act on.
+    if (!state || state.state === 'unavailable') return null;
     const optionsAttr = state.attributes.options;
     const options = Array.isArray(optionsAttr)
       ? (optionsAttr as unknown[]).filter((v): v is string => typeof v === 'string')
@@ -556,7 +558,19 @@ export class ComfortBandProfilesTab extends LitElement {
     if (!this.hass) return nothing;
     const state = this._readState();
     if (state === null) {
-      return html`<div class="empty">Profile manager not registered yet.</div>`;
+      // A profile manager that's there but can't be read (still starting,
+      // failed to load or reloading, or its entity disabled) isn't one to
+      // set up again: the integration only offers that while there's none.
+      return profileManagerExists(this.hass)
+        ? html`<div class="empty">
+            Profiles aren't available right now. If the Comfort Band Profiles entry or its active
+            profile entity is disabled, turn it back on under Settings → Devices &amp; Services.
+          </div>`
+        : html`<div class="empty">
+            No profiles set up. Profiles are named sets of schedules, such as Home and Away, that
+            every room switches between together. To use them, add Comfort Band again under Settings
+            → Devices &amp; Services and choose “Set up profile manager”.
+          </div>`;
     }
     const { options, active, defaultProfile, descriptions, crudAvailable } = state;
 
@@ -665,6 +679,10 @@ export class ComfortBandProfilesTab extends LitElement {
         aria-current=${isActive ? 'true' : nothing}
         @click=${() => this._onSelect(profile)}
         @keydown=${(e: KeyboardEvent) => {
+          // Only a key pressed on the row itself picks its profile. Enter or
+          // Space on the ⋮ button or a menu item bubbles up here too, and
+          // used to switch every room's profile instead of opening the menu.
+          if (e.target !== e.currentTarget) return;
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             this._onSelect(profile);

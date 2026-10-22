@@ -1,7 +1,7 @@
 /**
  * `<dual-handle-slider>` — single-track range with two draggable thumbs.
  *
- * Used for the manual low/high in the Now tab. Behaviour:
+ * Used for the exact range in the Advanced tab's Comfort section. Behaviour:
  *   - Dragging the low thumb writes `low`; clamps to `[min, high - step]`.
  *   - Dragging the high thumb writes `high`; clamps to `[low + step, max]`.
  *   - Fires `input` continuously while dragging, `change` on release or

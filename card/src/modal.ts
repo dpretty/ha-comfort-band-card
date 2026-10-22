@@ -4,35 +4,25 @@
  * Uses the native `<dialog>` element (modal API): `showModal()` opens with
  * a backdrop, ESC and click-outside close it. No browser_mod dependency.
  *
- * Tabs in v0.1.0:
- *   - Now (commit 4)
- *   - Schedule (commit 7)
- *   - Profiles (commit 5)
- *   - Insights (commit 6)
- *
- * Tabs the user hasn't reached yet render a "coming soon" placeholder so
- * the modal works end-to-end through every commit.
+ * Tabs: Now and Schedule for everyone; Advanced (settings, profiles and
+ * history, #30) for whoever sets the house up.
  */
 
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';
 import './tabs/now-tab.js';
-import './tabs/profiles-tab.js';
-import './tabs/insights-tab.js';
 import './tabs/schedule-tab.js';
-import './tabs/settings-tab.js';
+import './tabs/advanced-tab.js';
 import type { ZoneEntities } from './helpers.js';
 import type { HomeAssistant } from './types.js';
 import { tokens } from './styles.js';
 
-type TabId = 'now' | 'schedule' | 'profiles' | 'settings' | 'insights';
+type TabId = 'now' | 'schedule' | 'advanced';
 
 const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: 'now', label: 'Now' },
   { id: 'schedule', label: 'Schedule' },
-  { id: 'profiles', label: 'Profiles' },
-  { id: 'settings', label: 'Settings' },
-  { id: 'insights', label: 'Insights' },
+  { id: 'advanced', label: 'Advanced' },
 ];
 
 @customElement('comfort-band-modal')
@@ -145,7 +135,10 @@ export class ComfortBandModal extends LitElement {
     `,
   ];
 
+  /** Opens on Now, whichever tab it was left on: the family's tap shouldn't
+   *  land on Advanced because someone set the house up last. */
   public open(): void {
+    this._activeTab = 'now';
     this._isOpen = true;
     this.updateComplete.then(() => this._dialog?.showModal());
   }
@@ -265,19 +258,12 @@ export class ComfortBandModal extends LitElement {
           .hass=${this.hass}
           .zone=${this.zone}
         ></comfort-band-schedule-tab>`;
-      case 'profiles':
-        return html`<comfort-band-profiles-tab .hass=${this.hass}></comfort-band-profiles-tab>`;
-      case 'settings':
-        return html`<comfort-band-settings-tab
+      case 'advanced':
+        return html`<comfort-band-advanced-tab
           .hass=${this.hass}
           .zone=${this.zone}
           .entities=${this.entities}
-        ></comfort-band-settings-tab>`;
-      case 'insights':
-        return html`<comfort-band-insights-tab
-          .hass=${this.hass}
-          .entities=${this.entities}
-        ></comfort-band-insights-tab>`;
+        ></comfort-band-advanced-tab>`;
     }
   }
 }

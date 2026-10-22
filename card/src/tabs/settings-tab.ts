@@ -1,19 +1,16 @@
 /**
- * `<comfort-band-settings-tab>` — Settings tab content.
- *
- * Thin per-zone affordance for the two behaviour switches that v0.4
+ * `<comfort-band-settings-tab>` — the two behaviour switches that v0.4
  * introduced (learning_enabled, use_apparent_temperature) and a read-only
- * view of the optional humidity sensor. NOT trying to duplicate HA's
- * Device card — every existing tunable (deadband, override hours, etc.)
- * stays on the Device card where it already lives.
+ * view of the optional humidity sensor, shown in the Advanced tab's
+ * sections: `section="comfort"` for "feels like" and the humidity sensor,
+ * `section="automation"` for learning.
  *
  * Optimistic UI: each toggle flips local state immediately, awaits the
  * service call, and rolls back on rejection. Matches the schedule-tab
  * `_writeSchedule` pattern.
  *
- * Graceful degradation: when the new entities don't exist (pre-v0.4
- * integration), the tab renders an upgrade hint instead — mirrors the
- * Profiles-tab `crudAvailable` gate.
+ * Graceful degradation: when its switch doesn't exist (pre-v0.4
+ * integration), a section shows an upgrade hint instead.
  */
 
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
@@ -27,6 +24,8 @@ export class ComfortBandSettingsTab extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
   @property({ type: String }) public zone = '';
   @property({ attribute: false }) public entities?: ZoneEntities;
+  /** Which of the Advanced tab's sections this shows. */
+  @property({ type: String }) public section: 'comfort' | 'automation' = 'comfort';
 
   /** Optimistic state for the two switches, keyed by entity_id. Cleared
    *  on success; rolled back on failure with `_error` set. */
@@ -38,7 +37,6 @@ export class ComfortBandSettingsTab extends LitElement {
     css`
       :host {
         display: block;
-        padding: var(--cb-gap-md);
       }
       .row {
         display: flex;
@@ -106,15 +104,16 @@ export class ComfortBandSettingsTab extends LitElement {
         cursor: not-allowed;
       }
       .info-value {
-        font-family: ui-monospace, SFMono-Regular, monospace;
-        font-size: 12px;
+        /* A long name or ID wraps rather than squeezing the label out. */
+        max-width: 55%;
+        overflow-wrap: anywhere;
+        font-size: 13px;
         color: var(--cb-text-primary);
-        word-break: break-all;
+        text-align: right;
       }
       .info-value.unconfigured {
         font-style: italic;
         color: var(--cb-text-secondary);
-        font-family: inherit;
       }
       .error {
         margin-bottom: var(--cb-gap-sm);
@@ -169,62 +168,79 @@ export class ComfortBandSettingsTab extends LitElement {
 
   protected override render() {
     if (!this.hass || !this.entities) return nothing;
-
-    const useApparent = this.entities.useApparentTemperature;
-    const learning = this.entities.learningEnabled;
-    // All-or-nothing gate: if ANY of the v0.4 switch entities is missing,
-    // hide the whole tab and show the upgrade hint. We deliberately
-    // don't fall through and render the surviving toggle alone —
-    // a half-rendered tab gives a misleading impression that the
-    // integration is fully upgraded. The Now-tab "Driving decisions"
-    // badge takes the opposite approach (silent degradation when its
-    // entities are missing) because there a missing badge doesn't
-    // mislead — it just hides a passive indicator.
-    if (useApparent === null || learning === null) {
+    const entityId =
+      this.section === 'comfort'
+        ? this.entities.useApparentTemperature
+        : this.entities.learningEnabled;
+    if (entityId === null) {
       return html`<div class="upgrade-hint">
-        Settings require the <code>comfort_band</code> integration v0.4.0 or later.
+        ${this.section === 'comfort' ? '“Feels like”' : 'Learning'} needs the
+        <code>comfort_band</code> integration v0.4.0 or later.
       </div>`;
     }
-
-    // The Room Temperature sensor's `humidity_sensor` attribute carries
-    // the currently-configured sensor entity_id. None if not configured.
-    const humiditySensor = readHumiditySensor(this.hass, this.entities.roomTemperature);
-
-    // `useApparent` and `learning` are narrowed to `string` by the early
-    // return above — render both toggles unconditionally.
     return html`
       ${this._error ? html`<div class="error" role="alert">${this._error}</div>` : nothing}
+      ${this.section === 'comfort' ? this._renderComfort(entityId) : this._renderLearning(entityId)}
+    `;
+  }
+
+  private _renderComfort(useApparent: string) {
+    // The Room Temperature sensor's `humidity_sensor` attribute carries
+    // the currently-configured sensor entity_id. None if not configured.
+    const humidity = readHumiditySensor(this.hass!, this.entities!.roomTemperature);
+    return html`
       ${this._renderToggle({
         entityId: useApparent,
-        title: 'Use apparent temperature',
-        desc: html`When on, heating and cooling decisions use the humidity-adjusted "feels like"
-        value instead of the raw sensor. Falls back to the raw value automatically if the humidity
-        sensor is unavailable.`,
-      })}
-      ${this._renderToggle({
-        entityId: learning,
-        title: 'Learning enabled',
-        // Mirrors the integration's control gate: on, the learned predictor
-        // decides (and MPC, when its own switch is on and it is ready); off,
-        // plain on/off at the deadband edges. Samples are recorded either way.
-        desc: html`Uses what this room has learned about how quickly it warms and cools to time
-        heating and cooling: starting early rather than waiting for the room to get too cold or
-        warm, stopping early so it doesn't overshoot, and holding off while it's already heading
-        back on its own. Predictive control (the “MPC enabled” switch) needs this on too. While it's
-        off, the room keeps recording readings; it just doesn't act on what it has learned.`,
+        title: 'Use “feels like”',
+        desc: html`When on, heating and cooling go by the humidity-adjusted “feels like” temperature
+        instead of the room's own reading. Falls back to the room's reading automatically if the
+        humidity sensor is unavailable.`,
       })}
       <div class="row">
         <div class="row-label">
           <div class="title">Humidity sensor</div>
           <div class="desc">
-            Configure via Settings → Devices &amp; Services → Comfort Band → Configure.
+            ${humidity ? 'Change it' : 'Set one up'} under Settings → Devices &amp; Services →
+            Comfort Band → Configure.
           </div>
         </div>
-        <div class="info-value ${humiditySensor ? '' : 'unconfigured'}">
-          ${humiditySensor ?? 'Not configured'}
+        <div class="info-value ${humidity ? '' : 'unconfigured'}">
+          ${humidity ? this._sensorText(humidity) : 'Not configured'}
         </div>
       </div>
     `;
+  }
+
+  /** "Bedroom humidity · 54%": the sensor's own name and reading, not its
+   *  ID, the reading as HA formats it where the frontend can. */
+  private _sensorText(entityId: string): string {
+    const s = this.hass!.states[entityId];
+    if (!s) return entityId;
+    const name =
+      typeof s.attributes.friendly_name === 'string' && s.attributes.friendly_name
+        ? s.attributes.friendly_name
+        : entityId;
+    const value = Number.parseFloat(s.state);
+    if (!Number.isFinite(value)) return `${name} · no reading`;
+    if (this.hass!.formatEntityState) return `${name} · ${this.hass!.formatEntityState(s)}`;
+    const unit =
+      typeof s.attributes.unit_of_measurement === 'string' ? s.attributes.unit_of_measurement : '';
+    return `${name} · ${s.state}${unit ? ` ${unit}` : ''}`;
+  }
+
+  private _renderLearning(learning: string) {
+    return this._renderToggle({
+      entityId: learning,
+      title: 'Learning',
+      // Mirrors the integration's control gate: on, the learned predictor
+      // decides (and MPC, when its own switch is on and it is ready); off,
+      // plain on/off at the deadband edges. Samples are recorded either way.
+      desc: html`Uses what this room has learned about how quickly it warms and cools to time
+      heating and cooling: starting early rather than waiting for the room to get too cold or warm,
+      stopping early so it doesn't overshoot, and holding off while it's already heading back on its
+      own. Predictive control (the “MPC enabled” switch) needs this on too. While it's off, the room
+      keeps recording readings; it just doesn't act on what it has learned.`,
+    });
   }
 
   private _renderToggle(opts: { entityId: string; title: string; desc: TemplateResult }) {
