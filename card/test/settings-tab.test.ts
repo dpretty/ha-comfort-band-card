@@ -1438,8 +1438,7 @@ describe('comfort-band-settings-tab once a call has gone through', () => {
     });
     await el.updateComplete;
     expect(row(el, 'idleFanMode').querySelector('select')!.value).toBe('auto');
-    // Its own call comes back before HA reports it: it waits, from the state
-    // HA had when that call started.
+    // Its own call comes back before HA reports it: it waits.
     finishes[1]();
     await flush(el);
     expect(row(el, 'idleFanMode').querySelector('select')!.value).toBe('auto');
@@ -1539,7 +1538,7 @@ describe('comfort-band-settings-tab once a call has gone through', () => {
       expect(toggle().getAttribute('aria-disabled')).toBe('false');
     });
 
-    it('shows a dash, without waiting, for an entity HA drops meanwhile', async () => {
+    it("doesn't take an entity HA has dropped for one that reported the value", async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const ref: { el?: ComfortBandSettingsTab } = {};
       const hass = makeHass({
@@ -1553,20 +1552,7 @@ describe('comfort-band-settings-tab once a call has gone through', () => {
       stepButtons(el, 'deadbandBelow').more.click();
       vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
       await flush(el);
-      expect(shown(el, 'deadbandBelow')).toBe('—');
-      expect(vi.getTimerCount()).toBe(0);
-    });
-
-    // Someone else's change, or HA's own take on the value.
-    it('shows what HA reports instead, without waiting', async () => {
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-      const r = reporting({ 'number.gym_peak_heat_offset': number('2.0', 0, 5, 0.5, '°C') });
-      const el = r.set(await settingsTab(r.hass, 'peak'));
-      stepButtons(el, 'peakHeatOffset').more.click();
-      vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
-      await flush(el);
-      expect(shown(el, 'peakHeatOffset')).toBe('2.0 °C');
-      expect(vi.getTimerCount()).toBe(0);
+      expect(vi.getTimerCount()).toBe(1);
     });
 
     it('stops waiting for a number or a choice at once', async () => {

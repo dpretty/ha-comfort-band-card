@@ -2622,13 +2622,12 @@ let pi = class extends Ce {
     const r = this.hass;
     if (!r) return;
     const a = () => this._pending[e] === t && !this._timers.has(e);
-    let u;
-    this._chain = this._chain.then(() => (u = this.hass?.states[e], r.callService(i, n, { entity_id: e, ...o }))).then(
+    this._chain = this._chain.then(() => r.callService(i, n, { entity_id: e, ...o })).then(
       () => {
-        this._error?.entityId === e && (this._error = null), a() && (this._reported(e, t) || this.hass?.states[e] !== u || !this.isConnected ? this._drop(e) : this._settle(e));
+        this._error?.entityId === e && (this._error = null), a() && (this._reported(e, t) || !this.isConnected ? this._drop(e) : this._settle(e));
       },
-      (d) => {
-        this._error = { entityId: e, message: eh(d) }, a() && this._drop(e);
+      (u) => {
+        this._error = { entityId: e, message: eh(u) }, a() && this._drop(e);
       }
     );
   }

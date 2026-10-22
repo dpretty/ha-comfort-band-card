@@ -536,27 +536,15 @@ export class ComfortBandSettingsTab extends LitElement {
     const hass = this.hass;
     if (!hass) return;
     const current = () => this._pending[entityId] === value && !this._timers.has(entityId);
-    let before: HassEntity | undefined;
     this._chain = this._chain
-      .then(() => {
-        before = this.hass?.states[entityId];
-        return hass.callService(domain, service, { entity_id: entityId, ...data });
-      })
+      .then(() => hass.callService(domain, service, { entity_id: entityId, ...data }))
       .then(
         () => {
           if (this._error?.entityId === entityId) this._error = null;
           if (!current()) return;
-          // HA has reported it, or reported something else meanwhile. Taken
-          // off the page (its taps sent as it went), it waits for nothing.
-          if (
-            this._reported(entityId, value) ||
-            this.hass?.states[entityId] !== before ||
-            !this.isConnected
-          ) {
-            this._drop(entityId);
-          } else {
-            this._settle(entityId);
-          }
+          // Taken off the page (its taps sent as it went), it waits for nothing.
+          if (this._reported(entityId, value) || !this.isConnected) this._drop(entityId);
+          else this._settle(entityId);
         },
         (err: unknown) => {
           this._error = { entityId, message: errorText(err) };
