@@ -152,8 +152,9 @@ export interface StatusInput {
 export function statusLine(s: StatusInput): { kind: StatusKind; text: string } {
   if (s.doing) return { kind: 'adjusting', text: s.doing };
   if (!s.enabled) return { kind: 'paused', text: 'Paused: not controlling this room' };
-  if (s.sensor === 'offline')
+  if (s.sensor === 'offline') {
     return { kind: 'sensor', text: 'On hold: the room sensor is offline' };
+  }
   if (s.sensor === 'no-reading') {
     return { kind: 'sensor', text: 'On hold: no room temperature reading' };
   }

@@ -195,6 +195,12 @@ describe('roomBadges', () => {
     expect(roomBadges(room({ temperature: 22.6 }))).toEqual(['above']);
   });
 
+  // What it's doing about it says more than which side it's on.
+  it('shows only heating or cooling while the room is outside its range', () => {
+    expect(roomBadges(room({ action: 'heating', temperature: 18 }))).toEqual(['heating']);
+    expect(roomBadges(room({ action: 'cooling', temperature: 23.5 }))).toEqual(['cooling']);
+  });
+
   it('shows an adjustment, after what the room is doing', () => {
     expect(roomBadges(room({ overrideActive: true }))).toEqual(['adjusted']);
     expect(roomBadges(room({ overrideActive: true, action: 'heating' }))).toEqual([

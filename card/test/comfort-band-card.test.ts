@@ -287,6 +287,25 @@ describe('comfort-band-card', () => {
     }
   });
 
+  it('promises no end once the next change has passed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 22, 18, 0));
+    try {
+      const hass = makeHass('gym');
+      hass.states['sensor.gym_next_band_change'] = {
+        entity_id: 'sensor.gym_next_band_change',
+        state: new Date(2026, 9, 22, 17, 0).toISOString(),
+        attributes: { scheduled: true },
+        last_changed: '',
+        last_updated: '',
+      };
+      const el = await card('gym', hass);
+      expect(tileOf(el).statusText).toBe('Comfortable · 19.5–22.5°');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // A paused zone still works out what it would do, but doesn't do it.
   it("doesn't colour a paused room as heating", async () => {
     const hass = makeHass('gym');
