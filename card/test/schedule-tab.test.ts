@@ -930,12 +930,33 @@ describe('comfort-band-schedule-tab', () => {
       current: [],
     };
 
-    it('says which profile it follows, by name', async () => {
+    // Not "follows": with no schedule of its own in the active profile, a
+    // room follows the default profile's.
+    it("says whose schedule it shows, by the profile's name as typed", async () => {
       const { hass } = makeHass({ initialSchedule: schedule, active: 'away' });
       const el = await tab(hass);
-      expect(el.shadowRoot!.querySelector('.header')!.textContent!.trim()).toBe(
-        'Following the Away schedule',
-      );
+      expect(el.shadowRoot!.querySelector('.header')!.textContent!.trim()).toBe('Schedule: away');
+      expect(shownWords(el.shadowRoot!)).not.toMatch(/follow/i);
+    });
+
+    it.each(['unavailable', 'unknown'])(
+      'names no profile while the profile select is %s',
+      async (state) => {
+        const { hass } = makeHass({ initialSchedule: schedule, active: state });
+        const el = await tab(hass);
+        expect(el.shadowRoot!.querySelector('.header')).toBeNull();
+      },
+    );
+
+    // A change can be saved at 18.25; it's shown, and read, to the tenth.
+    it('reads a range as it shows it, to the tenth', async () => {
+      const { hass } = makeHass({
+        initialSchedule: { baseline: [{ at: '06:00', low: 18.25, high: 21.75 }], current: [] },
+      });
+      const el = await tab(hass);
+      const row = el.shadowRoot!.querySelector('li.row')!;
+      expect(row.querySelector('.band')!.textContent!.trim()).toBe('18.3–21.8°');
+      expect(row.getAttribute('aria-label')).toBe('Edit the 06:00 change, 18.3 to 21.8 degrees');
     });
 
     // Without a profile manager the schedule is the zone's own.

@@ -134,6 +134,28 @@ describe('comfort-band-tile', () => {
     expect(gauge.action).toBe('cooling');
   });
 
+  // Its own content would run the gauge's label into it.
+  it('is named by the zone, the temperature and the status sentence', async () => {
+    const el = await tile({
+      zoneName: 'Lounge',
+      temperature: 23.7,
+      feelsLike: true,
+      statusText: 'A bit warm · 19–23°',
+    });
+    expect(el.shadowRoot!.querySelector('.tile')!.getAttribute('aria-label')).toBe(
+      'Lounge, feels like 23.7°. A bit warm · 19–23°',
+    );
+    teardown();
+    const compact = await tile({ zoneName: 'Gym', temperature: 21, noExpand: true });
+    expect(compact.shadowRoot!.querySelector('.tile')!.getAttribute('aria-label')).toBe(
+      'Gym 21.0°',
+    );
+  });
+
+  it('puts "feels like" on the same line as the temperature', () => {
+    expect(rule(tileCss(), '.reading')).toMatch(/display:\s*flex/);
+  });
+
   it('says "feels like" beside the temperature when that is what it shows', async () => {
     const feels = await tile({ temperature: 22.4, feelsLike: true });
     expect(feels.shadowRoot!.querySelector('.reading .feels')!.textContent!.trim()).toBe(

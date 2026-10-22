@@ -53,6 +53,11 @@ describe('band-gauge', () => {
     expect(idle.shadowRoot!.querySelector('svg')!.getAttribute('aria-label')).toBe(
       'Comfortable range 19.0° to 23.0°, feels like 21.4°',
     );
+    teardown();
+    const cooling = await mount('band-gauge', { low: 19, high: 23, room: 23.4, action: 'cooling' });
+    expect(cooling.shadowRoot!.querySelector('svg')!.getAttribute('aria-label')).toBe(
+      'Comfortable range 19.0° to 23.0°, room 23.4°, cooling',
+    );
   });
 
   it('writes a descriptive aria-label including the action', async () => {

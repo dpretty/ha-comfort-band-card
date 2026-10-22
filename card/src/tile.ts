@@ -21,7 +21,7 @@ export class ComfortBandTile extends LitElement {
   @property({ type: String }) public zoneName = '';
   /** The temperature that drives control. */
   @property({ type: Number }) public temperature = NaN;
-  /** Whether `temperature` is "feels like", for the gauge's label. */
+  /** Whether `temperature` is "feels like": the tile and the chip say so. */
   @property({ type: Boolean }) public feelsLike = false;
   @property({ type: Number }) public low = NaN;
   @property({ type: Number }) public high = NaN;
@@ -138,6 +138,9 @@ export class ComfortBandTile extends LitElement {
         gap: var(--cb-gap-md);
       }
       .reading {
+        display: flex;
+        align-items: baseline;
+        gap: var(--cb-gap-xs);
         min-width: 70px;
       }
       .room-temp {
@@ -197,6 +200,7 @@ export class ComfortBandTile extends LitElement {
       <div
         class="tile ${this.noExpand ? 'no-expand' : ''}"
         role="${this.noExpand ? 'group' : 'button'}"
+        aria-label=${this._label()}
         tabindex="${this.noExpand ? -1 : 0}"
         @click=${this._onTap}
         @keydown=${this._onTap}
@@ -229,6 +233,14 @@ export class ComfortBandTile extends LitElement {
     `;
   }
 
+  /** What the tile and the chip are called by screen readers, and the chip's
+   *  tooltip: the zone, the temperature and the status sentence. Explicit, so
+   *  the gauge's own label isn't run into it. */
+  private _label(): string {
+    const name = `${this.zoneName || 'Zone'}${this.feelsLike ? ', feels like' : ''} ${this._renderTemperature()}`;
+    return this.statusText ? `${name}. ${this.statusText}` : name;
+  }
+
   private _renderMini() {
     // The tint repeats what the heating or cooling icon already says.
     const tint = this.badges.includes('heating')
@@ -237,8 +249,7 @@ export class ComfortBandTile extends LitElement {
         ? 'cooling'
         : null;
     const style = tint ? `--cb-mini-bg:${actionColorVar(tint)}` : '';
-    const name = `${this.zoneName || 'Zone'}${this.feelsLike ? ', feels like' : ''} ${this._renderTemperature()}`;
-    const label = this.statusText ? `${name}. ${this.statusText}` : name;
+    const label = this._label();
     return html`
       <div
         class="mini ${this.noExpand ? 'no-expand' : ''} ${tint ? 'tinted' : ''}"

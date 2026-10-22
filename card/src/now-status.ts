@@ -25,7 +25,8 @@ export function bandText(band: Band): string {
   return `${degrees(band.low)}–${degrees(band.high)}°`;
 }
 
-function degrees(value: number): string {
+/** "17.5", "23": a temperature to the tenth, without a trailing ".0". */
+export function degrees(value: number): string {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1);
 }
@@ -124,7 +125,6 @@ const STATUS_WORDS: Partial<Record<StatusKind, string>> = {
   comfortable: 'Comfortable',
   below: 'A bit cool',
   above: 'A bit warm',
-  idle: 'Idle',
 };
 
 export interface StatusInput {

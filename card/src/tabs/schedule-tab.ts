@@ -3,8 +3,8 @@
  *
  * **v0.9.0**: list-first editor. The chart (`<comfort-band-schedule-chart>`)
  * is now a read-only visualization. The list below it is the primary
- * editor: each row has explicit Edit + Delete buttons, plus an "Add
- * transition" button in the toolbar above the list. Delete asks for
+ * editor: each row has explicit Edit + Delete buttons, plus an "Add a
+ * change" button in the toolbar above the list. A row's Delete asks for
  * inline confirmation (no more long-press surprise from v0.8.x).
  *
  * Workflow:
@@ -29,7 +29,7 @@ import '../transition-edit-dialog.js';
 import { findActiveProfileEntity } from '../helpers.js';
 import { parseTime } from '../schedule-chart.js';
 import { setSchedule, subscribeSchedule } from '../services.js';
-import { bandText, formatClock } from '../now-status.js';
+import { bandText, degrees, formatClock } from '../now-status.js';
 import type { HomeAssistant, Transition, UnsubscribeFunc } from '../types.js';
 import { tokens } from '../styles.js';
 
@@ -174,7 +174,8 @@ export class ComfortBandScheduleTab extends LitElement {
         font-variant-numeric: tabular-nums;
         font-weight: 500;
         color: var(--cb-text-primary);
-        min-width: 48px;
+        /* Room for "10:30 PM", so the ranges line up on a 12-hour clock. */
+        min-width: 5.5em;
       }
       .row .band {
         color: var(--cb-text-secondary);
@@ -557,11 +558,7 @@ export class ComfortBandScheduleTab extends LitElement {
     }
 
     return html`
-      ${readActiveProfile(this.hass) !== null && this._profile
-        ? html`<div class="header">
-            <span class="profile-label">Following the ${titleCase(this._profile)} schedule</span>
-          </div>`
-        : nothing}
+      ${this._renderHeader()}
       ${this._loading
         ? html`<div class="loading">Loading schedule…</div>`
         : this._error
@@ -576,6 +573,20 @@ export class ComfortBandScheduleTab extends LitElement {
               ${this._renderList()}
             `}
     `;
+  }
+
+  /**
+   * Which profile's schedule this is, named as typed, where profiles are set
+   * up. Not "the room follows it": with no schedule of its own in the active
+   * profile, a room follows the default profile's.
+   */
+  private _renderHeader() {
+    const profile = this.hass ? readActiveProfile(this.hass) : null;
+    // While the select can't be read, it has no name to give.
+    if (!profile || profile === 'unavailable' || profile === 'unknown') return nothing;
+    return html`<div class="header">
+      <span class="profile-label">Schedule: ${profile}</span>
+    </div>`;
   }
 
   private _renderList() {
@@ -593,7 +604,7 @@ export class ComfortBandScheduleTab extends LitElement {
 
   private _renderRow(t: Transition) {
     const at = formatClock(t.at, this.hass);
-    const ariaLabel = `Edit the ${at} change, ${t.low} to ${t.high} degrees`;
+    const ariaLabel = `Edit the ${at} change, ${degrees(t.low)} to ${degrees(t.high)} degrees`;
     return html`
       <li
         class="row"
@@ -649,11 +660,6 @@ function readActiveProfile(hass: HomeAssistant): string | null {
   const entity = findActiveProfileEntity(hass);
   if (!entity) return null;
   return hass.states[entity]?.state ?? null;
-}
-
-/** "home" → "Home". */
-function titleCase(name: string): string {
-  return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 function defaultLow(transitions: Transition[]): number {

@@ -209,8 +209,9 @@ describe('statusLine', () => {
     });
   });
 
-  it("doesn't call a room with no reading comfortable", () => {
-    expect(line({ temperature: NaN }).kind).toBe('idle');
+  // No word it could say truly: "Idle" was the controller's.
+  it("doesn't call a room with no reading comfortable, nor idle", () => {
+    expect(line({ temperature: NaN })).toEqual({ kind: 'idle', text: '18–23° until T+60m' });
   });
 
   it('says a paused room is not being controlled', () => {
@@ -378,6 +379,7 @@ describe('formatClock', () => {
     expect(formatClock('07:00', locale('24', 'en-GB'))).toBe('07:00');
     expect(formatClock('0:05', locale('24', 'en-GB'))).toBe('00:05');
     expect(formatClock('12:00', locale('12', 'en-GB'))).toBe('12 pm');
+    expect(formatClock('23:59', locale('12'))).toBe('11:59 PM');
   });
 
   it("leaves anything that isn't a time of day as it is", () => {
