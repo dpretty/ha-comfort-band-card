@@ -113,7 +113,7 @@ export class ComfortBandNowTab extends LitElement {
   @state() private _burst: Burst | null = null;
   private _burstTimer: ReturnType<typeof setTimeout> | null = null;
   /** What a call from this tab is doing while it goes through, such as
-   *  "Going back to the schedule"; the controls wait meanwhile. */
+   *  "Going back to the schedule"; the controls ignore presses meanwhile. */
   @state() private _busy: string | null = null;
   private _busySeq = 0;
   /** Service calls from this tab (not feedback) go one after another, so
@@ -165,10 +165,10 @@ export class ComfortBandNowTab extends LitElement {
         color: var(--cb-text-secondary);
       }
       .status.heating ha-icon {
-        color: var(--cb-heat, var(--state-climate-heat-color, #ff8100));
+        color: var(--cb-action-heating);
       }
       .status.cooling ha-icon {
-        color: var(--cb-cool, var(--state-climate-cool-color, #2b9af9));
+        color: var(--cb-action-cooling);
       }
       section {
         margin-top: var(--cb-gap-lg);
@@ -460,6 +460,8 @@ export class ComfortBandNowTab extends LitElement {
     const { scheduled, nextChange } = this._schedule();
     const ends = Date.parse(this._stateOf(this.entities.overrideEnds)?.state ?? '');
     const headline = headlineTemperature({ room, apparent, useApparent });
+    // The headline's rule: "feels like" drives control when in use and readable.
+    const feelsLike = useApparent && Number.isFinite(apparent);
 
     const burst = this._burst;
     const doing =
@@ -498,6 +500,7 @@ export class ComfortBandNowTab extends LitElement {
           .low=${effLow}
           .high=${effHigh}
           .room=${headline.value}
+          .roomLabel=${feelsLike ? 'feels like' : 'room'}
           .action=${action}
         ></band-gauge>
       </div>

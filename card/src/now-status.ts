@@ -161,20 +161,25 @@ export function statusLine(s: StatusInput): { kind: StatusKind; text: string } {
 export function formatTime(ms: number, hass?: Pick<HomeAssistant, 'locale'>): string {
   const date = new Date(ms);
   const pref = hass?.locale?.time_format;
-  const options: Intl.DateTimeFormatOptions = { hour: 'numeric' };
-  if (pref === '12') options.hour12 = true;
-  if (pref === '24') options.hour12 = false;
-  // 'system' takes the 12/24-hour choice from the browser, as HA's frontend
-  // does, and keeps HA's language for everything else.
-  if (pref === 'system') {
-    const cycle = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions()
-      .hourCycle;
-    options.hour12 = cycle === 'h11' || cycle === 'h12';
-  }
   const language = hass?.locale?.language;
-  const cycle = new Intl.DateTimeFormat(language, options).resolvedOptions().hourCycle;
-  const twelveHour = cycle === 'h11' || cycle === 'h12';
-  if (!twelveHour) options.hour = '2-digit';
+  let twelveHour: boolean;
+  if (pref === '12') twelveHour = true;
+  else if (pref === '24') twelveHour = false;
+  else {
+    // 'system' takes the 12/24-hour choice from the browser, as HA's frontend
+    // does, and keeps HA's language for everything else; otherwise the
+    // language's own clock.
+    const cycle = new Intl.DateTimeFormat(pref === 'system' ? undefined : language, {
+      hour: 'numeric',
+    }).resolvedOptions().hourCycle;
+    twelveHour = cycle === 'h11' || cycle === 'h12';
+  }
+  // Applied as an hour cycle, as HA's frontend does. `hour12` maps to h11 or
+  // h24 on some engines, which writes noon "0 pm" and half past midnight "24:30".
+  const options: Intl.DateTimeFormatOptions = {
+    hourCycle: twelveHour ? 'h12' : 'h23',
+    hour: twelveHour ? 'numeric' : '2-digit',
+  };
   if (!twelveHour || date.getMinutes() !== 0) options.minute = '2-digit';
   return new Intl.DateTimeFormat(language, options).format(date);
 }

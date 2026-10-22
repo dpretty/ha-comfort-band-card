@@ -107,6 +107,18 @@ function statusText(el: ComfortBandNowTab): string {
   return el.shadowRoot!.querySelector('.status span')!.textContent!.trim();
 }
 
+function statusIcon(el: ComfortBandNowTab): string | null {
+  return el.shadowRoot!.querySelector('.status ha-icon')!.getAttribute('icon');
+}
+
+async function gaugeLabel(el: ComfortBandNowTab): Promise<string> {
+  const gauge = el.shadowRoot!.querySelector('band-gauge') as HTMLElement & {
+    updateComplete: Promise<boolean>;
+  };
+  await gauge.updateComplete;
+  return gauge.shadowRoot!.querySelector('svg')!.getAttribute('aria-label')!;
+}
+
 function lengths(el: ComfortBandNowTab): Array<{ text: string; checked: boolean }> {
   return Array.from(el.shadowRoot!.querySelectorAll('.lengths button')).map((b) => ({
     text: b.textContent!.trim(),
@@ -168,7 +180,8 @@ function scheduledHass(
       'sensor.gym_next_band_change': next === null ? 'unknown' : new Date(next).toISOString(),
       ...overrides,
     },
-    { 'sensor.gym_next_band_change': { scheduled, low: 18, high: 23 } },
+    // Unlike any band in force here, so showing them by mistake would show.
+    { 'sensor.gym_next_band_change': { scheduled, low: 17, high: 24 } },
   );
 }
 
@@ -179,6 +192,8 @@ describe('comfort-band-now-tab', () => {
   it('shows the room temperature large, to one decimal', async () => {
     const el = await nowTab(makeHass());
     expect(headline(el)).toEqual({ value: '21.0°', note: null });
+    // No "feels like" reading, but it isn't in use: nothing to warn about.
+    expect(el.shadowRoot!.querySelector('.warn')).toBeNull();
   });
 
   // The value that drives control is the large one.
@@ -212,6 +227,7 @@ describe('comfort-band-now-tab', () => {
       }),
     );
     expect(headline(el)).toEqual({ value: '21.0°', note: 'Feels like 23.5°' });
+    expect(await gaugeLabel(el)).toContain('room 21.0°');
   });
 
   it('warns when apparent mode is on but no humidity reading is available', async () => {
@@ -536,6 +552,7 @@ describe('comfort-band-now-tab', () => {
       heating.remove();
       const cooling = await nowTab(scheduledHass(null, { 'sensor.gym_current_action': 'cooling' }));
       expect(statusText(cooling)).toBe('Cooling · 19.5–22.5°');
+      expect(statusIcon(cooling)).toBe('mdi:snowflake');
     });
 
     it("doesn't call a room outside its range comfortable", async () => {
@@ -555,11 +572,21 @@ describe('comfort-band-now-tab', () => {
       expect(statusText(el)).toBe('Comfortable · 19.5–22.5°');
       const gauge = el.shadowRoot!.querySelector('band-gauge') as HTMLElement & { room: number };
       expect(gauge.room).toBe(20);
+      expect(await gaugeLabel(el)).toContain('feels like 20.0°');
+      expect(await gaugeLabel(el)).not.toContain('room');
     });
 
     it('says when a room is paused', async () => {
       const el = await nowTab(scheduledHass(null, { 'switch.gym_enabled': 'off' }));
       expect(statusText(el)).toBe('Paused: not controlling this room');
+      expect(statusIcon(el)).toBe('mdi:pause-circle-outline');
+    });
+
+    it('promises no end once the next change has passed', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(NOW);
+      const el = await nowTab(scheduledHass(NOW - HOUR));
+      expect(statusText(el)).toBe('Comfortable · 19.5–22.5°');
     });
 
     it('says a room has been adjusted, and until when', async () => {
@@ -595,6 +622,7 @@ describe('comfort-band-now-tab', () => {
       const el = await nowTab(hass);
       await tap(el, 'warmer', 2);
       expect(statusText(el)).toBe('Adjusting to 20.5–23.5°');
+      expect(statusIcon(el)).toBe('mdi:timer-sand');
       vi.advanceTimersByTime(1_499);
       await flush(el);
       expect(hass.callService).not.toHaveBeenCalled();
@@ -679,7 +707,7 @@ describe('comfort-band-now-tab', () => {
 
     // Until a change is through, hass may still show the state before it,
     // and a tap would build on that.
-    it('waits while a change is going through, then goes on from the band in force', async () => {
+    it('ignores taps while a change is going through, then goes on from the band in force', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const hass = makeHass();
       const held = holdNextCall(hass);
@@ -758,7 +786,7 @@ describe('comfort-band-now-tab', () => {
         ['start_override', { zone: 'gym', low: 20, high: 23, hours: 3 }],
         ['start_override', { zone: 'gym', low: 18, high: 21, hours: 3 }],
       ]);
-      // The slider's change is still going through: the controls still wait.
+      // The slider's change is still going through: the controls still ignore presses.
       expect(statusText(el)).toBe('Adjusting to 18–21°');
       expect(controlsDisabled(el).every((d) => d)).toBe(true);
       second.resolve();
@@ -809,6 +837,35 @@ describe('comfort-band-now-tab', () => {
       ]);
     });
 
+    // Each end on its own: from 30–34.75 (shown 30–34.8) the top can rise 0.2,
+    // and from 10.25–16 (shown 10.3–16) the bottom can fall 0.3.
+    it('rounds each end of the band in force before moving it to a limit', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const warm = makeHass({
+        'sensor.gym_effective_low': '30',
+        'sensor.gym_effective_high': '34.75',
+      });
+      const warmEl = await nowTab(warm);
+      await tap(warmEl, 'warmer');
+      vi.advanceTimersByTime(1_500);
+      await flush(warmEl);
+      expect(calls(warm)).toEqual([
+        ['start_override', { zone: 'gym', low: 30.2, high: 35, hours: 3 }],
+      ]);
+      warmEl.remove();
+      const cool = makeHass({
+        'sensor.gym_effective_low': '10.25',
+        'sensor.gym_effective_high': '16',
+      });
+      const coolEl = await nowTab(cool);
+      await tap(coolEl, 'cooler');
+      vi.advanceTimersByTime(1_500);
+      await flush(coolEl);
+      expect(calls(cool)).toEqual([
+        ['start_override', { zone: 'gym', low: 10, high: 15.7, hours: 3 }],
+      ]);
+    });
+
     it('sends nothing for Warmer when the top is already at the limit', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const hass = makeHass({
@@ -843,6 +900,24 @@ describe('comfort-band-now-tab', () => {
         { text: '1 h', checked: false },
         { text: '3 h', checked: true },
       ]);
+      // Grouped under their heading for screen readers.
+      const group = el.shadowRoot!.querySelector('.lengths')!;
+      expect(group.getAttribute('role')).toBe('group');
+      const heading = el.shadowRoot!.getElementById(group.getAttribute('aria-labelledby')!);
+      expect(heading!.textContent!.trim()).toBe('Adjust for');
+    });
+
+    // Not the integration's override_hours (6 in the fixture).
+    it('sends taps on an adjusted room for the length shown', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const hass = scheduledHass(null, { 'binary_sensor.gym_override_active': 'on' });
+      const el = await nowTab(hass);
+      await tap(el, 'warmer');
+      vi.advanceTimersByTime(1_500);
+      await flush(el);
+      expect(calls(hass)).toEqual([
+        ['start_override', { zone: 'gym', low: 20, high: 23, hours: 3 }],
+      ]);
     });
 
     it('sends the length picked', async () => {
@@ -872,14 +947,35 @@ describe('comfort-band-now-tab', () => {
       ]);
     });
 
-    it("can't re-time an adjustment whose band can't be read", async () => {
+    // Each press starts the length again from now, the one shown included.
+    it('re-times an adjustment with the length already shown, and again on a second press', async () => {
       const hass = scheduledHass(null, {
         'binary_sensor.gym_override_active': 'on',
-        'number.gym_manual_low': 'unavailable',
+        'number.gym_manual_low': '20',
+        'number.gym_manual_high': '23.5',
       });
       const el = await nowTab(hass);
+      await pickLength(el, '3');
       await pickLength(el, '1');
-      expect(hass.callService).not.toHaveBeenCalled();
+      await pickLength(el, '1');
+      expect(calls(hass)).toEqual([
+        ['start_override', { zone: 'gym', low: 20, high: 23.5, hours: 3 }],
+        ['start_override', { zone: 'gym', low: 20, high: 23.5, hours: 1 }],
+        ['start_override', { zone: 'gym', low: 20, high: 23.5, hours: 1 }],
+      ]);
+    });
+
+    it("can't re-time an adjustment whose band can't be read", async () => {
+      for (const unreadable of ['number.gym_manual_low', 'number.gym_manual_high']) {
+        const hass = scheduledHass(null, {
+          'binary_sensor.gym_override_active': 'on',
+          [unreadable]: 'unavailable',
+        });
+        const el = await nowTab(hass);
+        await pickLength(el, '1');
+        expect(hass.callService).not.toHaveBeenCalled();
+        el.remove();
+      }
     });
 
     it('only stores the length when nothing is adjusted, and uses it next', async () => {
@@ -993,7 +1089,10 @@ describe('comfort-band-now-tab', () => {
       vi.advanceTimersByTime(1_500);
       await flush(el);
       expect(statusText(el)).toBe('Adjusting to 20–23°');
-      expect(warmer.disabled).toBe(false);
+      // jsdom keeps focus on a control that can't take it, so check for each
+      // way of making it unusable: disabled, in a disabled fieldset, or inert.
+      expect(warmer.hasAttribute('disabled')).toBe(false);
+      expect(warmer.closest('[inert], fieldset[disabled]')).toBeNull();
       expect(el.shadowRoot!.activeElement).toBe(warmer);
     });
   });
@@ -1035,6 +1134,7 @@ describe('comfort-band-now-tab', () => {
 
     // The state before the cancel is still what hass shows meanwhile.
     it('says it is going back, and holds the controls until it has', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const hass = adjusted();
       const held = holdNextCall(hass);
       const el = await nowTab(hass);
@@ -1045,10 +1145,12 @@ describe('comfort-band-now-tab', () => {
       await tap(el, 'warmer');
       await pickLength(el, '1');
       backButton(el)!.click();
+      vi.advanceTimersByTime(1_500);
       await flush(el);
-      expect(calls(hass)).toEqual([['cancel_override', { zone: 'gym' }]]);
       held.resolve();
       await flush(el);
+      // Nothing was queued behind the cancel, either.
+      expect(calls(hass)).toEqual([['cancel_override', { zone: 'gym' }]]);
       expect(controlsDisabled(el).every((d) => !d)).toBe(true);
     });
 
@@ -1090,6 +1192,22 @@ describe('comfort-band-now-tab', () => {
       expect(statusText(el)).toBe('Comfortable · set to 19.5–22.5°');
       expect(backButton(el)).toBeNull();
       expect(el.shadowRoot!.querySelector('.lengths')).toBeNull();
+    });
+  });
+
+  describe('without a zone', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('sends nothing', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const hass = scheduledHass(null, { 'binary_sensor.gym_override_active': 'on' });
+      const el = await nowTab(hass, makeEntities(), '');
+      await tap(el, 'warmer');
+      vi.advanceTimersByTime(1_500);
+      await flush(el);
+      backButton(el)!.click();
+      await flush(el);
+      expect(hass.callService).not.toHaveBeenCalled();
     });
   });
 

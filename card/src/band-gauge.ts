@@ -25,6 +25,8 @@ export class BandGauge extends LitElement {
   @property({ type: Number }) public low = NaN;
   @property({ type: Number }) public high = NaN;
   @property({ type: Number }) public room = NaN;
+  /** What the marker's temperature is, for screen readers. */
+  @property({ type: String }) public roomLabel = 'room';
   @property({ type: String }) public action: string | null = 'unknown';
 
   public static override styles = [
@@ -74,7 +76,7 @@ export class BandGauge extends LitElement {
 
     const fmt = (t: number) => (Number.isFinite(t) ? `${t.toFixed(1)}°` : '—');
 
-    const aria = `Comfort band gauge: low ${fmt(this.low)}, room ${fmt(this.room)}, high ${fmt(this.high)}, action ${action}`;
+    const aria = `Comfort band gauge: low ${fmt(this.low)}, ${this.roomLabel} ${fmt(this.room)}, high ${fmt(this.high)}, action ${action}`;
 
     return html`
       <svg viewBox="0 0 100 24" preserveAspectRatio="none" role="img" aria-label=${aria}>

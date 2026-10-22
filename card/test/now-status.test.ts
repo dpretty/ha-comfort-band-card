@@ -150,6 +150,7 @@ describe('statusLine', () => {
     expect(line({ nextChange: NOW - 1 }).text).toBe('Comfortable · 18–23°');
     expect(line({ nextChange: null }).text).toBe('Comfortable · 18–23°');
     expect(line({ scheduled: null }).text).toBe('Comfortable · 18–23°');
+    expect(line({ scheduled: false }).text).toBe('Comfortable · 18–23°');
   });
 
   it('says an adjustment and when it ends, where a schedule sets the band', () => {
@@ -204,6 +205,7 @@ describe('statusLine', () => {
       kind: 'none',
       text: "Can't read this room's range",
     });
+    expect(line({ band: { low: 18, high: NaN } }).text).toBe("Can't read this room's range");
   });
 });
 
@@ -228,6 +230,15 @@ describe('formatTime', () => {
     expect(formatTime(at(21, 0), locale('24', 'en-US'))).toBe('21:00');
   });
 
+  // With `hour12`, some engines (Node 20 among them) count a 12-hour clock
+  // from 0 and a 24-hour one to 24 when the language's own clock is the other.
+  it('writes noon and midnight as 12 on a 12-hour clock and 00 on a 24-hour one', () => {
+    expect(formatTime(at(12, 0), locale('12', 'en-GB'))).toBe('12 pm');
+    expect(formatTime(at(0, 0), locale('12', 'en-GB'))).toBe('12 am');
+    expect(formatTime(at(0, 30), locale('24', 'en-US'))).toBe('00:30');
+    expect(formatTime(at(12, 0), locale('24', 'en-US'))).toBe('12:00');
+  });
+
   // As HA's frontend does: the browser's 12/24-hour choice, HA's language.
   it("takes the browser's 12/24-hour choice for HA's 'system' setting", () => {
     const cycle = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions()
@@ -240,6 +251,9 @@ describe('formatTime', () => {
     );
     expect(formatTime(at(21, 0), { locale: { language: other, time_format: 'system' } })).not.toBe(
       formatTime(at(21, 0), { locale: { language: other } }),
+    );
+    expect(formatTime(at(12, 0), { locale: { language: other, time_format: 'system' } })).toBe(
+      formatTime(at(12, 0), { locale: { language: other, time_format: browser } }),
     );
   });
 
