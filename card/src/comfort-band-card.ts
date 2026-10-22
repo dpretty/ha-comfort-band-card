@@ -13,9 +13,11 @@ import './tile.js';
 import './modal.js';
 import './card-editor.js';
 import type { ComfortBandModal } from './modal.js';
-import type { ComfortBandCardConfig, HassEntity, HomeAssistant } from './types.js';
+import type { ComfortBandCardConfig, HomeAssistant } from './types.js';
 import type { ZoneEntities } from './helpers.js';
 import { findZoneEntities, zoneDisplayName } from './helpers.js';
+import { formatTime, statusLine } from './now-status.js';
+import { controlling, readRoom, roomBadges } from './room-status.js';
 import { tokens } from './styles.js';
 
 @customElement('comfort-band-card')
@@ -105,12 +107,14 @@ export class ComfortBandCard extends LitElement {
     return html`
       <comfort-band-tile
         zoneName=${view.zoneName}
-        .roomTemp=${view.roomTemp}
+        .temperature=${view.temperature}
+        .feelsLike=${view.feelsLike}
         .low=${view.low}
         .high=${view.high}
         .action=${view.action}
-        .overrideActive=${view.overrideActive}
-        .overrideEnds=${view.overrideEnds}
+        .statusKind=${view.statusKind}
+        .statusText=${view.statusText}
+        .badges=${view.badges}
         .noExpand=${compact}
         .variant=${variant}
         @comfort-band-tile-tap=${this._onTileTap}
@@ -131,24 +135,23 @@ export class ComfortBandCard extends LitElement {
   };
 
   private _buildView(hass: HomeAssistant, entities: ZoneEntities) {
-    const stateOf = (entityId: string | null): HassEntity | undefined =>
-      entityId !== null ? hass.states[entityId] : undefined;
-
-    const numericState = (entityId: string | null): number => {
-      const s = stateOf(entityId);
-      if (!s) return NaN;
-      const n = parseFloat(s.state);
-      return Number.isFinite(n) ? n : NaN;
-    };
-
+    const room = readRoom(hass, entities);
+    const status = statusLine({
+      ...room,
+      doing: null,
+      now: Date.now(),
+      formatTime: (ms) => formatTime(ms, hass),
+    });
     return {
       zoneName: zoneDisplayName(hass, this._config!, entities),
-      low: numericState(entities.effectiveLow),
-      high: numericState(entities.effectiveHigh),
-      roomTemp: numericState(entities.roomTemperature),
-      action: stateOf(entities.currentAction)?.state ?? 'unknown',
-      overrideActive: stateOf(entities.overrideActive)?.state === 'on',
-      overrideEnds: stateOf(entities.overrideEnds)?.state ?? null,
+      temperature: room.temperature,
+      feelsLike: room.feelsLike,
+      low: room.band.low,
+      high: room.band.high,
+      action: controlling(room) ? room.action : 'unknown',
+      statusKind: status.kind,
+      statusText: status.text,
+      badges: roomBadges(room),
     };
   }
 }

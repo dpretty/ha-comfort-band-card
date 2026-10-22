@@ -1,7 +1,8 @@
 /**
- * Pure helpers behind the Now tab's top half: which temperature to show
- * large, the one-line status ("Comfortable · 17.5–23° until 9 pm"), and the
- * Warmer / Cooler shift. Kept free of Lit so each rule can be tested on its own.
+ * Pure helpers behind the Now tab's top half and the tile: which temperature
+ * to show large, the one-line status ("Comfortable · 17.5–23° until 9 pm"),
+ * and the Warmer / Cooler shift. Kept free of Lit so each rule can be tested
+ * on its own.
  */
 
 import type { HomeAssistant } from './types.js';
@@ -57,11 +58,12 @@ export function headlineTemperature(opts: {
   useApparent: boolean;
 }): { value: number; note: string } {
   const { room, apparent, useApparent } = opts;
-  // Compared in the tenths both are shown in, so 19.8 and 19.9 differ.
+  // Compared as both are shown, so 19.8 and 19.9 differ and 21.45 and 21.4
+  // (both "21.4") don't.
   const differ =
     Number.isFinite(room) &&
     Number.isFinite(apparent) &&
-    Math.round(apparent * 10) !== Math.round(room * 10);
+    shownTenths(apparent) !== shownTenths(room);
   if (useApparent && Number.isFinite(apparent)) {
     return {
       value: apparent,
@@ -71,12 +73,48 @@ export function headlineTemperature(opts: {
   return { value: room, note: differ ? `Feels like ${apparent.toFixed(1)}°` : '' };
 }
 
+/**
+ * A temperature in tenths of a degree, as `toFixed(1)` shows it. That isn't
+ * always `Math.round(t * 10)`: 17.45 is stored just under the half, so it
+ * shows as 17.4, but `17.45 * 10` comes out at exactly 174.5 and rounds up.
+ */
+export function shownTenths(value: number): number {
+  return Math.round(Number(value.toFixed(1)) * 10);
+}
+
+/** Where a temperature sits against a range, compared as each is shown: the
+ *  temperature with `toFixed(1)`, the range's ends as `bandText` writes them.
+ *  Null when either can't be read. */
+export function rangePosition(temperature: number, band: Band): 'below' | 'in' | 'above' | null {
+  if (![temperature, band.low, band.high].every(Number.isFinite)) return null;
+  const t = shownTenths(temperature);
+  if (t < Math.round(band.low * 10)) return 'below';
+  if (t > Math.round(band.high * 10)) return 'above';
+  return 'in';
+}
+
+/**
+ * The room reading control is using:
+ * - `ok`: the configured room sensor;
+ * - `stand-in`: the room sensor is offline and a stand-in reading (a backup
+ *   sensor, or the air conditioner's own) is driving control (v0.18.0+);
+ * - `offline`: the room sensor is offline and nothing stands in, so control
+ *   is on hold. Since v0.18.0 that includes the first few minutes of an
+ *   outage, before a stand-in may take over;
+ * - `no-reading`: there's no room reading, though the integration doesn't
+ *   say the sensor is offline (one older than v0.16.0, or one starting up).
+ */
+export type SensorState = 'ok' | 'stand-in' | 'offline' | 'no-reading';
+
 export type StatusKind =
   | 'adjusting'
   | 'paused'
+  | 'sensor'
   | 'heating'
   | 'cooling'
   | 'comfortable'
+  | 'below'
+  | 'above'
   | 'idle'
   | 'none';
 
@@ -84,12 +122,16 @@ const STATUS_WORDS: Partial<Record<StatusKind, string>> = {
   heating: 'Heating',
   cooling: 'Cooling',
   comfortable: 'Comfortable',
+  below: 'Idle',
+  above: 'Idle',
   idle: 'Idle',
 };
 
 export interface StatusInput {
   /** The zone's `enabled` switch; false means it isn't controlling the room. */
   enabled: boolean;
+  /** The room reading control is using. */
+  sensor: SensorState;
   /** `heating`, `cooling`, `idle` or anything else (unknown). */
   action: string;
   /** The temperature that drives control. */
@@ -114,24 +156,42 @@ export interface StatusInput {
  * schedule, its next change; for an adjustment, when it ends, and only when a
  * schedule sets the zone's band. Without one, an adjustment's band is the
  * zone's band from then on, so it doesn't end.
+ *
+ * While a stand-in reading drives control, the line leads with "Room sensor
+ * offline" and goes on as usual; with no reading at all, control is on hold.
  */
 export function statusLine(s: StatusInput): { kind: StatusKind; text: string } {
   if (s.doing) return { kind: 'adjusting', text: s.doing };
   if (!s.enabled) return { kind: 'paused', text: 'Paused: not controlling this room' };
+  if (s.sensor === 'offline') {
+    return { kind: 'sensor', text: 'On hold: the room sensor is offline' };
+  }
+  if (s.sensor === 'no-reading') {
+    return { kind: 'sensor', text: 'On hold: no room temperature reading' };
+  }
+  const line = inForce(s);
+  if (s.sensor === 'stand-in')
+    return { kind: 'sensor', text: `Room sensor offline · ${line.text}` };
+  return line;
+}
+
+/** The status of a room being controlled from a reading: what it's doing,
+ *  the range in force, and until when. */
+function inForce(s: StatusInput): { kind: StatusKind; text: string } {
   if (!Number.isFinite(s.band.low) || !Number.isFinite(s.band.high)) {
     return { kind: 'none', text: "Can't read this room's range" };
   }
 
-  const inBand = s.temperature >= s.band.low && s.temperature <= s.band.high;
+  const position = rangePosition(s.temperature, s.band);
   const kind: StatusKind =
     s.action === 'heating'
       ? 'heating'
       : s.action === 'cooling'
         ? 'cooling'
         : s.action === 'idle'
-          ? Number.isFinite(s.temperature) && inBand
+          ? position === 'in'
             ? 'comfortable'
-            : 'idle'
+            : (position ?? 'idle')
           : 'none';
   const word = STATUS_WORDS[kind];
 

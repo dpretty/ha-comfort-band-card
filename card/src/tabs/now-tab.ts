@@ -18,6 +18,9 @@
  *   - "How does it feel?" feedback pills (`comfort_band.record_feedback`).
  *   - "Set an exact range": the two-handled slider, folded away.
  *
+ * When the room sensor is offline, a sentence under the status says what that
+ * means for the room and what to do.
+ *
  * Where the integration (v0.23.0+) says no schedule sets the zone's band, an
  * adjustment's band is the zone's band from then on, so there is no length to
  * choose, no "until" and no "Back to schedule".
@@ -35,13 +38,13 @@ import type { FeedbackLabel } from '../services.js';
 import { tokens } from '../styles.js';
 import {
   type Band,
-  type StatusKind,
   bandText,
   formatTime,
   headlineTemperature,
   shiftBand,
   statusLine,
 } from '../now-status.js';
+import { STATUS_ICONS, controlling, readRoom, readSchedule, sensorNotice } from '../room-status.js';
 
 /** Feedback pills: service label → button text. Order = display order. */
 const FEEDBACK_PILLS: ReadonlyArray<{ label: FeedbackLabel; text: string }> = [
@@ -74,16 +77,6 @@ interface Burst {
   /** A length was picked during the burst: send it even if the taps cancel out. */
   picked: boolean;
 }
-
-const STATUS_ICONS: Record<StatusKind, string> = {
-  adjusting: 'mdi:timer-sand',
-  paused: 'mdi:pause-circle-outline',
-  heating: 'mdi:fire',
-  cooling: 'mdi:snowflake',
-  comfortable: 'mdi:check-circle-outline',
-  idle: 'mdi:minus-circle-outline',
-  none: 'mdi:thermometer',
-};
 
 @customElement('comfort-band-now-tab')
 export class ComfortBandNowTab extends LitElement {
@@ -162,6 +155,8 @@ export class ComfortBandNowTab extends LitElement {
       }
       .status ha-icon {
         --mdc-icon-size: 20px;
+        /* Not a theme's --icon-primary-color: the colours below. */
+        --icon-primary-color: currentColor;
         color: var(--cb-text-secondary);
       }
       .status.heating ha-icon {
@@ -169,6 +164,14 @@ export class ComfortBandNowTab extends LitElement {
       }
       .status.cooling ha-icon {
         color: var(--cb-action-cooling);
+      }
+      .status.sensor ha-icon {
+        color: var(--warning-color, #ffa600);
+      }
+      .notice {
+        margin-top: 4px;
+        font-size: 13px;
+        color: var(--cb-text-secondary);
       }
       section {
         margin-top: var(--cb-gap-lg);
@@ -299,18 +302,9 @@ export class ComfortBandNowTab extends LitElement {
     return { low: Math.round(low * 10) / 10, high: Math.round(high * 10) / 10 };
   }
 
-  /** From `sensor.{zone}_next_band_change`: whether a schedule sets the
-   *  zone's band (null on integrations that don't say), and when it next
-   *  changes. */
   private _schedule(): { scheduled: boolean | null; nextChange: number | null } {
-    const s = this._stateOf(this.entities?.nextBandChange ?? null);
-    if (!s) return { scheduled: null, nextChange: null };
-    const scheduled = s.attributes.scheduled;
-    const next = Date.parse(s.state);
-    return {
-      scheduled: typeof scheduled === 'boolean' ? scheduled : null,
-      nextChange: Number.isNaN(next) ? null : next,
-    };
+    if (!this.hass || !this.entities) return { scheduled: null, nextChange: null };
+    return readSchedule(this.hass, this.entities);
   }
 
   /** The length in force: the one picked here, else three hours. */
@@ -449,19 +443,11 @@ export class ComfortBandNowTab extends LitElement {
     if (!this.hass || !this.entities) return nothing;
     const now = Date.now();
 
-    const room = this._numericState(this.entities.roomTemperature);
-    const apparent = this._numericState(this.entities.apparentTemperature);
-    const effLow = this._numericState(this.entities.effectiveLow);
-    const effHigh = this._numericState(this.entities.effectiveHigh);
-    const action = this._stateOf(this.entities.currentAction)?.state ?? 'unknown';
-    const useApparent = this._stateOf(this.entities.useApparentTemperature)?.state === 'on';
-    const overrideActive = this._stateOf(this.entities.overrideActive)?.state === 'on';
-    const enabled = this._stateOf(this.entities.enabled)?.state !== 'off';
-    const { scheduled, nextChange } = this._schedule();
-    const ends = Date.parse(this._stateOf(this.entities.overrideEnds)?.state ?? '');
+    const reading = readRoom(this.hass, this.entities);
+    const { room, apparent, useApparent, feelsLike, overrideActive, scheduled } = reading;
+    const { low: effLow, high: effHigh } = reading.band;
     const headline = headlineTemperature({ room, apparent, useApparent });
-    // The headline's rule: "feels like" drives control when in use and readable.
-    const feelsLike = useApparent && Number.isFinite(apparent);
+    const notice = sensorNotice(reading);
 
     const burst = this._burst;
     const doing =
@@ -469,14 +455,7 @@ export class ComfortBandNowTab extends LitElement {
         ? `Adjusting to ${bandText(shiftBand(burst.base, burst.steps))}`
         : this._busy;
     const status = statusLine({
-      enabled,
-      action,
-      temperature: headline.value,
-      band: { low: effLow, high: effHigh },
-      overrideActive,
-      overrideEnds: Number.isNaN(ends) ? null : ends,
-      scheduled,
-      nextChange,
+      ...reading,
       doing,
       now,
       formatTime: (ms) => formatTime(ms, this.hass),
@@ -489,7 +468,7 @@ export class ComfortBandNowTab extends LitElement {
         >
         ${headline.note ? html`<span class="note">${headline.note}</span>` : nothing}
       </div>
-      ${useApparent && !Number.isFinite(apparent)
+      ${useApparent && !Number.isFinite(apparent) && Number.isFinite(room)
         ? html`<div class="warn">
             Apparent temperature mode is on but no humidity reading is available — decisions are
             using the raw room temperature.
@@ -501,14 +480,14 @@ export class ComfortBandNowTab extends LitElement {
           .high=${effHigh}
           .room=${headline.value}
           .roomLabel=${feelsLike ? 'feels like' : 'room'}
-          .action=${action}
+          .action=${controlling(reading) ? reading.action : 'unknown'}
         ></band-gauge>
       </div>
       <div class="status ${status.kind}" role="status" aria-live="polite">
         <ha-icon icon=${STATUS_ICONS[status.kind]} aria-hidden="true"></ha-icon>
         <span>${status.text}</span>
       </div>
-
+      ${notice ? html`<div class="notice">${notice}</div>` : nothing}
       ${this._renderAdjust(overrideActive, scheduled)} ${this._renderFeedbackSection()}
       ${this._renderExactRange(effLow, effHigh)}
     `;

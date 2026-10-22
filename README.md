@@ -8,7 +8,7 @@ Compact tile + expanded modal with **Now / Schedule / Profiles / Insights** tabs
 
 ## What you get
 
-- **Compact tile** — zone display name, prominent room temperature, inline `[low … room … high]` band gauge coloured by `current_action` (red=heating, blue=cooling, neutral=idle), override pill while an override is active.
+- **Compact tile** — zone display name, the temperature that drives control (the room reading, or "feels like" when apparent temperature is in use), an inline `[low … room … high]` band gauge coloured by `current_action` (red=heating, blue=cooling, neutral=idle or not controlling), and the Now tab's status line with its icon: what the room is doing, its range, and when that next changes or an adjustment ends ("Comfortable · 17.5–23° until 5 pm"; the times need integration ≥ **v0.23.0**, as on the Now tab). A paused zone says so, and so does one whose room sensor is offline (integration ≥ **v0.16.0**): "Room sensor offline · …" while a stand-in reading drives control (≥ **v0.18.0**), "On hold: the room sensor is offline" when nothing does. The Now tab adds a sentence on what that means and what to do.
 - **Now tab** — the temperature that drives control, large (the room reading, or "feels like" when apparent temperature is in use), and one status line: what the room is doing, the range in force and when the schedule next changes it ("Comfortable · 17.5–23° until 9 pm"). Below it, **Adjust for** 1 h · 3 h (3 h until another is picked), then **Cooler** / **Warmer**: each tap moves the whole range half a degree (stopping at 10° and 35°, never pushing a range the other way), and taps made close together are sent as one `start_override` once they stop, for the length picked. Picking a length while a room is adjusted re-times the adjustment; **Back to schedule** ends it. While a change is going through, these controls ignore presses (they keep focus). The zone's `override_hours` applies only to overrides started elsewhere. Further down: the "How does it feel?" feedback buttons, and the two-handled slider under **Set an exact range**. The next-change time and the room-has-a-schedule check need integration ≥ **v0.23.0** (`sensor.{zone}_next_band_change`); on older versions the card leaves out "until" and offers "End adjustment" instead of "Back to schedule". In a room with no schedule an adjustment's range stays, so it offers no length and no way back to a schedule.
 - **Schedule tab** — 2D chart of the active profile's transitions: time on X, temperature on Y (14–28 °C), with the band area filled. Drag a handle horizontally to change its time (snap 15 min), vertically to retarget low or high (snap 0.5 °C). Tap a handle for the precise-edit dialog. Long-press to delete. Tap empty space to add a transition at the snapped time, with the band centred on the tap temperature. Keyboard: arrows nudge, Enter edits, Delete removes. Persists via `comfort_band.set_schedule`; the live-update WS subscription keeps other open card instances in sync.
 - **Profiles tab** — list + switch active profile, plus full CRUD: tap **+ New profile** to create one, or use the per-row overflow menu (`⋮`) to Clone, Rename, or Delete. The active-fallback (`home` by default; tracks renames) is protected from deletion. Requires integration ≥ **v0.3.0**.
@@ -40,7 +40,7 @@ Entity discovery is by device identifier (`(comfort_band, zone:{slug})`), so ren
 type: custom:comfort-band-card
 zone: gym         # required — the zone slug from your comfort_band setup
 name: Gym         # optional — defaults to the room (area) the zone's device is in
-variant: tile     # optional — `tile` (default) or `mini` (number-only chip)
+variant: tile     # optional — `tile` (default) or `mini` (floorplan chip)
 compact: false    # optional — set true for a tile that doesn't expand on tap
 ```
 
@@ -48,7 +48,7 @@ The dashboard's visual editor offers a zone dropdown, an optional name, a varian
 
 ### Mini variant (for floorplans)
 
-`variant: mini` renders a small inline chip showing just the room temperature, sized to its content. The background tints red while heating and blue while cooling, and tapping it opens the same modal as the full tile. Drop one inside a `picture-elements` card to label rooms on a floorplan:
+`variant: mini` renders a small inline chip showing the temperature that drives control, sized to its content. A comfortable room is the number alone; anything worth noticing adds an icon in front, most urgent first: the room sensor offline, heating or cooling (the background tints red or blue as well), below or above its range when it's neither heating nor cooling, and adjusted. A paused zone shows a pause icon only, and a room on hold (no reading at all) only the warning icon. The chip's label for screen readers, and its tooltip, is the zone, the temperature and the status line. Its touch area is at least 44 px each way, without the chip looking any bigger, and tapping it opens the same modal as the full tile (a `compact` chip, which doesn't open, keeps to its own size). Drop one inside a `picture-elements` card to label rooms on a floorplan:
 
 ```yaml
 type: picture-elements

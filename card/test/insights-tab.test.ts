@@ -17,6 +17,7 @@ function makeEntities(overrides: Partial<ZoneEntities> = {}): ZoneEntities {
     nextBandChange: null,
     currentAction: null,
     overrideActive: null,
+    roomSensorUnavailable: null,
     manualLow: null,
     manualHigh: null,
     overrideHours: null,

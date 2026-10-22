@@ -123,7 +123,8 @@ export type BandHandle = 'low' | 'high';
 // ---------- Card config ----------
 
 /** Visual variant of the card. `tile` is the default full-size tile;
- *  `mini` is a tiny number-only chip suitable for floorplan overlays. */
+ *  `mini` is a small chip for floorplan overlays: the temperature, with an
+ *  icon in front for anything notable. */
 export type ComfortBandCardVariant = 'tile' | 'mini';
 
 export interface ComfortBandCardConfig {

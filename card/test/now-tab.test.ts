@@ -18,6 +18,7 @@ function makeEntities(zone = 'gym'): ZoneEntities {
     nextBandChange: `sensor.${zone}_next_band_change`,
     currentAction: `sensor.${zone}_current_action`,
     overrideActive: `binary_sensor.${zone}_override_active`,
+    roomSensorUnavailable: `binary_sensor.${zone}_room_sensor_unavailable`,
     manualLow: `number.${zone}_manual_low`,
     manualHigh: `number.${zone}_manual_high`,
     overrideHours: `number.${zone}_override_hours`,
@@ -603,6 +604,87 @@ describe('comfort-band-now-tab', () => {
       expect(statusText(el)).toBe(
         `Comfortable · adjusted to 20–23° until ${formatTime(NOW + 2 * HOUR)}`,
       );
+    });
+
+    it('explains a room sensor that is offline while a stand-in drives control', async () => {
+      const el = await nowTab(
+        makeHass(
+          { 'binary_sensor.gym_room_sensor_unavailable': 'on' },
+          { 'sensor.gym_room_temperature': { source: 'climate' } },
+        ),
+      );
+      expect(statusText(el)).toBe('Room sensor offline · Comfortable · 19.5–22.5°');
+      expect(el.shadowRoot!.querySelector('.status ha-icon')!.getAttribute('icon')).toBe(
+        'mdi:alert-circle-outline',
+      );
+      expect(el.shadowRoot!.querySelector('.notice')!.textContent!.trim()).toBe(
+        "Using the air conditioner's own sensor until the room sensor reports again. Check its battery or connection.",
+      );
+    });
+
+    it('says control is on hold when the room sensor is offline with nothing standing in', async () => {
+      const el = await nowTab(
+        makeHass({
+          'binary_sensor.gym_room_sensor_unavailable': 'on',
+          'sensor.gym_room_temperature': 'unknown',
+          'sensor.gym_apparent_temperature': 'unknown',
+          'switch.gym_use_apparent_temperature': 'on',
+          'sensor.gym_current_action': 'heating',
+        }),
+      );
+      expect(statusText(el)).toBe('On hold: the room sensor is offline');
+      // Not "using the raw room temperature": there isn't one.
+      expect(el.shadowRoot!.querySelector('.warn')).toBeNull();
+      expect(el.shadowRoot!.querySelector('.notice')!.textContent!.trim()).toBe(
+        "Heating and cooling here won't be adjusted while there's no room temperature reading. Check the room sensor's battery or connection.",
+      );
+      const gauge = el.shadowRoot!.querySelector('band-gauge') as HTMLElement & { action: string };
+      expect(gauge.action).toBe('unknown');
+    });
+
+    it('says only that the sensor needs looking at in a paused room', async () => {
+      const el = await nowTab(
+        makeHass(
+          { 'switch.gym_enabled': 'off', 'binary_sensor.gym_room_sensor_unavailable': 'on' },
+          { 'sensor.gym_room_temperature': { source: 'climate' } },
+        ),
+      );
+      expect(statusText(el)).toBe('Paused: not controlling this room');
+      expect(el.shadowRoot!.querySelector('.notice')!.textContent!.trim()).toBe(
+        'The room sensor is offline. Check its battery or connection.',
+      );
+    });
+
+    // The words carry the meaning; the colours repeat it.
+    it('colours the status icon for sensor trouble, whatever the theme', () => {
+      const css = (
+        customElements.get('comfort-band-now-tab') as unknown as typeof ComfortBandNowTab
+      ).styles
+        .flat()
+        .map((s) => (s as { cssText: string }).cssText)
+        .join('\n');
+      expect(css).toMatch(/\.status\.sensor ha-icon\s*\{[^}]*var\(--warning-color/);
+      expect(css).toMatch(/\.status ha-icon\s*\{[^}]*--icon-primary-color:\s*currentColor/);
+    });
+
+    it('has no sensor notice while the room sensor reports', async () => {
+      const el = await nowTab(makeHass({ 'binary_sensor.gym_room_sensor_unavailable': 'off' }));
+      expect(el.shadowRoot!.querySelector('.notice')).toBeNull();
+    });
+
+    // A paused zone still works out what it would do, but doesn't do it.
+    it("doesn't colour the gauge for heating in a paused room", async () => {
+      const el = await nowTab(
+        makeHass({ 'switch.gym_enabled': 'off', 'sensor.gym_current_action': 'heating' }),
+      );
+      const gauge = el.shadowRoot!.querySelector('band-gauge') as HTMLElement & { action: string };
+      expect(gauge.action).toBe('unknown');
+      el.remove();
+      const heating = await nowTab(makeHass({ 'sensor.gym_current_action': 'heating' }));
+      const live = heating.shadowRoot!.querySelector('band-gauge') as HTMLElement & {
+        action: string;
+      };
+      expect(live.action).toBe('heating');
     });
 
     it('is a polite live region', async () => {

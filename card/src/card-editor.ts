@@ -221,7 +221,7 @@ export class ComfortBandCardEditor extends LitElement {
         <select @change=${this._onVariantChange} .value=${variant}>
           <option value="tile" ?selected=${variant === 'tile'}>Tile (default)</option>
           <option value="mini" ?selected=${variant === 'mini'}>
-            Mini (number only, for floorplans)
+            Mini (small chip, for floorplans)
           </option>
         </select>
       </label>

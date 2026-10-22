@@ -3,7 +3,9 @@ import {
   bandText,
   formatTime,
   headlineTemperature,
+  rangePosition,
   shiftBand,
+  shownTenths,
   statusLine,
   type StatusInput,
 } from '../src/now-status.js';
@@ -73,6 +75,11 @@ describe('headlineTemperature', () => {
       'Feels like 19.9°',
     );
     expect(headlineTemperature({ room: 21, apparent: 21.04, useApparent: false }).note).toBe('');
+    // Both shown as 21.4.
+    expect(headlineTemperature({ room: 21.45, apparent: 21.4, useApparent: false }).note).toBe('');
+    expect(headlineTemperature({ room: 21.45, apparent: 21.4, useApparent: true }).note).toBe(
+      'Feels like',
+    );
   });
 
   it('shows "feels like" when it drives control', () => {
@@ -106,6 +113,7 @@ describe('statusLine', () => {
   const NOW = Date.parse('2026-10-22T10:00:00Z');
   const base: StatusInput = {
     enabled: true,
+    sensor: 'ok',
     action: 'idle',
     temperature: 20,
     band: { low: 18, high: 23 },
@@ -126,7 +134,14 @@ describe('statusLine', () => {
   it('counts the range ends as inside it', () => {
     expect(line({ temperature: 18 }).kind).toBe('comfortable');
     expect(line({ temperature: 23 }).kind).toBe('comfortable');
-    expect(line({ temperature: 23.1 }).kind).toBe('idle');
+    expect(line({ temperature: 23.1 }).kind).toBe('above');
+  });
+
+  // 23.04 is shown as 23.0, inside an 18–23° range.
+  it('judges comfort in the tenths shown', () => {
+    expect(line({ temperature: 23.04 }).kind).toBe('comfortable');
+    expect(line({ temperature: 17.96 }).kind).toBe('comfortable');
+    expect(line({ temperature: 23.06 }).kind).toBe('above');
   });
 
   it('names heating and cooling whatever the temperature', () => {
@@ -136,7 +151,11 @@ describe('statusLine', () => {
 
   it('says "idle" for a room outside its range that is not being heated or cooled', () => {
     expect(line({ temperature: 17.5 })).toEqual({
-      kind: 'idle',
+      kind: 'below',
+      text: 'Idle · 18–23° until T+60m',
+    });
+    expect(line({ temperature: 23.5 })).toEqual({
+      kind: 'above',
       text: 'Idle · 18–23° until T+60m',
     });
   });
@@ -198,6 +217,38 @@ describe('statusLine', () => {
       kind: 'paused',
       text: 'Paused: not controlling this room',
     });
+    expect(line({ enabled: false, sensor: 'offline' }).kind).toBe('paused');
+  });
+
+  it('leads with the sensor while a stand-in reading drives control', () => {
+    expect(line({ sensor: 'stand-in', action: 'heating' })).toEqual({
+      kind: 'sensor',
+      text: 'Room sensor offline · Heating · 18–23° until T+60m',
+    });
+    expect(line({ sensor: 'stand-in', action: 'unknown', overrideActive: true }).text).toBe(
+      'Room sensor offline · Adjusted to 18–23°',
+    );
+    expect(line({ sensor: 'stand-in', band: { low: NaN, high: 23 } })).toEqual({
+      kind: 'sensor',
+      text: "Room sensor offline · Can't read this room's range",
+    });
+  });
+
+  it('says control is on hold with no room reading', () => {
+    expect(line({ sensor: 'offline', temperature: NaN, action: 'heating' })).toEqual({
+      kind: 'sensor',
+      text: 'On hold: the room sensor is offline',
+    });
+    expect(line({ sensor: 'no-reading', temperature: NaN })).toEqual({
+      kind: 'sensor',
+      text: 'On hold: no room temperature reading',
+    });
+    // Before the range: it's the reading that's missing.
+    expect(line({ sensor: 'offline', band: { low: NaN, high: NaN } }).kind).toBe('sensor');
+  });
+
+  it('puts a change made on the card before sensor trouble', () => {
+    expect(line({ sensor: 'offline', doing: 'Going back to the schedule' }).kind).toBe('adjusting');
   });
 
   it("says when the range can't be read", () => {
@@ -206,6 +257,58 @@ describe('statusLine', () => {
       text: "Can't read this room's range",
     });
     expect(line({ band: { low: 18, high: NaN } }).text).toBe("Can't read this room's range");
+  });
+});
+
+describe('shownTenths', () => {
+  it('rounds as toFixed(1) shows a temperature', () => {
+    expect(shownTenths(17.45)).toBe(174);
+    expect((17.45).toFixed(1)).toBe('17.4');
+    expect(shownTenths(17.46)).toBe(175);
+    expect(shownTenths(21)).toBe(210);
+    expect(shownTenths(-0.05)).toBe(-1);
+  });
+});
+
+describe('rangePosition', () => {
+  const band = { low: 18, high: 23 };
+
+  it('says which side of the range a temperature is, in the tenths shown', () => {
+    expect(rangePosition(17.9, band)).toBe('below');
+    expect(rangePosition(17.96, band)).toBe('in');
+    expect(rangePosition(18, band)).toBe('in');
+    expect(rangePosition(23, band)).toBe('in');
+    expect(rangePosition(23.04, band)).toBe('in');
+    expect(rangePosition(23.05, band)).toBe('above');
+  });
+
+  // 17.45 is stored just under the half: shown as 17.4, so below a 17.5 low.
+  it('compares a temperature as it is shown, half-tenths included', () => {
+    expect(rangePosition(17.45, { low: 17.5, high: 23 })).toBe('below');
+    expect(rangePosition(19.95, { low: 20, high: 23 })).toBe('below');
+    expect(rangePosition(20.45, { low: 20.5, high: 23 })).toBe('below');
+    expect(rangePosition(22.55, { low: 18, high: 22.5 })).toBe('above');
+  });
+
+  // bandText writes a 17.45 low as "17.5", so 17.4 is below it, even
+  // though the temperature itself would show 17.45 as 17.4.
+  it('compares a range end as bandText writes it, not as a temperature is shown', () => {
+    expect(bandText({ low: 17.45, high: 23 })).toBe('17.5–23°');
+    expect(rangePosition(17.4, { low: 17.45, high: 23 })).toBe('below');
+    expect(bandText({ low: 18, high: 22.45 })).toBe('18–22.5°');
+    expect(rangePosition(22.5, { low: 18, high: 22.45 })).toBe('in');
+  });
+
+  // Mid-ramp, a range end can sit between tenths; it's shown rounded.
+  it('compares a range end as it is shown', () => {
+    expect(rangePosition(19.8, { low: 19.84, high: 23 })).toBe('in');
+    expect(rangePosition(23.2, { low: 18, high: 23.16 })).toBe('in');
+  });
+
+  it("is null when the temperature or either end can't be read", () => {
+    expect(rangePosition(NaN, band)).toBeNull();
+    expect(rangePosition(20, { low: NaN, high: 23 })).toBeNull();
+    expect(rangePosition(20, { low: 18, high: NaN })).toBeNull();
   });
 });
 

@@ -53,6 +53,7 @@ const ALL_KEYS = [
   'next_band_change',
   'current_action',
   'override_active',
+  'room_sensor_unavailable',
   'manual_low',
   'manual_high',
   'override_hours',
@@ -79,6 +80,7 @@ describe('findZoneEntities', () => {
     expect(out.cancelOverride).toBe('sensor.gym_cancel_override');
     expect(out.enabled).toBe('sensor.gym_enabled');
     expect(out.nextBandChange).toBe('sensor.gym_next_band_change');
+    expect(out.roomSensorUnavailable).toBe('sensor.gym_room_sensor_unavailable');
   });
 
   it('resolves entities even when entity_ids have collision suffixes (`_2`)', () => {

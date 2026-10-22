@@ -1,30 +1,41 @@
 /**
- * `<comfort-band-tile>` — compact tile (~120 px tall).
+ * `<comfort-band-tile>` — compact tile.
  *
- * Composed of zone display name + prominent room temperature + horizontal
- * `<band-gauge>` + an override pill (when active). Tap fires
- * `comfort-band-tile-tap`; the parent card opens the modal in response.
+ * Composed of zone display name + prominent temperature (the one that drives
+ * control) + horizontal `<band-gauge>` + the Now tab's status sentence with
+ * its icon. The `mini` variant is the number alone, with an icon in front
+ * for anything notable. Tap fires `comfort-band-tile-tap`; the parent card
+ * opens the modal in response.
  */
 
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import './band-gauge.js';
 import type { ComfortBandCardVariant } from './types.js';
-import { tokens, actionColorVar, asAction, actionLabel } from './styles.js';
+import type { StatusKind } from './now-status.js';
+import { type Badge, BADGE_ICONS, STATUS_ICONS } from './room-status.js';
+import { tokens, actionColorVar } from './styles.js';
 
 @customElement('comfort-band-tile')
 export class ComfortBandTile extends LitElement {
   @property({ type: String }) public zoneName = '';
-  @property({ type: Number }) public roomTemp = NaN;
+  /** The temperature that drives control. */
+  @property({ type: Number }) public temperature = NaN;
+  /** Whether `temperature` is "feels like", for the gauge's label. */
+  @property({ type: Boolean }) public feelsLike = false;
   @property({ type: Number }) public low = NaN;
   @property({ type: Number }) public high = NaN;
+  /** Colours the gauge; `unknown` while the room isn't being controlled. */
   @property({ type: String }) public action: string | null = 'unknown';
-  @property({ type: Boolean }) public overrideActive = false;
-  /** ISO 8601 timestamp at which the override expires (or null). */
-  @property({ type: String }) public overrideEnds: string | null = null;
+  @property({ type: String }) public statusKind: StatusKind = 'none';
+  /** The Now tab's status sentence. */
+  @property({ type: String }) public statusText = '';
+  /** The mini chip's icons, most urgent first; none for a comfortable room. */
+  @property({ attribute: false }) public badges: Badge[] = [];
   /** Disable the tap-to-expand affordance. Used for compact embeds. */
   @property({ type: Boolean }) public noExpand = false;
-  /** Visual variant. `mini` renders a content-sized number-only chip. */
+  /** Visual variant. `mini` renders a content-sized chip: the temperature,
+   *  with an icon in front for anything notable. */
   @property({ type: String, reflect: true }) public variant: ComfortBandCardVariant = 'tile';
 
   public static override styles = [
@@ -58,9 +69,11 @@ export class ComfortBandTile extends LitElement {
         outline-offset: 2px;
       }
       .mini {
+        position: relative;
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        gap: 2px;
         padding: 4px 10px;
         border-radius: var(--cb-radius-pill);
         background: var(
@@ -78,6 +91,24 @@ export class ComfortBandTile extends LitElement {
       }
       .mini.no-expand {
         cursor: default;
+      }
+      /* WCAG 2.5.5: a touch target at least 44px each way, without making
+         the chip any bigger on the floorplan. Only for a chip that opens:
+         a compact one would just take taps from what's around it. */
+      .mini:not(.no-expand)::before {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: max(100%, 44px);
+        height: max(100%, 44px);
+        transform: translate(-50%, -50%);
+      }
+      /* HA's icon fills with --icon-primary-color when a theme sets it; keep
+         these the chip's own colour. */
+      .mini ha-icon {
+        --mdc-icon-size: 16px;
+        --icon-primary-color: currentColor;
       }
       .mini.tinted {
         --cb-mini-fg: var(--cb-text-on-action, #ffffff);
@@ -101,15 +132,6 @@ export class ComfortBandTile extends LitElement {
         color: var(--cb-text-primary);
         font-family: var(--paper-font-body1_-_font-family, sans-serif);
       }
-      .action-chip {
-        font-size: 11px;
-        font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        padding: 2px 8px;
-        border-radius: var(--cb-radius-pill);
-        color: var(--cb-text-on-action, #ffffff);
-      }
       .body {
         display: flex;
         align-items: center;
@@ -127,14 +149,27 @@ export class ComfortBandTile extends LitElement {
         flex: 1;
         min-width: 0;
       }
-      .override-pill {
-        align-self: flex-start;
-        font-size: 11px;
-        padding: 2px 8px;
-        border-radius: var(--cb-radius-pill);
-        background: var(--cb-text-secondary);
-        color: var(--cb-text-on-action, #ffffff);
-        opacity: 0.85;
+      .status {
+        display: flex;
+        align-items: center;
+        gap: var(--cb-gap-xs);
+        font-size: 13px;
+        color: var(--cb-text-primary);
+      }
+      .status ha-icon {
+        --mdc-icon-size: 18px;
+        --icon-primary-color: currentColor;
+        flex: none;
+        color: var(--cb-text-secondary);
+      }
+      .status.heating ha-icon {
+        color: var(--cb-action-heating);
+      }
+      .status.cooling ha-icon {
+        color: var(--cb-action-cooling);
+      }
+      .status.sensor ha-icon {
+        color: var(--warning-color, #ffa600);
       }
     `,
   ];
@@ -146,23 +181,8 @@ export class ComfortBandTile extends LitElement {
     this.dispatchEvent(new CustomEvent('comfort-band-tile-tap', { bubbles: true, composed: true }));
   }
 
-  private _renderRoomTemp(): string {
-    return Number.isFinite(this.roomTemp) ? `${this.roomTemp.toFixed(1)}°` : '—';
-  }
-
-  private _renderOverridePill() {
-    if (!this.overrideActive) return null;
-    const remaining = formatRemaining(this.overrideEnds);
-    return html`<div class="override-pill">Override${remaining ? ` · ${remaining}` : ''}</div>`;
-  }
-
-  private _renderActionChip() {
-    const action = asAction(this.action);
-    if (action === 'idle' || action === 'unknown') return null;
-    const color = actionColorVar(action);
-    return html`<span class="action-chip" style="background:${color}">
-      ${actionLabel(action)}
-    </span>`;
+  private _renderTemperature(): string {
+    return Number.isFinite(this.temperature) ? `${this.temperature.toFixed(1)}°` : '—';
   }
 
   protected override render() {
@@ -177,34 +197,42 @@ export class ComfortBandTile extends LitElement {
       >
         <div class="header">
           <div class="zone-name">${this.zoneName || '—'}</div>
-          ${this._renderActionChip()}
         </div>
         <div class="body">
-          <div class="room-temp">${this._renderRoomTemp()}</div>
+          <div class="room-temp">${this._renderTemperature()}</div>
           <div class="gauge-wrap">
             <band-gauge
               .low=${this.low}
               .high=${this.high}
-              .room=${this.roomTemp}
+              .room=${this.temperature}
+              .roomLabel=${this.feelsLike ? 'feels like' : 'room'}
               .action=${this.action}
             ></band-gauge>
           </div>
         </div>
-        ${this._renderOverridePill()}
+        ${this.statusText
+          ? html`<div class="status ${this.statusKind}">
+              <ha-icon icon=${STATUS_ICONS[this.statusKind]} aria-hidden="true"></ha-icon>
+              <span>${this.statusText}</span>
+            </div>`
+          : null}
       </div>
     `;
   }
 
   private _renderMini() {
-    const action = asAction(this.action);
-    const tinted = action === 'heating' || action === 'cooling';
-    const style = tinted ? `--cb-mini-bg:${actionColorVar(action)}` : '';
-    const label = `${this.zoneName || 'Zone'} ${this._renderRoomTemp()}${
-      tinted ? `, ${actionLabel(action)}` : ''
-    }`;
+    // The tint repeats what the heating or cooling icon already says.
+    const tint = this.badges.includes('heating')
+      ? 'heating'
+      : this.badges.includes('cooling')
+        ? 'cooling'
+        : null;
+    const style = tint ? `--cb-mini-bg:${actionColorVar(tint)}` : '';
+    const name = `${this.zoneName || 'Zone'} ${this._renderTemperature()}`;
+    const label = this.statusText ? `${name}. ${this.statusText}` : name;
     return html`
       <div
-        class="mini ${this.noExpand ? 'no-expand' : ''} ${tinted ? 'tinted' : ''}"
+        class="mini ${this.noExpand ? 'no-expand' : ''} ${tint ? 'tinted' : ''}"
         style=${style}
         role="${this.noExpand ? 'group' : 'button'}"
         tabindex="${this.noExpand ? -1 : 0}"
@@ -213,24 +241,18 @@ export class ComfortBandTile extends LitElement {
         @click=${this._onTap}
         @keydown=${this._onTap}
       >
-        ${this._renderRoomTemp()}
+        ${this.badges.map(
+          (badge) =>
+            html`<ha-icon
+              icon=${BADGE_ICONS[badge]}
+              data-badge=${badge}
+              aria-hidden="true"
+            ></ha-icon>`,
+        )}
+        <span class="value">${this._renderTemperature()}</span>
       </div>
     `;
   }
-}
-
-/** Returns "1h 23m left" / "12m left" / "" for non-future timestamps. */
-function formatRemaining(iso: string | null): string {
-  if (!iso) return '';
-  const target = Date.parse(iso);
-  if (Number.isNaN(target)) return '';
-  const ms = target - Date.now();
-  if (ms <= 0) return '';
-  const totalMins = Math.round(ms / 60_000);
-  if (totalMins < 60) return `${totalMins}m left`;
-  const hours = Math.floor(totalMins / 60);
-  const mins = totalMins % 60;
-  return mins ? `${hours}h ${mins}m left` : `${hours}h left`;
 }
 
 declare global {

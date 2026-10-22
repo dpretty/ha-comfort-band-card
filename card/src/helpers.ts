@@ -38,8 +38,10 @@ export interface ZoneEntities {
   /** v0.23.0+: when the schedule next changes the band; absent on older integrations. */
   nextBandChange: string | null;
   currentAction: string | null;
-  // Binary sensor
+  // Binary sensors
   overrideActive: string | null;
+  /** v0.16.0+: on while the zone's configured room sensor isn't reporting. */
+  roomSensorUnavailable: string | null;
   // Numbers
   manualLow: string | null;
   manualHigh: string | null;
@@ -71,6 +73,7 @@ const KEY_TO_FIELD: Record<string, keyof ZoneEntities> = {
   next_band_change: 'nextBandChange',
   current_action: 'currentAction',
   override_active: 'overrideActive',
+  room_sensor_unavailable: 'roomSensorUnavailable',
   manual_low: 'manualLow',
   manual_high: 'manualHigh',
   override_hours: 'overrideHours',
@@ -93,6 +96,7 @@ function emptyZoneEntities(): ZoneEntities {
     nextBandChange: null,
     currentAction: null,
     overrideActive: null,
+    roomSensorUnavailable: null,
     manualLow: null,
     manualHigh: null,
     overrideHours: null,
