@@ -490,9 +490,10 @@ export function formatWhen(
     const part = (type: string) => Number(parts.find((p) => p.type === type)?.value);
     return [part('year'), part('month') - 1, part('day')];
   };
+  // Counted on UTC midnights, so a change of the clocks doesn't count.
   const day = (t: number) => {
     const [y, m, d] = ymd(t);
-    return zone ? Date.UTC(y, m, d) : new Date(y, m, d).getTime();
+    return Date.UTC(y, m, d);
   };
   const days = Math.round((day(ms) - day(now)) / 86_400_000);
   const inZone = zone ? { timeZone: zone } : {};

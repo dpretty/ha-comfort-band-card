@@ -2301,19 +2301,19 @@ function yh(e, t) {
 function lo(e, t, n, i) {
   const o = Nl(i), s = Uo(e, n, o), a = n?.locale?.language, u = a?.startsWith("en") ? a : "en", d = (S) => {
     if (!o) {
-      const B = new Date(S);
-      return [B.getFullYear(), B.getMonth(), B.getDate()];
+      const I = new Date(S);
+      return [I.getFullYear(), I.getMonth(), I.getDate()];
     }
     const O = new Intl.DateTimeFormat("en-US", {
       timeZone: o,
       year: "numeric",
       month: "numeric",
       day: "numeric"
-    }).formatToParts(S), R = (B) => Number(O.find(($) => $.type === B)?.value);
+    }).formatToParts(S), R = (I) => Number(O.find(($) => $.type === I)?.value);
     return [R("year"), R("month") - 1, R("day")];
   }, f = (S) => {
-    const [O, R, B] = d(S);
-    return o ? Date.UTC(O, R, B) : new Date(O, R, B).getTime();
+    const [O, R, I] = d(S);
+    return Date.UTC(O, R, I);
   }, p = Math.round((f(e) - f(t)) / 864e5), m = o ? { timeZone: o } : {};
   if (p === 0) return s;
   if (p === 1) return `tomorrow ${s}`;
@@ -4470,8 +4470,8 @@ function pd(e, t, n) {
   return !1;
 }
 function Ga(e, t, n) {
-  let i = n.min, o = n.max, s = ae(i.pad, 0), a = ae(o.pad, 0), u = ae(i.hard, -pe), d = ae(o.hard, pe), f = ae(i.soft, pe), p = ae(o.soft, -pe), m = ae(i.mode, 0), v = ae(o.mode, 0), k = t - e, S = Xt(k), O = et(ze(e), ze(t)), R = Xt(O), B = ze(R - S);
-  (k < 1e-24 || B > 10) && (k = 0, (e == 0 || t == 0) && (k = 1e-24, m == 2 && f != pe && (s = 0), v == 2 && p != -pe && (a = 0)));
+  let i = n.min, o = n.max, s = ae(i.pad, 0), a = ae(o.pad, 0), u = ae(i.hard, -pe), d = ae(o.hard, pe), f = ae(i.soft, pe), p = ae(o.soft, -pe), m = ae(i.mode, 0), v = ae(o.mode, 0), k = t - e, S = Xt(k), O = et(ze(e), ze(t)), R = Xt(O), I = ze(R - S);
+  (k < 1e-24 || I > 10) && (k = 0, (e == 0 || t == 0) && (k = 1e-24, m == 2 && f != pe && (s = 0), v == 2 && p != -pe && (a = 0)));
   let $ = k || O || 1e3, U = Xt($), A = Ai(10, ft(U)), Q = $ * (k == 0 ? e == 0 ? 0.1 : 1 : s), z = me(Xl(e - Q, A / 10), 24), X = e >= f && (m == 1 || m == 3 && z <= f || m == 2 && z >= f) ? f : pe, Y = et(u, z < X && e >= X ? X : Pt(X, z)), ne = $ * (k == 0 ? t == 0 ? 0.1 : 1 : a), K = me(qo(t + ne, A / 10), 24), T = t <= p && (v == 1 || v == 3 && K >= p || v == 2 && K <= p) ? p : -pe, J = Pt(d, K > T && t <= T ? T : et(T, K));
   return Y == J && Y == 0 && (J = 100), [Y, J];
 }
@@ -4832,21 +4832,21 @@ function hc(e) {
     [e, el + ".{fff}", Do + " " + wi, he, Xi + " " + wi, he, Xa, he, 1]
   ];
   function p(m) {
-    return (v, k, S, O, R, B) => {
+    return (v, k, S, O, R, I) => {
       let $ = [], U = R >= a, A = R >= s && R < a, Q = m(S), z = me(Q * e, 3), X = Rs(Q.getFullYear(), U ? 0 : Q.getMonth(), A || U ? 1 : Q.getDate()), Y = me(X * e, 3);
       if (A || U) {
         let ne = A ? R / s : 0, K = U ? R / a : 0, T = z == Y ? z : me(Rs(X.getFullYear() + K, X.getMonth() + ne, 1) * e, 3), J = new Date(Ne(T / e)), L = J.getFullYear(), V = J.getMonth();
         for (let j = 0; T <= O; j++) {
-          let oe = Rs(L + K * j, V + ne * j, 1), I = oe - m(me(oe * e, 3));
-          T = me((+oe + I) * e, 3), T <= O && $.push(T);
+          let oe = Rs(L + K * j, V + ne * j, 1), B = oe - m(me(oe * e, 3));
+          T = me((+oe + B) * e, 3), T <= O && $.push(T);
         }
       } else {
         let ne = R >= o ? o : R, K = ft(S) - ft(z), T = Y + K + qo(z - Y, ne);
         $.push(T);
-        let J = m(T), L = J.getHours() + J.getMinutes() / n + J.getSeconds() / i, V = R / i, j = v.axes[k]._space, oe = B / j;
+        let J = m(T), L = J.getHours() + J.getMinutes() / n + J.getSeconds() / i, V = R / i, j = v.axes[k]._space, oe = I / j;
         for (; T = me(T + R, e == 1 ? 0 : 3), !(T > O); )
           if (V > 1) {
-            let I = ft(me(L + V, 6)) % 24, se = m(T).getHours() - I;
+            let B = ft(me(L + V, 6)) % 24, se = m(T).getHours() - B;
             se > 1 && (se = -1), T -= se * i, L = (L + V) % 24;
             let de = $[$.length - 1];
             me((T - de) / R, 3) * oe >= 0.7 && $.push(T);
@@ -4873,8 +4873,8 @@ function nl(e, t) {
   return (n, i, o, s, a) => {
     let u = t.find((S) => a >= S[0]) || t[t.length - 1], d, f, p, m, v, k;
     return i.map((S) => {
-      let O = e(S), R = O.getFullYear(), B = O.getMonth(), $ = O.getDate(), U = O.getHours(), A = O.getMinutes(), Q = O.getSeconds(), z = R != d && u[2] || B != f && u[3] || $ != p && u[4] || U != m && u[5] || A != v && u[6] || Q != k && u[7] || u[1];
-      return d = R, f = B, p = $, m = U, v = A, k = Q, z(O);
+      let O = e(S), R = O.getFullYear(), I = O.getMonth(), $ = O.getDate(), U = O.getHours(), A = O.getMinutes(), Q = O.getSeconds(), z = R != d && u[2] || I != f && u[3] || $ != p && u[4] || U != m && u[5] || A != v && u[6] || Q != k && u[7] || u[1];
+      return d = R, f = I, p = $, m = U, v = A, k = Q, z(O);
     });
   };
 }
@@ -5198,7 +5198,7 @@ function yc(e, t) {
 const Ei = 1, tr = 2;
 function Zn(e, t, n) {
   const i = e.mode, o = e.series[t], s = i == 2 ? e._data[t] : e._data, a = e.scales, u = e.bbox;
-  let d = s[0], f = i == 2 ? s[1] : s[t], p = i == 2 ? a[o.facets[0].scale] : a[e.series[0].scale], m = i == 2 ? a[o.facets[1].scale] : a[o.scale], v = u.left, k = u.top, S = u.width, O = u.height, R = e.valToPosH, B = e.valToPosV;
+  let d = s[0], f = i == 2 ? s[1] : s[t], p = i == 2 ? a[o.facets[0].scale] : a[e.series[0].scale], m = i == 2 ? a[o.facets[1].scale] : a[o.scale], v = u.left, k = u.top, S = u.width, O = u.height, R = e.valToPosH, I = e.valToPosV;
   return p.ori == 0 ? n(
     o,
     d,
@@ -5206,7 +5206,7 @@ function Zn(e, t, n) {
     p,
     m,
     R,
-    B,
+    I,
     v,
     k,
     S,
@@ -5222,7 +5222,7 @@ function Zn(e, t, n) {
     f,
     p,
     m,
-    B,
+    I,
     R,
     k,
     v,
@@ -5261,11 +5261,11 @@ function yf(e, t, n, i, o) {
 }
 function en(e, t, n, i, o, s) {
   return Zn(e, t, (a, u, d, f, p, m, v, k, S, O, R) => {
-    let B = a.pxRound;
+    let I = a.pxRound;
     const $ = f.dir * (f.ori == 0 ? 1 : -1), U = f.ori == 0 ? zi : Oi;
     let A, Q;
     $ == 1 ? (A = n, Q = i) : (A = i, Q = n);
-    let z = B(m(u[A], f, O, k)), X = B(v(d[A], p, R, S)), Y = B(m(u[Q], f, O, k)), ne = B(v(s == 1 ? p.max : p.min, p, R, S)), K = new Path2D(o);
+    let z = I(m(u[A], f, O, k)), X = I(v(d[A], p, R, S)), Y = I(m(u[Q], f, O, k)), ne = I(v(s == 1 ? p.max : p.min, p, R, S)), K = new Path2D(o);
     return U(K, Y, ne), U(K, z, ne), U(K, z, X), K;
   });
 }
@@ -5304,8 +5304,8 @@ function Cr(e, t, n, i, o, s, a) {
           v = f;
       let k = s(e[m]), S = v == m ? k : s(e[v]), O = m - o;
       k = a <= 0 && O >= 0 && O < d ? s(e[O]) : k;
-      let B = v + o;
-      S = a >= 0 && B >= 0 && B < d ? s(e[B]) : S, S >= k && u.push([k, S]);
+      let I = v + o;
+      S = a >= 0 && I >= 0 && I < d ? s(e[I]) : S, S >= k && u.push([k, S]);
     }
   return u;
 }
@@ -5345,7 +5345,7 @@ const Qo = (e, t, n) => {
 };
 function Ac(e) {
   return (t, n, i, o, s) => Zn(t, n, (a, u, d, f, p, m, v, k, S, O, R) => {
-    let { pxRound: B, points: $ } = a, U, A;
+    let { pxRound: I, points: $ } = a, U, A;
     f.ori == 0 ? (U = Qo, A = xc) : (U = Xo, A = $c);
     const Q = me($.width * ce, 3);
     let z = ($.size - $.width) / 2 * ce, X = me(z * 2, 3), Y = new Path2D(), ne = new Path2D(), { left: K, top: T, width: J, height: L } = t.bbox;
@@ -5358,8 +5358,8 @@ function Ac(e) {
     );
     const V = (j) => {
       if (d[j] != null) {
-        let oe = B(m(u[j], f, O, k)), I = B(v(d[j], p, R, S));
-        U(Y, oe + z, I), A(Y, oe, I, z, 0, No * 2);
+        let oe = I(m(u[j], f, O, k)), B = I(v(d[j], p, R, S));
+        U(Y, oe + z, B), A(Y, oe, B, z, 0, No * 2);
       }
     };
     if (s)
@@ -5385,17 +5385,17 @@ function Cc(e) {
   const t = ae(e?.alignGaps, 0);
   return (n, i, o, s) => Zn(n, i, (a, u, d, f, p, m, v, k, S, O, R) => {
     [o, s] = Ko(d, o, s);
-    let B = a.pxRound, $ = (L) => B(m(L, f, O, k)), U = (L) => B(v(L, p, R, S)), A, Q;
+    let I = a.pxRound, $ = (L) => I(m(L, f, O, k)), U = (L) => I(v(L, p, R, S)), A, Q;
     f.ori == 0 ? (A = zi, Q = xf) : (A = Oi, Q = $f);
     const z = f.dir * (f.ori == 0 ? 1 : -1), X = { stroke: new Path2D(), fill: null, clip: null, band: null, gaps: null, flags: Ei }, Y = X.stroke;
     let ne = !1;
     if (s - o >= O * 4) {
-      let L = (F) => n.posToVal(F, f.key, !0), V = null, j = null, oe, I, tt, we = $(u[z == 1 ? o : s]), se = $(u[o]), de = $(u[s]), ee = L(z == 1 ? se + 1 : de - 1);
+      let L = (F) => n.posToVal(F, f.key, !0), V = null, j = null, oe, B, tt, we = $(u[z == 1 ? o : s]), se = $(u[o]), de = $(u[s]), ee = L(z == 1 ? se + 1 : de - 1);
       for (let F = z == 1 ? o : s; F >= o && F <= s; F += z) {
         let Me = u[F], xe = (z == 1 ? Me < ee : Me > ee) ? we : $(Me), ue = d[F];
-        xe == we ? ue != null ? (I = ue, V == null ? (A(Y, xe, U(I)), oe = V = j = I) : I < V ? V = I : I > j && (j = I)) : ue === null && (ne = !0) : (V != null && Q(Y, we, U(V), U(j), U(oe), U(I)), ue != null ? (I = ue, A(Y, xe, U(I)), V = j = oe = I) : (V = j = null, ue === null && (ne = !0)), we = xe, ee = L(we + z));
+        xe == we ? ue != null ? (B = ue, V == null ? (A(Y, xe, U(B)), oe = V = j = B) : B < V ? V = B : B > j && (j = B)) : ue === null && (ne = !0) : (V != null && Q(Y, we, U(V), U(j), U(oe), U(B)), ue != null ? (B = ue, A(Y, xe, U(B)), V = j = oe = B) : (V = j = null, ue === null && (ne = !0)), we = xe, ee = L(we + z));
       }
-      V != null && V != j && tt != we && Q(Y, we, U(V), U(j), U(oe), U(I));
+      V != null && V != j && tt != we && Q(Y, we, U(V), U(j), U(oe), U(B));
     } else
       for (let L = z == 1 ? o : s; L >= o && L <= s; L += z) {
         let V = d[L];
@@ -5403,8 +5403,8 @@ function Cc(e) {
       }
     let [T, J] = Tr(n, i);
     if (a.fill != null || T != 0) {
-      let L = X.fill = new Path2D(Y), V = a.fillTo(n, i, a.min, a.max, T), j = U(V), oe = $(u[o]), I = $(u[s]);
-      z == -1 && ([I, oe] = [oe, I]), A(L, I, j), A(L, oe, j);
+      let L = X.fill = new Path2D(Y), V = a.fillTo(n, i, a.min, a.max, T), j = U(V), oe = $(u[o]), B = $(u[s]);
+      z == -1 && ([B, oe] = [oe, B]), A(L, B, j), A(L, oe, j);
     }
     if (!a.spanGaps) {
       let L = [];
@@ -5418,9 +5418,9 @@ function Cc(e) {
 }
 function kf(e) {
   const t = ae(e.align, 1), n = ae(e.ascDesc, !1), i = ae(e.alignGaps, 0), o = ae(e.extend, !1);
-  return (s, a, u, d) => Zn(s, a, (f, p, m, v, k, S, O, R, B, $, U) => {
+  return (s, a, u, d) => Zn(s, a, (f, p, m, v, k, S, O, R, I, $, U) => {
     [u, d] = Ko(m, u, d);
-    let A = f.pxRound, { left: Q, width: z } = s.bbox, X = (se) => A(S(se, v, $, R)), Y = (se) => A(O(se, k, U, B)), ne = v.ori == 0 ? zi : Oi;
+    let A = f.pxRound, { left: Q, width: z } = s.bbox, X = (se) => A(S(se, v, $, R)), Y = (se) => A(O(se, k, U, I)), ne = v.ori == 0 ? zi : Oi;
     const K = { stroke: new Path2D(), fill: null, clip: null, band: null, gaps: null, flags: Ei }, T = K.stroke, J = v.dir * (v.ori == 0 ? 1 : -1);
     let L = Y(m[J == 1 ? u : d]), V = X(p[J == 1 ? u : d]), j = V, oe = V;
     o && t == -1 && (oe = Q, ne(T, oe, L)), ne(T, V, L);
@@ -5431,12 +5431,12 @@ function kf(e) {
       let ee = X(p[se]), F = Y(de);
       t == 1 ? ne(T, ee, L) : ne(T, j, F), ne(T, ee, F), L = F, j = ee;
     }
-    let I = j;
-    o && t == 1 && (I = Q + z, ne(T, I, L));
+    let B = j;
+    o && t == 1 && (B = Q + z, ne(T, B, L));
     let [tt, we] = Tr(s, a);
     if (f.fill != null || tt != 0) {
       let se = K.fill = new Path2D(T), de = f.fillTo(s, a, f.min, f.max, tt), ee = Y(de);
-      ne(se, I, ee), ne(se, oe, ee);
+      ne(se, B, ee), ne(se, oe, ee);
     }
     if (!f.spanGaps) {
       let se = [];
@@ -5444,7 +5444,7 @@ function kf(e) {
       let de = f.width * ce / 2, ee = n || t == 1 ? de : -de, F = n || t == -1 ? -de : de;
       se.forEach((Me) => {
         Me[0] += ee, Me[1] += F;
-      }), K.gaps = se = f.gaps(s, a, u, d, se), K.clip = Jo(se, v.ori, R, B, $, U);
+      }), K.gaps = se = f.gaps(s, a, u, d, se), K.clip = Jo(se, v.ori, R, I, $, U);
     }
     return we != 0 && (K.band = we == 2 ? [
       en(s, a, u, d, T, -1),
@@ -5474,13 +5474,13 @@ function Sf(e) {
   o == null ? [0, 0] : typeof o == "number" ? [o, 0] : o;
   const s = ie(o), a = 1 - t[0], u = ae(t[1], pe), d = ae(t[2], 1), f = ae(e.disp, io), p = ae(e.each, (k) => {
   }), { fill: m, stroke: v } = f;
-  return (k, S, O, R) => Zn(k, S, (B, $, U, A, Q, z, X, Y, ne, K, T) => {
-    let J = B.pxRound, L = n, V = i * ce, j = u * ce, oe = d * ce, I, tt;
-    A.ori == 0 ? [I, tt] = s(k, S) : [tt, I] = s(k, S);
+  return (k, S, O, R) => Zn(k, S, (I, $, U, A, Q, z, X, Y, ne, K, T) => {
+    let J = I.pxRound, L = n, V = i * ce, j = u * ce, oe = d * ce, B, tt;
+    A.ori == 0 ? [B, tt] = s(k, S) : [tt, B] = s(k, S);
     const we = A.dir * (A.ori == 0 ? 1 : -1);
     let se = A.ori == 0 ? es : Er, de = A.ori == 0 ? p : (M, ge, Pe, ei, En, Ft, Dn) => {
       p(M, ge, Pe, En, ei, Dn, Ft);
-    }, ee = ae(k.bands, xr).find((M) => M.series[0] == S), F = ee != null ? ee.dir : 0, Me = B.fillTo(k, S, B.min, B.max, F), qe = J(X(Me, Q, T, ne)), xe, ue, St, at = K, ke = J(B.width * ce), Lt = !1, Kt = null, mt = null, cn = null, Jn = null;
+    }, ee = ae(k.bands, xr).find((M) => M.series[0] == S), F = ee != null ? ee.dir : 0, Me = I.fillTo(k, S, I.min, I.max, F), qe = J(X(Me, Q, T, ne)), xe, ue, St, at = K, ke = J(I.width * ce), Lt = !1, Kt = null, mt = null, cn = null, Jn = null;
     m != null && (ke == 0 || v != null) && (Lt = !0, Kt = m.values(k, S, O, R), mt = /* @__PURE__ */ new Map(), new Set(Kt).forEach((M) => {
       M != null && mt.set(M, new Path2D());
     }), ke > 0 && (cn = v.values(k, S, O, R), Jn = /* @__PURE__ */ new Map(), new Set(cn).forEach((M) => {
@@ -5504,7 +5504,7 @@ function Sf(e) {
       let { y0: M, y1: ge } = f;
       M != null && ge != null && (U = ge.values(k, S, O, R), Yt = M.values(k, S, O, R));
     }
-    let Cn = I * ue, q = tt * ue;
+    let Cn = B * ue, q = tt * ue;
     for (let M = we == 1 ? O : R; M >= O && M <= R; M += we) {
       let ge = U[M];
       if (ge == null)
@@ -5529,31 +5529,31 @@ function Sf(e) {
         );
       }
     }
-    return ke > 0 ? Ze.stroke = Lt ? Jn : Xn : Lt || (Ze._fill = B.width == 0 ? B._fill : B._stroke ?? B._fill, Ze.width = 0), Ze.fill = Lt ? mt : Xn, Ze;
+    return ke > 0 ? Ze.stroke = Lt ? Jn : Xn : Lt || (Ze._fill = I.width == 0 ? I._fill : I._stroke ?? I._fill, Ze.width = 0), Ze.fill = Lt ? mt : Xn, Ze;
   });
 }
 function Af(e, t) {
   const n = ae(t?.alignGaps, 0);
-  return (i, o, s, a) => Zn(i, o, (u, d, f, p, m, v, k, S, O, R, B) => {
+  return (i, o, s, a) => Zn(i, o, (u, d, f, p, m, v, k, S, O, R, I) => {
     [s, a] = Ko(f, s, a);
-    let $ = u.pxRound, U = (I) => $(v(I, p, R, S)), A = (I) => $(k(I, m, B, O)), Q, z, X;
+    let $ = u.pxRound, U = (B) => $(v(B, p, R, S)), A = (B) => $(k(B, m, I, O)), Q, z, X;
     p.ori == 0 ? (Q = Qo, X = zi, z = kc) : (Q = Xo, X = Oi, z = Sc);
     const Y = p.dir * (p.ori == 0 ? 1 : -1);
     let ne = U(d[Y == 1 ? s : a]), K = ne, T = [], J = [];
-    for (let I = Y == 1 ? s : a; I >= s && I <= a; I += Y)
-      if (f[I] != null) {
-        let we = d[I], se = U(we);
-        T.push(K = se), J.push(A(f[I]));
+    for (let B = Y == 1 ? s : a; B >= s && B <= a; B += Y)
+      if (f[B] != null) {
+        let we = d[B], se = U(we);
+        T.push(K = se), J.push(A(f[B]));
       }
     const L = { stroke: e(T, J, Q, X, z, $), fill: null, clip: null, band: null, gaps: null, flags: Ei }, V = L.stroke;
     let [j, oe] = Tr(i, o);
     if (u.fill != null || j != 0) {
-      let I = L.fill = new Path2D(V), tt = u.fillTo(i, o, u.min, u.max, j), we = A(tt);
-      X(I, K, we), X(I, ne, we);
+      let B = L.fill = new Path2D(V), tt = u.fillTo(i, o, u.min, u.max, j), we = A(tt);
+      X(B, K, we), X(B, ne, we);
     }
     if (!u.spanGaps) {
-      let I = [];
-      I.push(...Cr(d, f, s, a, Y, U, n)), L.gaps = I = u.gaps(i, o, s, a, I), L.clip = Jo(I, p.ori, S, O, R, B);
+      let B = [];
+      B.push(...Cr(d, f, s, a, Y, U, n)), L.gaps = B = u.gaps(i, o, s, a, B), L.clip = Jo(B, p.ori, S, O, R, I);
     }
     return oe != 0 && (L.band = oe == 2 ? [
       en(i, o, s, a, V, -1),
@@ -5679,7 +5679,7 @@ function Ke(e, t, n) {
   (e.plugins || []).forEach((r) => {
     r.opts && (e = r.opts(i, e) || e);
   });
-  const B = e.ms || 1e-3, $ = i.series = o == 1 ? gl(e.series || [], rl, hl, !1) : Mf(e.series || [null], ul), U = i.axes = gl(e.axes || [], sl, ll, !0), A = i.scales = {}, Q = i.bands = e.bands || [];
+  const I = e.ms || 1e-3, $ = i.series = o == 1 ? gl(e.series || [], rl, hl, !1) : Mf(e.series || [null], ul), U = i.axes = gl(e.axes || [], sl, ll, !0), A = i.scales = {}, Q = i.bands = e.bands || [];
   Q.forEach((r) => {
     r.fill = ie(r.fill || null), r.dir = ae(r.dir, -1);
   });
@@ -5739,7 +5739,7 @@ function Ke(e, t, n) {
     let l = A[r];
     (l.min != null || l.max != null) && (j[r] = { min: l.min, max: l.max }, l.min = l.max = null);
   }
-  const oe = e.tzDate || ((r) => new Date(Ne(r / B))), I = e.fmtDate || $r, tt = B == 1 ? Wd(oe) : Kd(oe), we = nl(oe, tl(B == 1 ? Ud : Gd, I)), se = ol(oe, il(qd, I)), de = [], ee = i.legend = Ee({}, Qd, e.legend), F = i.cursor = Ee({}, sf, { drag: { y: o == 2 } }, e.cursor), Me = ee.show, qe = F.show, xe = ee.markers;
+  const oe = e.tzDate || ((r) => new Date(Ne(r / I))), B = e.fmtDate || $r, tt = I == 1 ? Wd(oe) : Kd(oe), we = nl(oe, tl(I == 1 ? Ud : Gd, B)), se = ol(oe, il(qd, B)), de = [], ee = i.legend = Ee({}, Qd, e.legend), F = i.cursor = Ee({}, sf, { drag: { y: o == 2 } }, e.cursor), Me = ee.show, qe = F.show, xe = ee.markers;
   ee.idxs = de, xe.width = ie(xe.width), xe.dash = ie(xe.dash), xe.stroke = ie(xe.stroke), xe.fill = ie(xe.fill);
   let ue, St, at, ke = [], Lt = [], Kt, mt = !1, cn = {};
   if (ee.live) {
@@ -5901,7 +5901,7 @@ function Ke(e, t, n) {
   function zr(r, l) {
     if (o == 1 || l > 0) {
       let c = o == 1 && A[r.scale].time, h = r.value;
-      r.value = c ? Ja(h) ? ol(oe, il(h, I)) : h || se : h || mf, r.label = r.label || (c ? af : rf);
+      r.value = c ? Ja(h) ? ol(oe, il(h, B)) : h || se : h || mf, r.label = r.label || (c ? af : rf);
     }
     if (ii || l > 0) {
       r.width = r.width == null ? 1 : r.width, r.paths = r.paths || Ef || vd, r.fillTo = ie(r.fillTo || yf), r.pxAlign = +ae(r.pxAlign, O), r.pxRound = fl(r.pxAlign), r.stroke = ie(r.stroke || null), r.fill = ie(r.fill || null), r._stroke = r._fill = r._paths = r._focus = null;
@@ -5948,14 +5948,14 @@ function Ke(e, t, n) {
       let g = h.time;
       r.size = ie(r.size), r.space = ie(r.space), r.rotate = ie(r.rotate), gn(r.incrs) && r.incrs.forEach((y) => {
         !wn.has(y) && wn.set(y, ec(y));
-      }), r.incrs = ie(r.incrs || (h.distr == 2 ? Bd : g ? B == 1 ? jd : Vd : In)), r.splits = ie(r.splits || (g && h.distr == 1 ? tt : h.distr == 3 ? Xs : h.distr == 4 ? uf : cf)), r.stroke = ie(r.stroke), r.grid.stroke = ie(r.grid.stroke), r.ticks.stroke = ie(r.ticks.stroke), r.border.stroke = ie(r.border.stroke);
+      }), r.incrs = ie(r.incrs || (h.distr == 2 ? Bd : g ? I == 1 ? jd : Vd : In)), r.splits = ie(r.splits || (g && h.distr == 1 ? tt : h.distr == 3 ? Xs : h.distr == 4 ? uf : cf)), r.stroke = ie(r.stroke), r.grid.stroke = ie(r.grid.stroke), r.ticks.stroke = ie(r.ticks.stroke), r.border.stroke = ie(r.border.stroke);
       let b = r.values;
       r.values = // static array of tick values
       gn(b) && !gn(b[0]) ? ie(b) : (
         // temporal
         g ? (
           // config array of fmtDate string tpls
-          gn(b) ? nl(oe, tl(b, I)) : (
+          gn(b) ? nl(oe, tl(b, B)) : (
             // fmtDate string tpl
             Ja(b) ? Yd(oe, b) : b || we
           )
@@ -5997,7 +5997,7 @@ function Ke(e, t, n) {
   function ss() {
     Ii = !0;
     let r, l;
-    o == 1 && (We > 0 ? (Le = vo[0] = 0, Fe = vo[1] = We - 1, r = t[0][Le], l = t[0][Fe], J == 2 ? (r = Le, l = Fe) : r == l && (J == 3 ? [r, l] = Yo(r, r, T.log, !1) : J == 4 ? [r, l] = _r(r, r, T.log, !1) : T.time ? l = r + Ne(86400 / B) : [r, l] = Ho(r, l, yr, !0))) : (Le = vo[0] = r = null, Fe = vo[1] = l = null)), dn(z, r, l);
+    o == 1 && (We > 0 ? (Le = vo[0] = 0, Fe = vo[1] = We - 1, r = t[0][Le], l = t[0][Fe], J == 2 ? (r = Le, l = Fe) : r == l && (J == 3 ? [r, l] = Yo(r, r, T.log, !1) : J == 4 ? [r, l] = _r(r, r, T.log, !1) : T.time ? l = r + Ne(86400 / I) : [r, l] = Ho(r, l, yr, !0))) : (Le = vo[0] = r = null, Fe = vo[1] = l = null)), dn(z, r, l);
   }
   let _o, ri, rs, as, ls, cs, us, hs, ds, it;
   function Fr(r, l, c, h, g, b) {

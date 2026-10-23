@@ -129,6 +129,11 @@ describe('comfort-band-schedule-chart', () => {
     expect(label.getAttribute('style')).toContain('calc(32px + (100% - 32px) * 0.75)');
   });
 
+  it('keeps the now marker on the chart', async () => {
+    const el = await mount('comfort-band-schedule-chart', { transitions: SCHEDULE, now: 2000 });
+    expect(el.shadowRoot!.querySelector('.now-line')!.getAttribute('x1')).toBe('600');
+  });
+
   it('marks no now without one', async () => {
     const el = await chart();
     expect(el.shadowRoot!.querySelector('.now-line')).toBeNull();

@@ -122,6 +122,7 @@ describe('sameAsBefore', () => {
   it('compares to the tenth', () => {
     expect(sameAsBefore([t('06:00', 18.04, 22), t('09:00', 18, 22.01)])).toEqual([true, true]);
     expect(sameAsBefore([t('06:00', 18, 22), t('09:00', 18.1, 22)])).toEqual([false, false]);
+    expect(sameAsBefore([t('06:00', 18, 22), t('09:00', 18, 23)])).toEqual([false, false]);
   });
 
   it('marks nothing with fewer than two', () => {
@@ -150,6 +151,7 @@ describe('ownScheduleInForce and sharedScheduleName', () => {
   it('can’t tell while the assignment can’t be read', () => {
     for (const spec of [
       'unavailable',
+      { state: 'unavailable', attributes: { schedule_id: null } },
       { state: 'Own schedule', attributes: {} },
       null,
     ] as Array<Spec | null>) {
@@ -206,6 +208,22 @@ describe('nowLine', () => {
     expect(
       line({ 'binary_sensor.gym_override_active': 'on', 'sensor.gym_override_ends': at(17) }),
     ).toBe('Now 19.5–22.5°, adjusted until 17:00 · the schedule changes to 18–22° at 21:00');
+  });
+
+  // In HA's time zone, as the list's times are.
+  it('says the times in HA’s time zone', () => {
+    const hass = makeHass({
+      'binary_sensor.gym_override_active': 'on',
+      'sensor.gym_override_ends': new Date(Date.UTC(2026, 9, 23, 15, 0)).toISOString(),
+      'sensor.gym_next_band_change': {
+        state: new Date(Date.UTC(2026, 9, 23, 20, 30)).toISOString(),
+        attributes: { low: 18, high: 22, scheduled: true },
+      },
+    });
+    hass.config = { time_zone: 'UTC' };
+    expect(nowLine(hass, makeEntities(), Date.UTC(2026, 9, 23, 12, 0))).toBe(
+      'Now 19.5–22.5°, adjusted until 15:00 · the schedule changes to 18–22° at 20:30',
+    );
   });
 
   // Without a schedule an adjustment's range stays, so it has no end.
