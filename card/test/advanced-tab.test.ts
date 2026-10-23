@@ -129,6 +129,7 @@ describe('comfort-band-advanced-tab', () => {
       { id: 'fan', name: 'Fan', summary: 'Fan control on', open: false },
       { id: 'peak', name: 'Peak saving', summary: 'Peak saving off', open: false },
       { id: 'schedules', name: 'Schedules', summary: 'No profiles set up', open: false },
+      { id: 'diagnostics', name: 'Diagnostics', summary: 'Basic control deciding', open: false },
       { id: 'history', name: 'History', summary: 'Last 24 hours', open: false },
     ]);
   });
@@ -152,6 +153,7 @@ describe('comfort-band-advanced-tab', () => {
       'Fan control off',
       'Peak saving on',
       'Profile: home',
+      'Paused',
       'Last 24 hours',
     ]);
   });
@@ -216,6 +218,7 @@ describe('comfort-band-advanced-tab', () => {
       null,
       null,
       'Not available right now',
+      null,
       'Last 24 hours',
     ]);
   });
@@ -272,6 +275,9 @@ describe('comfort-band-advanced-tab', () => {
     await setOpen(el, 'history', true);
     const charts = el.shadowRoot!.querySelector('comfort-band-insights-tab') as Child;
     expect([charts.hass, charts.entities]).toEqual([hass, entities]);
+    await setOpen(el, 'diagnostics', true);
+    const diag = el.shadowRoot!.querySelector('comfort-band-diagnostics-tab') as Child;
+    expect([diag.hass, diag.zone, diag.entities]).toEqual([hass, 'gym', entities]);
   });
 
   // The charts subscribe to HA's history.
@@ -284,6 +290,19 @@ describe('comfort-band-advanced-tab', () => {
     await setOpen(el, 'history', true);
     await setOpen(el, 'comfort', false);
     expect(charts()).not.toBeNull();
+  });
+
+  // It fetches the feedback each time it opens.
+  it('shows diagnostics only while Diagnostics is open', async () => {
+    const el = await advancedTab();
+    const diag = () => section(el, 'diagnostics').querySelector('comfort-band-diagnostics-tab');
+    expect(diag()).toBeNull();
+    await setOpen(el, 'diagnostics', true);
+    expect(diag()).not.toBeNull();
+    await setOpen(el, 'history', true);
+    expect(diag()).not.toBeNull();
+    await setOpen(el, 'diagnostics', false);
+    expect(diag()).toBeNull();
   });
 
   it('loads the history charts only while History is open', async () => {

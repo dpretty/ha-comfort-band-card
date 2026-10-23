@@ -100,6 +100,11 @@ describe('findZoneEntities', () => {
       active_fan_mode: 'activeFanMode',
       idle_fan_mode: 'idleFanMode',
       schedule_assignment: 'scheduleAssignment',
+      mpc_ready: 'mpcReady',
+      thermal_slope: 'thermalSlope',
+      predicted_action: 'predictedAction',
+      mpc_action: 'mpcAction',
+      peak_saving: 'peakSaving',
     } as const;
     const hass = makeHass(
       [device],

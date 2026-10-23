@@ -74,6 +74,12 @@ export interface ZoneEntities {
   activeFanMode?: string | null;
   idleFanMode?: string | null;
   scheduleAssignment?: string | null;
+  // Read by the Advanced tab's diagnostics, likewise.
+  mpcReady?: string | null;
+  thermalSlope?: string | null;
+  predictedAction?: string | null;
+  mpcAction?: string | null;
+  peakSaving?: string | null;
   // Device meta (null if device not found)
   deviceId: string | null;
   deviceName: string | null;
@@ -115,6 +121,11 @@ const KEY_TO_FIELD: Record<string, keyof ZoneEntities> = {
   active_fan_mode: 'activeFanMode',
   idle_fan_mode: 'idleFanMode',
   schedule_assignment: 'scheduleAssignment',
+  mpc_ready: 'mpcReady',
+  thermal_slope: 'thermalSlope',
+  predicted_action: 'predictedAction',
+  mpc_action: 'mpcAction',
+  peak_saving: 'peakSaving',
 };
 
 function emptyZoneEntities(): ZoneEntities {
@@ -152,6 +163,11 @@ function emptyZoneEntities(): ZoneEntities {
     activeFanMode: null,
     idleFanMode: null,
     scheduleAssignment: null,
+    mpcReady: null,
+    thermalSlope: null,
+    predictedAction: null,
+    mpcAction: null,
+    peakSaving: null,
     deviceId: null,
     deviceName: null,
   };
