@@ -330,7 +330,7 @@ describe('comfort-band-schedule-tab now', () => {
       }),
     );
     expect(text(el.shadowRoot!.querySelector('.shared-note'))).toBe(
-      'This room follows “Bedrooms”, a shared schedule. The changes below are its own, not the ones in force.',
+      'This room follows “Bedrooms”, a shared schedule. The changes below are this room’s own, not the ones in force.',
     );
     expect(el.shadowRoot!.querySelector('li.row.current')).toBeNull();
     expect(el.shadowRoot!.querySelector('[aria-current]')).toBeNull();
@@ -347,7 +347,7 @@ describe('comfort-band-schedule-tab now', () => {
       }),
     );
     expect(text(el.shadowRoot!.querySelector('.shared-note'))).toBe(
-      'This room follows a shared schedule. The changes below are its own, not the ones in force.',
+      'This room follows a shared schedule. The changes below are this room’s own, not the ones in force.',
     );
   });
 
@@ -420,10 +420,74 @@ describe('comfort-band-schedule-tab layout', () => {
       /\.row\.current \.band,\s*\.row\.current \.tag\s*\{[^}]*color:\s*var\(--cb-text-primary\)/,
     );
     expect(css()).toMatch(/\.tag\.current\s*\{[^}]*border-color:\s*var\(--cb-accent/);
+    expect(css()).toMatch(
+      /\.row\.current\s*\{[^}]*box-shadow:\s*inset 3px 0 0 var\(--cb-accent[^}]*background:\s*var\(--cb-track-bg\)/,
+    );
+  });
+
+  // Read first: rows aren't buttons until "Edit schedule".
+  it('shows read rows as text, not as something to press', async () => {
+    expect(css()).toMatch(/\.row\.read\s*\{[^}]*cursor:\s*default/);
+    const el = await tab();
+    expect(el.shadowRoot!.querySelectorAll('li.row.read').length).toBe(4);
+  });
+
+  it('spaces the toolbar’s buttons apart', () => {
+    expect(css()).toMatch(/\.list-toolbar\s*\{[^}]*gap:\s*var\(--cb-gap-sm\)/);
   });
 });
 
 describe('comfort-band-schedule-tab reads first', () => {
+  // What the family sees by default: each change's time, in HA's clock, and
+  // its range.
+  it('writes each read row’s time and range', async () => {
+    const hass = makeHass();
+    hass.locale = { language: 'en-AU', time_format: '12' };
+    const el = await tab(hass);
+    const read = Array.from(el.shadowRoot!.querySelectorAll('li.row.read'));
+    expect(read.map((r) => [text(r.querySelector('.at')), text(r.querySelector('.band'))])).toEqual(
+      [
+        ['6 am', '19–22°'],
+        ['9 am', '17–25°'],
+        ['5:30 pm', '19.5–22.5°'],
+        ['10 pm', '17–25°'],
+      ],
+    );
+  });
+
+  // The clock moves "now" on at each minute, and HA updates often: neither
+  // may undo what's being typed into the Add form (#33 review).
+  it('keeps what’s typed into the Add form across the minute and HA’s updates', async () => {
+    const el = await tab();
+    button(el, 'Edit schedule').click();
+    await el.updateComplete;
+    button(el, '+ Add a change').click();
+    await el.updateComplete;
+    const dialog = el.shadowRoot!.querySelector('transition-edit-dialog') as HTMLElement & {
+      updateComplete: Promise<boolean>;
+    };
+    await dialog.updateComplete;
+    const input = (name: string) =>
+      dialog.shadowRoot!.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
+    for (const [name, value] of [
+      ['at', '13:15'],
+      ['low', '16'],
+      ['high', '25'],
+    ]) {
+      input(name).value = value;
+      input(name).dispatchEvent(new Event('input'));
+    }
+    await dialog.updateComplete;
+    vi.advanceTimersByTime(60_000);
+    await el.updateComplete;
+    await dialog.updateComplete;
+    el.hass = { ...el.hass! };
+    await el.updateComplete;
+    await dialog.updateComplete;
+    expect(el.shadowRoot!.querySelector('transition-edit-dialog')).toBe(dialog);
+    expect(['at', 'low', 'high'].map((n) => input(n).value)).toEqual(['13:15', '16', '25']);
+  });
+
   it('offers only "Edit schedule", and rows that aren’t buttons', async () => {
     const el = await tab();
     expect(toolbar(el)).toEqual(['Edit schedule']);

@@ -123,12 +123,19 @@ describe('comfort-band-schedule-chart', () => {
       .map((s) => s.cssText)
       .join('\n');
     const marker = /\.marker\s*\{([^}]*)\}/.exec(css)![1];
+    expect(marker).toMatch(/stroke-width:\s*9;/);
     expect(marker).toMatch(/stroke-linecap:\s*round/);
     expect(marker).toMatch(/vector-effect:\s*non-scaling-stroke/);
     for (const m of Array.from(el.shadowRoot!.querySelectorAll('.marker'))) {
       expect(m.getAttribute('x2')).toBe(m.getAttribute('x1'));
       expect(m.getAttribute('y2')).toBe(m.getAttribute('y1'));
     }
+    // Each at its own edge: 14–28 °C up the 200-unit-high plot.
+    const y = (t: number) => String(200 - ((t - 14) / 14) * 200);
+    const [low, high] = ['low', 'high'].map(
+      (edge) => el.shadowRoot!.querySelector(`.marker.${edge}`)!,
+    );
+    expect([low.getAttribute('y1'), high.getAttribute('y1')]).toEqual([y(20), y(23)]);
   });
 
   // Real browsers check the spacing itself (#33 review): the now label sits
@@ -144,6 +151,8 @@ describe('comfort-band-schedule-chart', () => {
       .join('\n');
     expect(css).toMatch(/:host\s*\{[^}]*margin:\s*18px 0 var\(--cb-gap-md\)/);
     expect(css).toMatch(/\.chart\s*\{[^}]*margin-bottom:\s*22px/);
+    expect(css).toMatch(/\.now-label\s*\{[^}]*top:\s*-14px;[^}]*transform:\s*translateX\(-50%\)/);
+    expect(css).toMatch(/\.now-line\s*\{[^}]*stroke-width:\s*1\.5/);
   });
 
   it('marks now, beside its gutter', async () => {

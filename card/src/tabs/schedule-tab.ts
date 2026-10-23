@@ -115,18 +115,16 @@ export class ComfortBandScheduleTab extends LitElement {
   @state() private _error: string | null = null;
   @state() private _mode: Mode = 'list';
   @state() private _editing: Transition | null = null;
-  @state() private _newAt = '06:00';
   /** `at` of the row currently showing the inline delete-confirm UI. Cleared
    *  by Cancel, by Confirm (after the write succeeds), or automatically in
    *  `willUpdate` when a remote write echoes back without the targeted row. */
   @state() private _confirmingDeleteAt: string | null = null;
-  // Plain fields — `_mode` is the @state that drives re-renders; these are
-  // read once when the dialog opens. Marking them @state would re-render on
-  // every assignment. **Contract:** any handler that sets these MUST set
-  // them BEFORE flipping `_mode = 'add'`, otherwise the dialog renders with
-  // stale defaults.
-  private _newLow: number | undefined;
-  private _newHigh: number | undefined;
+  /** The Add form's starting values, built once when Add is pressed. The
+   *  form starts over whenever it's given a new object, so one built on each
+   *  render would undo what's typed at each update from HA and at each
+   *  minute (#33 review). Plain, not @state: set it BEFORE `_mode = 'add'`,
+   *  which renders. */
+  private _adding: Transition | null = null;
   /** Re-query-by-key trigger descriptor — restored on dismiss so keyboard
    *  users don't get yanked to body. Storing a *descriptor* (rather than a
    *  DOM reference) survives the row's DOM being recreated by the
@@ -474,9 +472,11 @@ export class ComfortBandScheduleTab extends LitElement {
 
   private _onAddClicked = () => {
     this._focusTrigger = { kind: 'add' };
-    this._newAt = nextDefaultTime(this._transitions);
-    this._newLow = defaultLow(this._transitions);
-    this._newHigh = defaultHigh(this._transitions);
+    this._adding = {
+      at: nextDefaultTime(this._transitions),
+      low: defaultLow(this._transitions),
+      high: defaultHigh(this._transitions),
+    };
     this._editing = null;
     this._mode = 'add';
   };
@@ -593,8 +593,7 @@ export class ComfortBandScheduleTab extends LitElement {
   private _exitDialogMode(): void {
     this._mode = 'list';
     this._editing = null;
-    this._newLow = undefined;
-    this._newHigh = undefined;
+    this._adding = null;
     // Defer focus restore so the dialog's DOM is gone before we try to focus
     // the trigger — focusing a not-yet-attached element silently no-ops.
     this.updateComplete.then(() => this._restoreFocus());
@@ -654,14 +653,7 @@ export class ComfortBandScheduleTab extends LitElement {
     if (!this.hass) return nothing;
 
     if (this._mode === 'add' || this._mode === 'edit') {
-      const seed: Transition | null =
-        this._mode === 'edit'
-          ? this._editing
-          : {
-              at: this._newAt,
-              low: this._newLow ?? defaultLow(this._transitions),
-              high: this._newHigh ?? defaultHigh(this._transitions),
-            };
+      const seed = this._mode === 'edit' ? this._editing : this._adding;
       return html`
         <transition-edit-dialog
           .transition=${seed}
@@ -747,7 +739,7 @@ export class ComfortBandScheduleTab extends LitElement {
       ${following
         ? html`<div class="shared-note">
             This room follows ${shared ? `“${shared}”, a shared schedule` : 'a shared schedule'}.
-            The changes below are its own, not the ones in force.
+            The changes below are this room’s own, not the ones in force.
           </div>`
         : nothing}
     `;

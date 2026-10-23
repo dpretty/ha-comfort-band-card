@@ -67,7 +67,9 @@ export function sameAsBefore(transitions: Transition[]): boolean[] {
  * Whether the list (the room's own schedule) is the one in force: not while
  * the room follows a shared schedule. Null where that can't be told: the
  * schedule assignment entity unreadable, or turned off on an integration
- * that has shared schedules (v0.14.0+).
+ * that has shared schedules, as its v0.16.0+ entities show. On v0.14–v0.15
+ * the assignment is the only sign of shared schedules, so with it turned
+ * off the room's own is taken as in force.
  */
 export function ownScheduleInForce(hass: HomeAssistant, entities: ZoneEntities): boolean | null {
   const id = entities.scheduleAssignment;
