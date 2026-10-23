@@ -94,6 +94,27 @@ describe('comfort-band-schedule-chart', () => {
     expect(labels[1].style.top).toBe(`${((28 - 18) / 14) * 100}%`);
   });
 
+  // A circle stretches with the chart's width; a dot of no length doesn't.
+  it('draws each change as a round dot whatever the chart’s width', async () => {
+    const el = await chart();
+    for (const m of el.shadowRoot!.querySelectorAll('.marker')) {
+      expect(m.tagName.toLowerCase()).toBe('line');
+      expect(m.getAttribute('x1')).toBe(m.getAttribute('x2'));
+      expect(m.getAttribute('y1')).toBe(m.getAttribute('y2'));
+    }
+    const css = (
+      customElements.get('comfort-band-schedule-chart') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((s) => s.cssText)
+      .join('\n');
+    expect(css).toMatch(
+      /\.marker\s*\{[^}]*stroke-linecap:\s*round[^}]*vector-effect:\s*non-scaling-stroke/,
+    );
+  });
+
   it('labels no edges without changes', async () => {
     const el = await chart([]);
     expect(el.shadowRoot!.querySelector('.edge-label')).toBeNull();

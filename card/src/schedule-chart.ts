@@ -3,7 +3,7 @@
  *
  * Renders the active profile's baseline schedule as two stepped lines
  * (low + high band edges) with the area between filled lightly. Each
- * transition shows a small marker circle at the low + high points. The low
+ * transition shows a dot at the low + high points, round at any width. The low
  * edge takes the heating colour and the high edge the cooling colour, each
  * labelled ("Low", "High") so colour isn't the only cue. With `now` set, a
  * marker shows the time of day (#33).
@@ -105,9 +105,12 @@ export class ComfortBandScheduleChart extends LitElement {
       .marker.high {
         stroke: var(--cb-action-cooling);
       }
+      /* A dot: a line of no length with a round cap. Its stroke doesn't
+         scale, so it stays round where a circle would stretch with the
+         chart's width. */
       .marker {
-        fill: var(--ha-card-background, #ffffff);
-        stroke-width: 2;
+        stroke-width: 9;
+        stroke-linecap: round;
         vector-effect: non-scaling-stroke;
         pointer-events: none;
       }
@@ -132,8 +135,10 @@ export class ComfortBandScheduleChart extends LitElement {
       /* A swatch of the line's colour: text in it would be too faint. */
       .edge-label {
         right: 2px;
-        padding-left: 6px;
+        padding: 1px 3px 1px 6px;
         border-left: 3px solid;
+        /* Over the line's end, legible on the card. */
+        background: var(--ha-card-background, var(--card-background-color, #ffffff));
       }
       .edge-label.low {
         border-left-color: var(--cb-action-heating);
@@ -263,8 +268,8 @@ export class ComfortBandScheduleChart extends LitElement {
           ${rendered.map((t) => {
             const x = this._timeToX(parseTime(t.at));
             return svg`
-              <circle class="marker low" cx=${x} cy=${this._tempToY(t.low)} r="5"></circle>
-              <circle class="marker high" cx=${x} cy=${this._tempToY(t.high)} r="5"></circle>
+              <line class="marker low" x1=${x} x2=${x} y1=${this._tempToY(t.low)} y2=${this._tempToY(t.low)}></line>
+              <line class="marker high" x1=${x} x2=${x} y1=${this._tempToY(t.high)} y2=${this._tempToY(t.high)}></line>
             `;
           })}
           ${nowX !== null
