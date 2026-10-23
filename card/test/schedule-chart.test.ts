@@ -143,7 +143,7 @@ describe('comfort-band-schedule-chart', () => {
       .map((s) => s.cssText)
       .join('\n');
     expect(css).toMatch(/:host\s*\{[^}]*margin:\s*18px 0 var\(--cb-gap-md\)/);
-    expect(css).toMatch(/\.chart\s*\{[^}]*margin-bottom:\s*16px/);
+    expect(css).toMatch(/\.chart\s*\{[^}]*margin-bottom:\s*22px/);
   });
 
   it('marks now, beside its gutter', async () => {

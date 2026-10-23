@@ -73,8 +73,9 @@ export class ComfortBandScheduleChart extends LitElement {
            leading digit ("25°" rendered as "5°"). */
         padding-left: ${unsafeCSS(GUTTER)}px;
         box-sizing: border-box;
-        /* Room below for the hour labels, with or without the legend. */
-        margin-bottom: 16px;
+        /* Room below for the hour labels (16 px down), with or without the
+           legend: the legend's own margin would collapse into this one. */
+        margin-bottom: 22px;
       }
       svg {
         display: block;
@@ -142,7 +143,6 @@ export class ComfortBandScheduleChart extends LitElement {
         display: flex;
         justify-content: flex-end;
         gap: var(--cb-gap-md);
-        margin-top: 6px;
         font-size: 11px;
         color: var(--cb-text-secondary);
       }
