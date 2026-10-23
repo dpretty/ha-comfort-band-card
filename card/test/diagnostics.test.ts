@@ -761,6 +761,27 @@ describe('formatWhen', () => {
     );
   });
 
+  it('counts across the end of a month in a given zone', () => {
+    expect(formatWhen(Date.UTC(2026, 10, 1, 9, 0), Date.UTC(2026, 9, 31, 12, 0), hass, 'UTC')).toBe(
+      'tomorrow 09:00',
+    );
+  });
+
+  // 23:30 UTC on Tuesday the 20th is Wednesday the 21st in Sydney.
+  it('names the day of the week in a given zone', () => {
+    const late = Date.UTC(2026, 9, 23, 23, 0);
+    expect(formatWhen(Date.UTC(2026, 9, 20, 23, 30), late, hass, 'UTC')).toBe('Tue 23:30');
+    expect(formatWhen(Date.UTC(2026, 9, 20, 23, 30), late, hass, 'Australia/Sydney')).toBe(
+      'Wed 10:30',
+    );
+  });
+
+  it('goes by the browser’s zone for one it doesn’t know', () => {
+    const ms = Date.UTC(2026, 9, 21, 9, 0);
+    const late = Date.UTC(2026, 9, 23, 23, 0);
+    expect(formatWhen(ms, late, hass, 'Not/AZone')).toBe(formatWhen(ms, late, hass));
+  });
+
   // The feedback goes back up to 2000 taps.
   it('gives the year of another year', () => {
     expect(formatWhen(new Date(2025, 8, 21, 13, 0).getTime(), now, hass)).toBe(

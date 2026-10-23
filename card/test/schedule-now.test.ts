@@ -189,7 +189,7 @@ describe('nowLine', () => {
     nowLine(makeHass(overrides), entities, NOW);
 
   it('says the range in force and the next change', () => {
-    expect(line()).toBe('Now 19.5–22.5° · from 21:00 18–22°');
+    expect(line()).toBe('Now 19.5–22.5° · the schedule’s next change: 21:00 → 18–22°');
   });
 
   it('says which day the next change is on, if not today', () => {
@@ -200,14 +200,14 @@ describe('nowLine', () => {
           attributes: { low: 19, high: 22, scheduled: true },
         },
       }),
-    ).toBe('Now 19.5–22.5° · from tomorrow 06:30 19–22°');
+    ).toBe('Now 19.5–22.5° · the schedule’s next change: tomorrow 06:30 → 19–22°');
   });
 
   // An adjustment may last past the change: that's the schedule's, then.
   it('says an adjustment is in force, and until when', () => {
     expect(
       line({ 'binary_sensor.gym_override_active': 'on', 'sensor.gym_override_ends': at(17) }),
-    ).toBe('Now 19.5–22.5°, adjusted until 17:00 · the schedule changes to 18–22° at 21:00');
+    ).toBe('Now 19.5–22.5°, adjusted until 17:00 · the schedule’s next change: 21:00 → 18–22°');
   });
 
   // In HA's time zone, as the list's times are.
@@ -222,33 +222,36 @@ describe('nowLine', () => {
     });
     hass.config = { time_zone: 'UTC' };
     expect(nowLine(hass, makeEntities(), Date.UTC(2026, 9, 23, 12, 0))).toBe(
-      'Now 19.5–22.5°, adjusted until 15:00 · the schedule changes to 18–22° at 20:30',
+      'Now 19.5–22.5°, adjusted until 15:00 · the schedule’s next change: 20:30 → 18–22°',
     );
   });
 
   // Without a schedule an adjustment's range stays, so it has no end.
-  it('says only "adjusted" without a schedule, or with an end it can’t use', () => {
+  // Without a schedule an adjustment's range is simply the room's range.
+  it('says nothing of an adjustment without a schedule, and only "adjusted" with an end it can’t use', () => {
     expect(
       line({
         'binary_sensor.gym_override_active': 'on',
         'sensor.gym_override_ends': at(17),
         'sensor.gym_next_band_change': { state: 'unknown', attributes: { scheduled: false } },
       }),
-    ).toBe('Now 19.5–22.5°, adjusted');
+    ).toBe('Now 19.5–22.5°');
     expect(
       line({ 'binary_sensor.gym_override_active': 'on', 'sensor.gym_override_ends': at(11) }),
-    ).toBe('Now 19.5–22.5°, adjusted · the schedule changes to 18–22° at 21:00');
+    ).toBe('Now 19.5–22.5°, adjusted · the schedule’s next change: 21:00 → 18–22°');
   });
 
   it('says a peak has relaxed or moved the range', () => {
     expect(line({ 'sensor.gym_peak_saving': 'active' })).toBe(
-      'Now 19.5–22.5°, relaxed for a peak · the schedule changes to 18–22° at 21:00',
+      'Now 19.5–22.5°, relaxed for a peak · the schedule’s next change: 21:00 → 18–22°',
     );
     expect(line({ 'sensor.gym_peak_saving': 'preconditioning' })).toBe(
-      'Now 19.5–22.5°, moved ahead of a peak · the schedule changes to 18–22° at 21:00',
+      'Now 19.5–22.5°, moved ahead of a peak · the schedule’s next change: 21:00 → 18–22°',
     );
-    expect(line({ 'sensor.gym_peak_saving': 'override' })).toBe(
-      'Now 19.5–22.5° · from 21:00 18–22°',
+    // An announced peak can relax the range before the change: the change
+    // is said as the schedule's whatever peak saving is doing.
+    expect(line({ 'sensor.gym_peak_saving': 'waiting' })).toBe(
+      'Now 19.5–22.5° · the schedule’s next change: 21:00 → 18–22°',
     );
   });
 
@@ -271,6 +274,17 @@ describe('nowLine', () => {
         'sensor.gym_next_band_change': {
           state: at(21),
           attributes: { low: 18, high: 22, scheduled: false },
+        },
+      }),
+    ).toBe('Now 19.5–22.5°');
+  });
+
+  it('says no next change without both its edges', () => {
+    expect(
+      line({
+        'sensor.gym_next_band_change': {
+          state: at(21),
+          attributes: { low: 18, high: null, scheduled: true },
         },
       }),
     ).toBe('Now 19.5–22.5°');

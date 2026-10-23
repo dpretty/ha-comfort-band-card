@@ -117,16 +117,22 @@ async function tab(
   entities: ZoneEntities | null = makeEntities(),
   time = Date.UTC(2026, 9, 23, 12, 0),
 ): Promise<ComfortBandScheduleTab> {
-  vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
   vi.setSystemTime(time);
   const el = await mount('comfort-band-schedule-tab', {
     hass,
     zone: 'gym',
     entities: entities ?? undefined,
   });
-  await new Promise((r) => setTimeout(r, 0));
+  await settle(el);
   await el.updateComplete;
   return el;
+}
+
+/** Lets the subscription's first answer arrive and the tab render it. */
+async function settle(el: ComfortBandScheduleTab): Promise<void> {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  await el.updateComplete;
 }
 
 const text = (n: Element | null | undefined) => n?.textContent?.replace(/\s+/g, ' ').trim();
@@ -149,7 +155,7 @@ describe('comfort-band-schedule-tab now', () => {
   it('says the range in force and when the schedule next changes it', async () => {
     const el = await tab();
     expect(text(el.shadowRoot!.querySelector('.now-line'))).toBe(
-      'Now 17–25° · from 17:30 19.5–22.5°',
+      'Now 17–25° · the schedule’s next change: 17:30 → 19.5–22.5°',
     );
   });
 
@@ -157,7 +163,7 @@ describe('comfort-band-schedule-tab now', () => {
     const el = await tab();
     expect(rows(el)).toEqual([
       { at: '06:00', current: null, tags: [] },
-      { at: '09:00', current: 'true', tags: ['Now'] },
+      { at: '09:00', current: 'true', tags: ['Current'] },
       { at: '17:30', current: null, tags: [] },
       { at: '22:00', current: null, tags: [] },
     ]);
@@ -177,10 +183,36 @@ describe('comfort-band-schedule-tab now', () => {
     expect(el.shadowRoot!.querySelector('li.row.current')!.getAttribute('data-at')).toBe('17:30');
   });
 
-  it('moves on with the clock', async () => {
-    const el = await tab(makeHass(), makeEntities(), Date.UTC(2026, 9, 23, 17, 29));
+  // At the minute, not a minute after it opened.
+  it('moves on with the clock, at the minute', async () => {
+    const el = await tab(makeHass(), makeEntities(), Date.UTC(2026, 9, 23, 17, 29, 30));
     expect(el.shadowRoot!.querySelector('li.row.current')!.getAttribute('data-at')).toBe('09:00');
-    vi.advanceTimersByTime(60_000);
+    vi.advanceTimersByTime(29_999);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('li.row.current')!.getAttribute('data-at')).toBe('09:00');
+    vi.advanceTimersByTime(1);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('li.row.current')!.getAttribute('data-at')).toBe('17:30');
+    vi.advanceTimersByTime(60_000 * 5);
+    await el.updateComplete;
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  // HA's update for a change comes at the change; the row moves with it.
+  it('moves on with each update from HA', async () => {
+    const hass = makeHass();
+    const el = await tab(hass, makeEntities(), Date.UTC(2026, 9, 23, 17, 29, 50));
+    vi.setSystemTime(Date.UTC(2026, 9, 23, 17, 30, 1));
+    el.hass = { ...hass };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('li.row.current')!.getAttribute('data-at')).toBe('17:30');
+  });
+
+  it('shows now as it is when it’s shown again', async () => {
+    const el = await tab(makeHass(), makeEntities(), Date.UTC(2026, 9, 23, 12, 0));
+    el.remove();
+    vi.setSystemTime(Date.UTC(2026, 9, 23, 18, 0));
+    document.body.appendChild(el);
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('li.row.current')!.getAttribute('data-at')).toBe('17:30');
   });
@@ -190,6 +222,32 @@ describe('comfort-band-schedule-tab now', () => {
     expect(vi.getTimerCount()).toBe(1);
     el.remove();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  // A turned-off select drops out of HA's entities; the tab then shows home's.
+  it('marks nothing while the active profile can’t be told', async () => {
+    const hass = makeHass();
+    hass.entities = {};
+    const el = await tab(hass);
+    const chart = el.shadowRoot!.querySelector(
+      'comfort-band-schedule-chart',
+    ) as ComfortBandScheduleChart;
+    expect(el.shadowRoot!.querySelector('li.row.current')).toBeNull();
+    expect(chart.now).toBeNull();
+    el.remove();
+    const unavailable = await tab(
+      makeHass({ 'select.comfort_band_profiles_active_profile': 'unavailable' }),
+    );
+    expect(unavailable.shadowRoot!.querySelector('li.row.current')).toBeNull();
+  });
+
+  // Without a profile manager, the room's schedule is home's.
+  it('marks the change in force without a profile manager', async () => {
+    const hass = makeHass({ 'select.comfort_band_profiles_active_profile': null });
+    hass.devices = {};
+    hass.entities = {};
+    const el = await tab(hass);
+    expect(el.shadowRoot!.querySelector('li.row.current')!.getAttribute('data-at')).toBe('09:00');
   });
 
   // The list is the room's own schedule; a shared one is in force.
@@ -207,6 +265,35 @@ describe('comfort-band-schedule-tab now', () => {
     );
     expect(el.shadowRoot!.querySelector('li.row.current')).toBeNull();
     expect(el.shadowRoot!.querySelector('[aria-current]')).toBeNull();
+    const chart = el.shadowRoot!.querySelector(
+      'comfort-band-schedule-chart',
+    ) as ComfortBandScheduleChart;
+    expect(chart.now).toBeNull();
+  });
+
+  it('says the room follows a shared schedule it can’t name', async () => {
+    const el = await tab(
+      makeHass({
+        'select.gym_schedule_assignment': { state: 'unknown', attributes: { schedule_id: 'abc' } },
+      }),
+    );
+    expect(text(el.shadowRoot!.querySelector('.shared-note'))).toBe(
+      'This room follows a shared schedule. The changes below are its own, not the ones in force.',
+    );
+  });
+
+  // Not UTC, which CI runs in: the line, the row and the marker all use HA's.
+  it('says it all in HA’s time zone', async () => {
+    const hass = makeHass();
+    hass.config = { time_zone: 'Asia/Kolkata' };
+    const el = await tab(hass);
+    expect(text(el.shadowRoot!.querySelector('.now-line'))).toBe(
+      'Now 17–25° · the schedule’s next change: 23:00 → 19.5–22.5°',
+    );
+    const chart = el.shadowRoot!.querySelector(
+      'comfort-band-schedule-chart',
+    ) as ComfortBandScheduleChart;
+    expect(chart.now).toBe(17 * 60 + 30);
   });
 
   it('marks nothing while it can’t tell which schedule is in force', async () => {
@@ -229,7 +316,7 @@ describe('comfort-band-schedule-tab now', () => {
         { at: '06:00', low: 19, high: 22 },
       ]),
     );
-    expect(rows(el).map((r) => r.tags)).toEqual([[], ['Same as before'], ['Now']]);
+    expect(rows(el).map((r) => r.tags)).toEqual([[], ['Same as before'], ['Current']]);
   });
 });
 
@@ -267,6 +354,40 @@ describe('comfort-band-schedule-tab reads first', () => {
     await el.updateComplete;
     expect(toolbar(el)).toEqual(['Edit schedule']);
     expect(el.shadowRoot!.activeElement).toBe(button(el, 'Edit schedule'));
+  });
+
+  it('marks the change in force in edit mode too, and names it', async () => {
+    const el = await tab(
+      makeHass({}, [
+        { at: '06:00', low: 19, high: 22 },
+        { at: '09:00', low: 19, high: 22 },
+        { at: '17:30', low: 19.5, high: 22.5 },
+      ]),
+    );
+    button(el, 'Edit schedule').click();
+    await el.updateComplete;
+    const current = el.shadowRoot!.querySelector('li.row.current')!;
+    expect(current.getAttribute('data-at')).toBe('09:00');
+    expect(current.getAttribute('aria-current')).toBe('true');
+    expect(Array.from(current.querySelectorAll('.tag')).map((t) => text(t))).toEqual([
+      'Current',
+      'Same as before',
+    ]);
+    expect(current.getAttribute('aria-label')).toBe(
+      'Edit the 09:00 change, 19 to 22 degrees, current, same as before',
+    );
+  });
+
+  // Focus moves once, not on every update from HA after it.
+  it('moves focus only once after a change of mode', async () => {
+    const hass = makeHass();
+    const el = await tab(hass);
+    button(el, 'Edit schedule').click();
+    await el.updateComplete;
+    (el.shadowRoot!.querySelector('li.row') as HTMLElement).focus();
+    el.hass = { ...hass };
+    await el.updateComplete;
+    expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector('li.row'));
   });
 
   it('drops a delete it was asking about when editing is done', async () => {

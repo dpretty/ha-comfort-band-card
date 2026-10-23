@@ -87,9 +87,11 @@ export function sharedScheduleName(hass: HomeAssistant, entities: ZoneEntities):
 }
 
 /**
- * "Now 19.5–22.5° · from 9 pm 18–22°": the range in force, why it's not
- * the schedule's where it isn't, and when the schedule next changes it and
- * to what. Null while the range in force can't be read.
+ * "Now 19.5–22.5° · the schedule’s next change: 9 pm → 18–22°": the range in
+ * force, why it's not the schedule's where that's known, and the schedule's
+ * next change. That's said as the schedule's, not as what will be in force
+ * then: an adjustment, a peak (announced or on) or a band ramp can each
+ * make those differ. Null while the range in force can't be read.
  */
 export function nowLine(hass: HomeAssistant, entities: ZoneEntities, now: number): string | null {
   const r = readRoom(hass, entities);
@@ -97,20 +99,19 @@ export function nowLine(hass: HomeAssistant, entities: ZoneEntities, now: number
   let line = `Now ${bandText(r.band)}`;
   // In HA's time zone, as the list's times are.
   const zone = hass.config?.time_zone;
-  // Something other than the schedule shaping the range now may still be at
-  // its next change, so that's said as the schedule's, not as what's in force.
-  let shaped = r.overrideActive;
   if (r.overrideActive) {
-    line +=
-      r.scheduled === true && r.overrideEnds !== null && r.overrideEnds > now
-        ? `, adjusted until ${formatWhen(r.overrideEnds, now, hass, zone)}`
-        : ', adjusted';
+    // Without a schedule an adjustment's range is simply the room's range.
+    if (r.scheduled === true) {
+      line +=
+        r.overrideEnds !== null && r.overrideEnds > now
+          ? `, adjusted until ${formatWhen(r.overrideEnds, now, hass, zone)}`
+          : ', adjusted';
+    }
   } else {
     const peakId = entities.peakSaving;
     const peak = typeof peakId === 'string' ? hass.states[peakId]?.state : undefined;
     if (peak === 'active') line += ', relaxed for a peak';
     if (peak === 'preconditioning') line += ', moved ahead of a peak';
-    shaped = peak === 'active' || peak === 'preconditioning';
   }
   const nextId = entities.nextBandChange;
   const next = nextId !== null ? hass.states[nextId] : undefined;
@@ -123,9 +124,7 @@ export function nowLine(hass: HomeAssistant, entities: ZoneEntities, now: number
     typeof low === 'number' &&
     typeof high === 'number'
   ) {
-    const when = formatWhen(r.nextChange, now, hass, zone);
-    const band = bandText({ low, high });
-    line += shaped ? ` · the schedule changes to ${band} at ${when}` : ` · from ${when} ${band}`;
+    line += ` · the schedule’s next change: ${formatWhen(r.nextChange, now, hass, zone)} → ${bandText({ low, high })}`;
   }
   return line;
 }

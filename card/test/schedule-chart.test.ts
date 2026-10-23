@@ -68,7 +68,7 @@ describe('comfort-band-schedule-chart', () => {
   });
 
   // #33: colour isn't the only cue.
-  it('colours the low edge for heating and the high for cooling, and labels them', async () => {
+  it('colours the low edge for heating and the high for cooling, and names them below', async () => {
     const el = await chart();
     const css = (
       customElements.get('comfort-band-schedule-chart') as unknown as {
@@ -84,40 +84,31 @@ describe('comfort-band-schedule-chart', () => {
     expect(css).toMatch(
       /\.line\.high,\s*\.marker\.high\s*\{[^}]*stroke:\s*var\(--cb-action-cooling\)/,
     );
-    const labels = Array.from(el.shadowRoot!.querySelectorAll<HTMLElement>('.edge-label'));
-    expect(labels.map((l) => [l.className, l.textContent!.trim()])).toEqual([
-      ['edge-label high', 'High'],
-      ['edge-label low', 'Low'],
-    ]);
-    // Where each edge ends the day: 22:00's 21° and 18°, on a 14–28° axis.
-    expect(labels[0].style.top).toBe(`${((28 - 21) / 14) * 100}%`);
-    expect(labels[1].style.top).toBe(`${((28 - 18) / 14) * 100}%`);
-  });
-
-  // A circle stretches with the chart's width; a dot of no length doesn't.
-  it('draws each change as a round dot whatever the chart’s width', async () => {
-    const el = await chart();
-    for (const m of el.shadowRoot!.querySelectorAll('.marker')) {
-      expect(m.tagName.toLowerCase()).toBe('line');
-      expect(m.getAttribute('x1')).toBe(m.getAttribute('x2'));
-      expect(m.getAttribute('y1')).toBe(m.getAttribute('y2'));
-    }
-    const css = (
-      customElements.get('comfort-band-schedule-chart') as unknown as {
-        styles: Array<{ cssText: string }>;
-      }
-    ).styles
-      .flat()
-      .map((s) => s.cssText)
-      .join('\n');
+    expect(css).toMatch(/\.legend \.low::before\s*\{[^}]*background:\s*var\(--cb-action-heating\)/);
     expect(css).toMatch(
-      /\.marker\s*\{[^}]*stroke-linecap:\s*round[^}]*vector-effect:\s*non-scaling-stroke/,
+      /\.legend \.high::before\s*\{[^}]*background:\s*var\(--cb-action-cooling\)/,
     );
+    const legend = el.shadowRoot!.querySelector('.legend')!;
+    expect(legend.getAttribute('aria-hidden')).toBe('true');
+    expect(Array.from(legend.children).map((c) => [c.className, c.textContent!.trim()])).toEqual([
+      ['low', 'Low'],
+      ['high', 'High'],
+    ]);
   });
 
-  it('labels no edges without changes', async () => {
+  // The hour labels sit across the plot, beside the temperatures' gutter.
+  it('places the hours beside the gutter, as the lines are', async () => {
+    const el = await chart();
+    expect(
+      Array.from(el.shadowRoot!.querySelectorAll<HTMLElement>('.axis-label.x')).map((l) =>
+        l.getAttribute('style'),
+      ),
+    ).toEqual([0, 0.25, 0.5, 0.75, 1].map((f) => `left: calc(32px + (100% - 32px) * ${f})`));
+  });
+
+  it('has no legend without changes', async () => {
     const el = await chart([]);
-    expect(el.shadowRoot!.querySelector('.edge-label')).toBeNull();
+    expect(el.shadowRoot!.querySelector('.legend')).toBeNull();
   });
 
   it('marks now, beside its gutter', async () => {
@@ -126,6 +117,7 @@ describe('comfort-band-schedule-chart', () => {
     expect([line.getAttribute('x1'), line.getAttribute('x2')]).toEqual(['450', '450']);
     const label = el.shadowRoot!.querySelector<HTMLElement>('.now-label')!;
     expect(label.textContent!.trim()).toBe('Now');
+    expect(label.getAttribute('aria-hidden')).toBe('true');
     expect(label.getAttribute('style')).toContain('calc(32px + (100% - 32px) * 0.75)');
   });
 
