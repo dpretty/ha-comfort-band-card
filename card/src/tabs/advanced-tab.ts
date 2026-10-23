@@ -10,7 +10,14 @@
  *   - Fan: fan control and its two modes.
  *   - Peak saving: its switch, offsets and lead time.
  *   - Schedules: which schedule the room follows, and profiles.
+ *   - Diagnostics: who decides heating and cooling now, what each controller
+ *     would do, what learning has learned, and recent feedback, loaded only
+ *     while open.
  *   - History: the last 24 hours' chart, loaded only while open.
+ *
+ * Comfort, Automation and Peak saving also say what the integration is doing
+ * beside the settings it explains: the room reading's source, whether
+ * predictive control is ready, and peak saving's status.
  */
 
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
@@ -18,6 +25,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import './settings-tab.js';
 import './profiles-tab.js';
 import './insights-tab.js';
+import './diagnostics-tab.js';
 import '../exact-range.js';
 import {
   findActiveProfileEntity,
@@ -26,6 +34,7 @@ import {
   type ZoneEntities,
 } from '../helpers.js';
 import type { HomeAssistant } from '../types.js';
+import { decidingSummary, readDeciding } from '../diagnostics.js';
 import { tokens } from '../styles.js';
 
 @customElement('comfort-band-advanced-tab')
@@ -37,6 +46,8 @@ export class ComfortBandAdvancedTab extends LitElement {
   /** Whether History is open: its chart subscribes to HA's history, so it's
    *  only there while it is. */
   @state() private _historyOpen = false;
+  /** Whether Diagnostics is open: it fetches the feedback each time it opens. */
+  @state() private _diagnosticsOpen = false;
 
   public static override styles = [
     tokens,
@@ -249,6 +260,19 @@ export class ComfortBandAdvancedTab extends LitElement {
           ></comfort-band-settings-tab>
           <h3 class="subhead">Profiles</h3>
           <comfort-band-profiles-tab .hass=${this.hass}></comfort-band-profiles-tab>`,
+      )}
+      ${this._section(
+        'diagnostics',
+        'Diagnostics',
+        decidingSummary(readDeciding(this.hass, this.entities)),
+        this._diagnosticsOpen
+          ? html`<comfort-band-diagnostics-tab
+              .hass=${this.hass}
+              .zone=${this.zone}
+              .entities=${this.entities}
+            ></comfort-band-diagnostics-tab>`
+          : nothing,
+        (open) => (this._diagnosticsOpen = open),
       )}
       ${this._section(
         'history',

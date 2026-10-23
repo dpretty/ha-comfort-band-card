@@ -23,6 +23,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { readHumiditySensor, type ZoneEntities } from '../helpers.js';
 import type { HassEntity, HomeAssistant } from '../types.js';
 import { tokens } from '../styles.js';
+import { readPeak, readReadiness, readRoomSource, type StatusRow } from '../diagnostics.js';
 
 export type SettingsSection = 'comfort' | 'automation' | 'fan' | 'peak' | 'schedules';
 
@@ -652,8 +653,17 @@ export class ComfortBandSettingsTab extends LitElement {
     const needs = SECTION_NEEDS[this.section];
     return html`
       ${this._error ? html`<div class="error" role="alert">${this._error.message}</div>` : nothing}
+      ${this.section === 'peak'
+        ? this._renderStatus(readPeak(this.hass, this.entities, Date.now()), 'peak')
+        : nothing}
       ${shownMain.map((s) => this._renderSetting(s))}
-      ${this.section === 'comfort' ? this._renderHumidity() : nothing}
+      ${this.section === 'comfort'
+        ? html`${this._renderHumidity()}
+          ${this._renderStatus(readRoomSource(this.hass, this.entities), 'source')}`
+        : nothing}
+      ${this.section === 'automation'
+        ? this._renderStatus(readReadiness(this.hass, this.entities), 'readiness')
+        : nothing}
       ${shownFine.length
         ? html`<details class="fine">
             <summary>Fine-tuning <span class="fine-summary">Timings and tolerances</span></summary>
@@ -692,6 +702,20 @@ export class ComfortBandSettingsTab extends LitElement {
       case 'select':
         return this._renderSelect(entityId, setting);
     }
+  }
+
+  /** What the integration is doing, beside the settings it explains. */
+  private _renderStatus(row: StatusRow | null, id: string) {
+    if (!row) return nothing;
+    return html`
+      <div class="row" data-status=${id}>
+        <div class="row-label">
+          <div class="title">${row.title}</div>
+          <div class="desc">${row.desc}</div>
+        </div>
+        <div class="info-value">${row.value}</div>
+      </div>
+    `;
   }
 
   private _renderHumidity() {

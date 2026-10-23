@@ -1263,6 +1263,100 @@ describe('comfort-band-settings-tab choices', () => {
   });
 });
 
+// What the integration is doing, beside the settings it explains.
+describe('comfort-band-settings-tab status', () => {
+  const withDiagnostics = makeEntities('gym', {
+    mpcReady: 'binary_sensor.gym_mpc_ready',
+    peakSaving: 'sensor.gym_peak_saving',
+    thermalSlope: 'sensor.gym_thermal_slope',
+  });
+  const hass = () =>
+    makeHass({
+      states: {
+        'sensor.gym_room_temperature': {
+          state: '21.0',
+          attributes: { humidity_sensor: null, source: 'primary', fallback_to_climate: true },
+        },
+        'binary_sensor.gym_mpc_ready': { state: 'off' },
+        'sensor.gym_thermal_slope': {
+          state: '0.4',
+          attributes: { idle_slope: 0.4, recovery_slope_heat: null, recovery_slope_cool: null },
+        },
+        'sensor.gym_peak_saving': { state: 'waiting', attributes: { next_start: null } },
+      },
+    });
+  const order = (el: ComfortBandSettingsTab) =>
+    Array.from(el.shadowRoot!.querySelectorAll('.row')).map(
+      (r) => r.getAttribute('data-status') ?? r.getAttribute('data-setting') ?? 'humidity',
+    );
+  const status = (el: ComfortBandSettingsTab, id: string) => {
+    const r = el.shadowRoot!.querySelector(`[data-status="${id}"]`)!;
+    return [
+      r.querySelector('.title')!.textContent!.trim(),
+      r.querySelector('.info-value')!.textContent!.trim(),
+      r.querySelector('.desc')!.textContent!.trim(),
+    ];
+  };
+
+  it('says where the room’s reading comes from, under the humidity sensor', async () => {
+    const el = await settingsTab(hass(), 'comfort', withDiagnostics);
+    expect(order(el).slice(-2)).toEqual(['humidity', 'source']);
+    expect(status(el, 'source')).toEqual([
+      'Room reading',
+      'Its own sensor',
+      'If that goes offline, after a short wait the unit’s own reading stands in. Set under Settings → Devices & Services → Comfort Band → Configure.',
+    ]);
+  });
+
+  it('says whether predictive control is ready, after the switches', async () => {
+    const el = await settingsTab(hass(), 'automation', withDiagnostics);
+    expect(order(el).slice(0, 4)).toEqual([
+      'enabled',
+      'learningEnabled',
+      'mpcEnabled',
+      'readiness',
+    ]);
+    expect(status(el, 'readiness')).toEqual([
+      'Ready to plan',
+      'Not yet',
+      'Still to learn: how fast heating or cooling moves it.',
+    ]);
+  });
+
+  it('says what peak saving is doing, first', async () => {
+    const el = await settingsTab(hass(), 'peak', withDiagnostics);
+    expect(order(el)[0]).toBe('peak');
+    expect(status(el, 'peak')).toEqual(['Right now', 'No peak now', 'None is announced yet.']);
+  });
+
+  it('says nothing where the integration doesn’t', async () => {
+    for (const section of ['comfort', 'automation', 'peak', 'fan', 'schedules'] as const) {
+      const el = await settingsTab(makeHass(), section);
+      expect(el.shadowRoot!.querySelector('[data-status]'), section).toBeNull();
+      el.remove();
+    }
+  });
+
+  it('says only its own section’s', async () => {
+    for (const [section, id] of [
+      ['fan', null],
+      ['schedules', null],
+      ['comfort', 'source'],
+      ['automation', 'readiness'],
+      ['peak', 'peak'],
+    ] as const) {
+      const el = await settingsTab(hass(), section, withDiagnostics);
+      expect(
+        Array.from(el.shadowRoot!.querySelectorAll('[data-status]')).map((r) =>
+          r.getAttribute('data-status'),
+        ),
+        section,
+      ).toEqual(id ? [id] : []);
+      el.remove();
+    }
+  });
+});
+
 describe('comfort-band-settings-tab humidity sensor', () => {
   const withRoom = (attributes: Record<string, unknown>, extra: Record<string, StateSpec> = {}) =>
     makeHass({
