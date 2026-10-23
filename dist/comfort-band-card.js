@@ -2589,7 +2589,7 @@ function ph(e, t) {
 const $a = "Set under Settings → Devices & Services → Comfort Band → Configure.";
 function mh(e, t) {
   const n = Jt(e, t, "roomTemperature");
-  if (!n || n.attributes.source === void 0) return null;
+  if (!n) return null;
   const i = "Room reading", o = ph(e, n.attributes.fallback_temp_sensor), s = n.attributes.fallback_to_climate === !0;
   switch (n.attributes.source) {
     case "primary": {
@@ -7194,7 +7194,7 @@ let Vn = class extends Ce {
       ${this._row("Cooling", e.cool.value, e.cool.source, "cool")}
       <details class="more">
         <summary>Details</summary>
-        <div class="table-wrap">
+        <div class="table-wrap" tabindex="0" role="region" aria-label="The rates in numbers">
           <table>
             <thead>
               <tr>
@@ -7343,6 +7343,10 @@ Vn.styles = [
       .table-wrap {
         overflow-x: auto;
       }
+      .table-wrap:focus-visible {
+        outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
+        outline-offset: 2px;
+      }
       table {
         border-collapse: collapse;
         font-size: 12px;
@@ -7351,7 +7355,7 @@ Vn.styles = [
       }
       th,
       td {
-        padding: 4px 8px;
+        padding: 4px 5px;
         text-align: right;
         white-space: nowrap;
       }

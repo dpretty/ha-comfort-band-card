@@ -346,7 +346,7 @@ const CONFIGURE = 'Set under Settings → Devices & Services → Comfort Band �
  */
 export function readRoomSource(hass: HomeAssistant, entities: ZoneEntities): StatusRow | null {
   const room = entity(hass, entities, 'roomTemperature');
-  if (!room || room.attributes.source === undefined) return null;
+  if (!room) return null;
   const title = 'Room reading';
   const standIn = friendlyName(hass, room.attributes.fallback_temp_sensor);
   const climate = room.attributes.fallback_to_climate === true;

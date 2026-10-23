@@ -161,6 +161,10 @@ export class ComfortBandDiagnosticsTab extends LitElement {
       .table-wrap {
         overflow-x: auto;
       }
+      .table-wrap:focus-visible {
+        outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
+        outline-offset: 2px;
+      }
       table {
         border-collapse: collapse;
         font-size: 12px;
@@ -169,7 +173,7 @@ export class ComfortBandDiagnosticsTab extends LitElement {
       }
       th,
       td {
-        padding: 4px 8px;
+        padding: 4px 5px;
         text-align: right;
         white-space: nowrap;
       }
@@ -321,7 +325,7 @@ export class ComfortBandDiagnosticsTab extends LitElement {
       ${this._row('Cooling', r.cool.value, r.cool.source, 'cool')}
       <details class="more">
         <summary>Details</summary>
-        <div class="table-wrap">
+        <div class="table-wrap" tabindex="0" role="region" aria-label="The rates in numbers">
           <table>
             <thead>
               <tr>

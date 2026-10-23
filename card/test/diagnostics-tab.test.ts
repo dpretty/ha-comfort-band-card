@@ -370,6 +370,30 @@ describe('comfort-band-diagnostics-tab feedback', () => {
     expect(lastNote(failed)).toBe('Feedback can’t be loaded right now.');
   });
 
+  it('ignores the first room’s late refusal once asked for another', async () => {
+    let refuse: (e: unknown) => void = () => {};
+    const callWS = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((_, r) => (refuse = r)))
+      .mockResolvedValue({ entries: [entry(1, { label: 'too_hot' })] });
+    const el = await diagnostics(makeHass({}, callWS));
+    el.zone = 'office';
+    await settle(el);
+    refuse({ code: 'unknown_command', message: 'Unknown' });
+    await settle(el);
+    expect(items(el).map((i) => i.said)).toEqual(['Too warm']);
+  });
+
+  it('lets the rates’ numbers scroll by keyboard, in their own named box', async () => {
+    const el = await diagnostics();
+    const wrap = el.shadowRoot!.querySelector('.table-wrap')!;
+    expect([
+      wrap.getAttribute('tabindex'),
+      wrap.getAttribute('role'),
+      wrap.getAttribute('aria-label'),
+    ]).toEqual(['0', 'region', 'The rates in numbers']);
+  });
+
   it('asks once, and again for another room, ignoring the first room’s late answer', async () => {
     let answer: (v: unknown) => void = () => {};
     const callWS = vi

@@ -146,6 +146,15 @@ describe('readDeciding', () => {
     expect(d.controller).toBe('predictive');
   });
 
+  // Its switch turned off as an entity, its status there but unreadable.
+  it('can’t tell from an unreadable status without peak saving’s switch', () => {
+    const d = readDeciding(
+      makeHass({ 'sensor.gym_peak_saving': 'unavailable' }),
+      makeEntities({ peakSavingEnabled: null }),
+    );
+    expect(d.controller).toBeNull();
+  });
+
   it('can’t tell without peak saving’s status while it’s on', () => {
     for (const hass of [
       makeHass({ 'sensor.gym_peak_saving': 'unavailable' }),
@@ -191,6 +200,12 @@ describe('readDeciding', () => {
     expect(
       readDeciding(makeHass({ 'sensor.gym_room_temperature': '21.5' }), makeEntities()).noReading,
     ).toBe(false);
+  });
+
+  // The integration says "unknown" without a reading.
+  it('reads the integration’s own "unknown"', () => {
+    const d = readDeciding(makeHass({ 'sensor.gym_current_action': 'unknown' }), makeEntities());
+    expect(d.decision).toBe('unknown');
   });
 
   it('reads an action it can’t read as unknown to it', () => {
@@ -256,6 +271,9 @@ describe('readRates', () => {
       source: 'From earlier readings, about 2 hours old.',
       known: true,
     });
+    expect(
+      at({ idle_slope: 0.3, idle_slope_source: 'cached', idle_slope_cached_age_min: 1 }).source,
+    ).toBe('From earlier readings, 1 minute old.');
     expect(at({ idle_slope: null, idle_slope_source: 'none' })).toEqual({
       value: 'Not learned yet',
       source: 'Not enough recent readings while idle to learn from.',
@@ -410,6 +428,9 @@ describe('readRoomSource', () => {
     expect(
       at({ source: 'primary', fallback_temp_sensor: null, fallback_to_climate: false })!.desc,
     ).toBe(`If that goes offline, control is on hold until it’s back. ${CONFIGURE}`);
+    expect(at({ source: 'primary' })!.desc).toBe(
+      `If that goes offline, control is on hold until it’s back. ${CONFIGURE}`,
+    );
   });
 
   it('names the stand-in in use', () => {
