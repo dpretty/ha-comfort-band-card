@@ -241,6 +241,42 @@ describe('comfort-band-schedule-tab now', () => {
     expect(unavailable.shadowRoot!.querySelector('li.row.current')).toBeNull();
   });
 
+  // The old profile's list stays on screen until the new one's arrives.
+  it('marks nothing on the old profile’s list after a change of profile', async () => {
+    const AWAY: Transition[] = [{ at: '00:00', low: 18, high: 21 }];
+    const profiles = (state: string) => ({
+      'select.comfort_band_profiles_active_profile': {
+        state,
+        attributes: { options: ['home', 'away'], default_profile: 'home' },
+      },
+    });
+    const hass = makeHass(profiles('home'));
+    let answerAway: (() => void) | null = null;
+    hass.connection.subscribeMessage = (async (
+      callback: (event: { schedule: ProfileSchedule | null }) => void,
+      message: { profile: string },
+    ) => {
+      const answer = (list: Transition[]) =>
+        callback({ schedule: { baseline: list, current: list } });
+      if (message.profile === 'away') answerAway = () => answer(AWAY);
+      else Promise.resolve().then(() => answer(DAY));
+      return () => {};
+    }) as unknown as HassConnection['subscribeMessage'];
+    const el = await tab(hass);
+    expect(el.shadowRoot!.querySelector('li.row.current')!.getAttribute('data-at')).toBe('09:00');
+    el.hass = { ...hass, states: { ...hass.states, ...makeHass(profiles('away')).states } };
+    await settle(el);
+    const chart = () =>
+      el.shadowRoot!.querySelector('comfort-band-schedule-chart') as ComfortBandScheduleChart;
+    expect(rows(el).map((r) => r.at)).toEqual(['06:00', '09:00', '17:30', '22:00']);
+    expect(el.shadowRoot!.querySelector('li.row.current')).toBeNull();
+    expect(chart().now).toBeNull();
+    answerAway!();
+    await settle(el);
+    expect(rows(el)).toEqual([{ at: '00:00', current: 'true', tags: ['Current'] }]);
+    expect(chart().now).toBe(12 * 60);
+  });
+
   // Without a profile manager, the room's schedule is home's.
   it('marks the change in force without a profile manager', async () => {
     const hass = makeHass({ 'select.comfort_band_profiles_active_profile': null });
@@ -317,6 +353,32 @@ describe('comfort-band-schedule-tab now', () => {
       ]),
     );
     expect(rows(el).map((r) => r.tags)).toEqual([[], ['Same as before'], ['Current']]);
+  });
+});
+
+// Real browsers check the layout itself (#33 review).
+describe('comfort-band-schedule-tab layout', () => {
+  const css = () =>
+    (
+      customElements.get('comfort-band-schedule-tab') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((s) => s.cssText)
+      .join('\n');
+
+  it('wraps a row on a phone, its range whole and its buttons at the right', () => {
+    expect(css()).toMatch(/\.row\s*\{[^}]*flex-wrap:\s*wrap/);
+    expect(css()).toMatch(/\.row \.band\s*\{[^}]*white-space:\s*nowrap/);
+    expect(css()).toMatch(/\.row \.actions\s*\{[^}]*margin-left:\s*auto/);
+  });
+
+  it('keeps the current row’s highlight under the pointer, its text legible', () => {
+    expect(css()).toMatch(/\.row\.read:not\(\.current\):hover\s*\{[^}]*background:\s*none/);
+    expect(css()).toMatch(
+      /\.row\.current \.band,\s*\.row\.current \.tag\s*\{[^}]*color:\s*var\(--cb-text-primary\)/,
+    );
   });
 });
 

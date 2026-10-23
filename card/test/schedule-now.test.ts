@@ -288,6 +288,26 @@ describe('nowLine', () => {
         },
       }),
     ).toBe('Now 19.5–22.5°');
+    expect(
+      line({
+        'sensor.gym_next_band_change': {
+          state: at(21),
+          attributes: { low: null, high: 22, scheduled: true },
+        },
+      }),
+    ).toBe('Now 19.5–22.5°');
+  });
+
+  // The integration says `override`, not `active`, under an adjustment; the
+  // two entities may still be a moment apart.
+  it('says an adjustment, not a peak, while both read as on', () => {
+    expect(
+      line({
+        'binary_sensor.gym_override_active': 'on',
+        'sensor.gym_override_ends': at(17),
+        'sensor.gym_peak_saving': 'active',
+      }),
+    ).toBe('Now 19.5–22.5°, adjusted until 17:00 · the schedule’s next change: 21:00 → 18–22°');
   });
 
   it('says nothing while the range in force can’t be read', () => {

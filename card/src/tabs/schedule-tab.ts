@@ -107,6 +107,9 @@ export class ComfortBandScheduleTab extends LitElement {
   private _focusAfterMode: 'add' | 'edit' | null = null;
 
   @state() private _profile = '';
+  /** The profile the list shown is for. Across a change of profile it's
+   *  the old one's, kept on screen until the new one's arrives. */
+  @state() private _listProfile = '';
   @state() private _transitions: Transition[] = [];
   @state() private _loading = false;
   @state() private _error: string | null = null;
@@ -418,27 +421,25 @@ export class ComfortBandScheduleTab extends LitElement {
       return;
     }
     const gen = ++this._subscribeGen;
+    const profile = this._profile;
     // Only show the loading state when we have nothing to display. On a
     // re-subscribe (profile flip, reconnect) keep the stale data visible
     // so the tab doesn't flash empty.
     if (this._transitions.length === 0) this._loading = true;
     this._error = null;
     try {
-      const unsub = await subscribeSchedule(
-        this.hass,
-        { zone: this.zone, profile: this._profile },
-        (schedule) => {
-          if (gen !== this._subscribeGen) return;
-          // Sort defensively — the backend normalises and sorts on every
-          // write, but the WS payload type is `Transition[]` with no order
-          // guarantee, and the list view below renders straight from this
-          // array.
-          this._transitions = schedule?.baseline
-            ? [...schedule.baseline].sort(compareTransitions)
-            : [];
-          this._loading = false;
-        },
-      );
+      const unsub = await subscribeSchedule(this.hass, { zone: this.zone, profile }, (schedule) => {
+        if (gen !== this._subscribeGen) return;
+        this._listProfile = profile;
+        // Sort defensively — the backend normalises and sorts on every
+        // write, but the WS payload type is `Transition[]` with no order
+        // guarantee, and the list view below renders straight from this
+        // array.
+        this._transitions = schedule?.baseline
+          ? [...schedule.baseline].sort(compareTransitions)
+          : [];
+        this._loading = false;
+      });
       if (gen !== this._subscribeGen) {
         // Superseded while awaiting the round-trip — release the
         // dangling server-side subscription instead of leaking it.
@@ -719,14 +720,15 @@ export class ComfortBandScheduleTab extends LitElement {
    * Whether this list is the one in force: the room's own schedule (not a
    * shared one) for the active profile. The tab falls back to "home" where
    * the profile select can't be read, so that's only taken as in force
-   * without a profile manager at all.
+   * without a profile manager at all. Across a change of profile, the list
+   * shown is the old one's until the new one's arrives.
    */
   private _listInForce(): boolean {
     if (!this.hass || !this.entities) return false;
     if (ownScheduleInForce(this.hass, this.entities) !== true) return false;
     const entity = findActiveProfileEntity(this.hass);
     const state = entity ? this.hass.states[entity] : undefined;
-    if (profileSelectReadable(state)) return state!.state === this._profile;
+    if (profileSelectReadable(state)) return state!.state === this._listProfile;
     return !profileManagerExists(this.hass);
   }
 
