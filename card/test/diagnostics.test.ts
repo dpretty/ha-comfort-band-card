@@ -630,8 +630,10 @@ describe('formatWhen', () => {
     const was = env.TZ;
     env.TZ = 'Europe/London';
     try {
-      const before = new Date(2026, 2, 28, 12, 0).getTime();
-      expect(formatWhen(new Date(2026, 2, 29, 13, 0).getTime(), before, hass)).toBe(
+      // The clocks go forward at 1 am on 29 March: its midnight to the next
+      // is 23 hours.
+      const before = new Date(2026, 2, 29, 12, 0).getTime();
+      expect(formatWhen(new Date(2026, 2, 30, 13, 0).getTime(), before, hass)).toBe(
         'tomorrow 13:00',
       );
     } finally {
@@ -704,6 +706,9 @@ describe('readPeak', () => {
   it('leaves out an edge moved by less than 0.05°', () => {
     expect(at('active', { low_adjustment: -0.04, high_adjustment: 0.05 })!.desc).toBe(
       'The range is relaxed: the top up 0.1°. Basic control decides meanwhile.',
+    );
+    expect(at('active', { low_adjustment: -0.05, high_adjustment: 0.04 })!.desc).toBe(
+      'The range is relaxed: the bottom down 0.1°. Basic control decides meanwhile.',
     );
   });
 

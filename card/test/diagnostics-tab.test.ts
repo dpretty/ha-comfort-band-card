@@ -147,6 +147,25 @@ describe('comfort-band-diagnostics-tab deciding', () => {
     expect(row(el, 'controller')).toMatchObject({ value: 'Basic control', desc });
   });
 
+  // Before integration v0.4.0.
+  it('says the integration has no learning', async () => {
+    const el = await diagnostics(
+      makeHass(),
+      makeEntities({
+        learningEnabled: null,
+        predictedAction: null,
+        thermalSlope: null,
+        mpcEnabled: null,
+        mpcReady: null,
+        mpcAction: null,
+      }),
+    );
+    expect(row(el, 'controller')).toMatchObject({
+      value: 'Basic control',
+      desc: 'This version of the integration has no learning.',
+    });
+  });
+
   it('says when it can’t tell who decides, or what', async () => {
     const el = await diagnostics(
       makeHass({ 'switch.gym_learning_enabled': 'unavailable', 'sensor.gym_current_action': null }),
