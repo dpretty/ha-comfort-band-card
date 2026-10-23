@@ -3,9 +3,13 @@
  * the house up needs, out of the family's way (#30). Folding sections, each
  * a heading and a one-line summary of what's inside:
  *
- *   - Comfort: "feels like", the humidity sensor, and an exact range.
- *   - Automation: learning.
- *   - Schedules: profiles.
+ *   - Comfort: "feels like", the humidity sensor, the deadbands, the band
+ *     ramp, the default adjustment length, and an exact range.
+ *   - Automation: control on/off, learning, predictive control, and their
+ *     timings under "Fine-tuning".
+ *   - Fan: fan control and its two modes.
+ *   - Peak saving: its switch, offsets and lead time.
+ *   - Schedules: which schedule the room follows, and profiles.
  *   - History: the last 24 hours' chart, loaded only while open.
  */
 
@@ -15,7 +19,12 @@ import './settings-tab.js';
 import './profiles-tab.js';
 import './insights-tab.js';
 import '../exact-range.js';
-import { findActiveProfileEntity, profileManagerExists, type ZoneEntities } from '../helpers.js';
+import {
+  findActiveProfileEntity,
+  profileManagerExists,
+  profileSelectReadable,
+  type ZoneEntities,
+} from '../helpers.js';
 import type { HomeAssistant } from '../types.js';
 import { tokens } from '../styles.js';
 
@@ -38,6 +47,13 @@ export class ComfortBandAdvancedTab extends LitElement {
       }
       details {
         border-bottom: 1px solid var(--divider-color, #e0e0e0);
+      }
+      /* "Profiles", under Schedules after "Follows". */
+      .subhead {
+        margin: var(--cb-gap-md) 0 0;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--cb-text-primary);
       }
       details:last-of-type {
         border-bottom: none;
@@ -115,9 +131,22 @@ export class ComfortBandAdvancedTab extends LitElement {
   }
 
   private _automationSummary(): string {
-    const state = this._state(this.entities?.learningEnabled ?? null);
-    if (state === 'on') return 'Learning on';
-    if (state === 'off') return 'Learning off';
+    const control = this._state(this.entities?.enabled ?? null);
+    const learning = this._state(this.entities?.learningEnabled ?? null);
+    return [
+      control === 'on' ? 'Controlling' : control === 'off' ? 'Paused' : '',
+      learning === 'on' ? 'learning on' : learning === 'off' ? 'learning off' : '',
+    ]
+      .filter(Boolean)
+      .join(' · ')
+      .replace(/^l/, 'L');
+  }
+
+  /** "Fan control on", "Peak saving off": a section led by one switch. */
+  private _switchSummary(field: 'fanControlEnabled' | 'peakSavingEnabled', name: string): string {
+    const state = this._state(this.entities?.[field] ?? null);
+    if (state === 'on') return `${name} on`;
+    if (state === 'off') return `${name} off`;
     return '';
   }
 
@@ -127,10 +156,11 @@ export class ComfortBandAdvancedTab extends LitElement {
     // As the section says: a manager that's there but can't be read (its
     // select disabled, not loaded yet, or failed to load and "unavailable")
     // isn't "none set up".
-    const profile = entity !== null ? this.hass.states[entity]?.state : undefined;
-    if (profile === undefined || profile === 'unavailable') {
+    const state = entity !== null ? this.hass.states[entity] : undefined;
+    if (!profileSelectReadable(state)) {
       return profileManagerExists(this.hass) ? 'Not available right now' : 'No profiles set up';
     }
+    const profile = state!.state;
     if (!profile || profile === 'unknown') return '';
     return `Profile: ${profile}`;
   }
@@ -170,7 +200,6 @@ export class ComfortBandAdvancedTab extends LitElement {
         html`<comfort-band-settings-tab
             section="comfort"
             .hass=${this.hass}
-            .zone=${this.zone}
             .entities=${this.entities}
           ></comfort-band-settings-tab>
           <comfort-band-exact-range
@@ -186,7 +215,26 @@ export class ComfortBandAdvancedTab extends LitElement {
         html`<comfort-band-settings-tab
           section="automation"
           .hass=${this.hass}
-          .zone=${this.zone}
+          .entities=${this.entities}
+        ></comfort-band-settings-tab>`,
+      )}
+      ${this._section(
+        'fan',
+        'Fan',
+        this._switchSummary('fanControlEnabled', 'Fan control'),
+        html`<comfort-band-settings-tab
+          section="fan"
+          .hass=${this.hass}
+          .entities=${this.entities}
+        ></comfort-band-settings-tab>`,
+      )}
+      ${this._section(
+        'peak',
+        'Peak saving',
+        this._switchSummary('peakSavingEnabled', 'Peak saving'),
+        html`<comfort-band-settings-tab
+          section="peak"
+          .hass=${this.hass}
           .entities=${this.entities}
         ></comfort-band-settings-tab>`,
       )}
@@ -194,7 +242,13 @@ export class ComfortBandAdvancedTab extends LitElement {
         'schedules',
         'Schedules',
         this._schedulesSummary(),
-        html`<comfort-band-profiles-tab .hass=${this.hass}></comfort-band-profiles-tab>`,
+        html`<comfort-band-settings-tab
+            section="schedules"
+            .hass=${this.hass}
+            .entities=${this.entities}
+          ></comfort-band-settings-tab>
+          <h3 class="subhead">Profiles</h3>
+          <comfort-band-profiles-tab .hass=${this.hass}></comfort-band-profiles-tab>`,
       )}
       ${this._section(
         'history',

@@ -28,6 +28,8 @@ function makeEntities(zone = 'gym'): ZoneEntities {
     enabled: `switch.${zone}_enabled`,
     learningEnabled: `switch.${zone}_learning_enabled`,
     useApparentTemperature: `switch.${zone}_use_apparent_temperature`,
+    fanControlEnabled: `switch.${zone}_fan_control_enabled`,
+    peakSavingEnabled: `switch.${zone}_peak_saving_enabled`,
     deviceId: `dev-${zone}`,
     deviceName: zone,
   };
@@ -43,6 +45,9 @@ function makeHass(
     'sensor.gym_room_temperature': '21.0',
     'switch.gym_use_apparent_temperature': 'on',
     'switch.gym_learning_enabled': 'off',
+    'switch.gym_enabled': 'on',
+    'switch.gym_fan_control_enabled': 'on',
+    'switch.gym_peak_saving_enabled': 'off',
     ...states,
   };
   const profile = opts.profile === undefined ? null : opts.profile;
@@ -100,6 +105,10 @@ function sections(el: ComfortBandAdvancedTab) {
   }));
 }
 
+function summaryOf(el: ComfortBandAdvancedTab, id: string): string | null {
+  return sections(el).find((s) => s.id === id)!.summary;
+}
+
 function section(el: ComfortBandAdvancedTab, id: string): HTMLDetailsElement {
   return el.shadowRoot!.querySelector(`details[data-section="${id}"]`) as HTMLDetailsElement;
 }
@@ -116,7 +125,9 @@ describe('comfort-band-advanced-tab', () => {
     const el = await advancedTab();
     expect(sections(el)).toEqual([
       { id: 'comfort', name: 'Comfort', summary: '“Feels like” on', open: false },
-      { id: 'automation', name: 'Automation', summary: 'Learning off', open: false },
+      { id: 'automation', name: 'Automation', summary: 'Controlling · learning off', open: false },
+      { id: 'fan', name: 'Fan', summary: 'Fan control on', open: false },
+      { id: 'peak', name: 'Peak saving', summary: 'Peak saving off', open: false },
       { id: 'schedules', name: 'Schedules', summary: 'No profiles set up', open: false },
       { id: 'history', name: 'History', summary: 'Last 24 hours', open: false },
     ]);
@@ -125,13 +136,21 @@ describe('comfort-band-advanced-tab', () => {
   it('sums up the other states of each setting', async () => {
     const el = await advancedTab(
       makeHass(
-        { 'switch.gym_use_apparent_temperature': 'off', 'switch.gym_learning_enabled': 'on' },
+        {
+          'switch.gym_use_apparent_temperature': 'off',
+          'switch.gym_learning_enabled': 'on',
+          'switch.gym_enabled': 'off',
+          'switch.gym_fan_control_enabled': 'off',
+          'switch.gym_peak_saving_enabled': 'on',
+        },
         { profile: 'home' },
       ),
     );
     expect(sections(el).map((s) => s.summary)).toEqual([
       '“Feels like” off',
-      'Learning on',
+      'Paused · learning on',
+      'Fan control off',
+      'Peak saving on',
       'Profile: home',
       'Last 24 hours',
     ]);
@@ -144,17 +163,35 @@ describe('comfort-band-advanced-tab', () => {
     const disabled = makeHass({}, { profile: 'home' });
     disabled.entities = {};
     const el = await advancedTab(disabled);
-    expect(sections(el)[2].summary).toBe('Not available right now');
+    expect(summaryOf(el, 'schedules')).toBe('Not available right now');
     el.remove();
     const unloaded = makeHass({}, { profile: 'home' });
     delete unloaded.states['select.comfort_band_profiles_active_profile'];
     const el2 = await advancedTab(unloaded);
-    expect(sections(el2)[2].summary).toBe('Not available right now');
+    expect(summaryOf(el2, 'schedules')).toBe('Not available right now');
+  });
+
+  it('sums up learning alone where control can’t be read', async () => {
+    const el = await advancedTab(
+      makeHass({ 'switch.gym_enabled': 'unavailable', 'switch.gym_learning_enabled': 'on' }),
+    );
+    expect(summaryOf(el, 'automation')).toBe('Learning on');
+  });
+
+  // A live select carries default_profile; one that failed to load doesn't.
+  it('names a profile that’s actually called "unavailable"', async () => {
+    const hass = makeHass({}, { profile: 'unavailable' });
+    hass.states['select.comfort_band_profiles_active_profile'].attributes = {
+      options: ['home', 'unavailable'],
+      default_profile: 'home',
+    };
+    const el = await advancedTab(hass);
+    expect(summaryOf(el, 'schedules')).toBe('Profile: unavailable');
   });
 
   it("doesn't name a profile while the select says unknown", async () => {
     const el = await advancedTab(makeHass({}, { profile: 'unknown' }));
-    expect(sections(el)[2].summary).toBeNull();
+    expect(summaryOf(el, 'schedules')).toBeNull();
   });
 
   it("says nothing it can't read", async () => {
@@ -163,13 +200,19 @@ describe('comfort-band-advanced-tab', () => {
         {
           'switch.gym_use_apparent_temperature': 'unavailable',
           'switch.gym_learning_enabled': 'unavailable',
+          'switch.gym_enabled': 'unavailable',
+          'switch.gym_fan_control_enabled': 'unavailable',
+          'switch.gym_peak_saving_enabled': 'unavailable',
         },
         { profile: 'unavailable' },
       ),
     );
     // A select left "unavailable" (its entry failed to load or is
-    // reloading) isn't readable: the section says profiles aren't available.
+    // reloading, without `default_profile`) isn't readable: the section
+    // says profiles aren't available.
     expect(sections(el).map((s) => s.summary)).toEqual([
+      null,
+      null,
       null,
       null,
       'Not available right now',
@@ -196,20 +239,34 @@ describe('comfort-band-advanced-tab', () => {
     expect(section(el, 'schedules').querySelector('comfort-band-profiles-tab')).not.toBeNull();
   });
 
+  // Without it the profiles read as Follows' choices.
+  it('heads the profiles under Schedules, after "Follows"', async () => {
+    const el = await advancedTab();
+    const order = Array.from(
+      section(el, 'schedules').querySelectorAll(
+        'comfort-band-settings-tab, h3, comfort-band-profiles-tab',
+      ),
+    ).map((c) => c.tagName);
+    expect(order).toEqual(['COMFORT-BAND-SETTINGS-TAB', 'H3', 'COMFORT-BAND-PROFILES-TAB']);
+    expect(section(el, 'schedules').querySelector('h3')!.textContent!.trim()).toBe('Profiles');
+  });
+
   // Without these, a section is blank or the slider silently sends nothing.
   it('hands each section what it needs', async () => {
     const hass = makeHass();
     const el = await advancedTab(hass);
     const entities = (el as unknown as { entities: ZoneEntities }).entities;
     type Child = HTMLElement & { hass?: HomeAssistant; zone?: string; entities?: ZoneEntities };
-    for (const selector of [
-      'details[data-section="comfort"] comfort-band-settings-tab',
-      'details[data-section="comfort"] comfort-band-exact-range',
-      'details[data-section="automation"] comfort-band-settings-tab',
-    ]) {
-      const child = el.shadowRoot!.querySelector(selector) as Child;
-      expect([child.hass, child.zone, child.entities], selector).toEqual([hass, 'gym', entities]);
+    for (const id of ['comfort', 'automation', 'fan', 'peak', 'schedules']) {
+      const child = el.shadowRoot!.querySelector(
+        `details[data-section="${id}"] comfort-band-settings-tab`,
+      ) as Child & { section: string };
+      expect([child.hass, child.entities, child.section], id).toEqual([hass, entities, id]);
     }
+    const exact = el.shadowRoot!.querySelector(
+      'details[data-section="comfort"] comfort-band-exact-range',
+    ) as Child;
+    expect([exact.hass, exact.zone, exact.entities]).toEqual([hass, 'gym', entities]);
     const profiles = el.shadowRoot!.querySelector('comfort-band-profiles-tab') as Child;
     expect(profiles.hass).toBe(hass);
     await setOpen(el, 'history', true);

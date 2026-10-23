@@ -130,8 +130,9 @@ describe('comfort-band-profiles-tab', () => {
     const disabled = makeHass({});
     disabled.entities = {};
     // Its entry failed to load or is reloading: the select is "unavailable",
-    // keeping only its last options.
-    const failed = makeHass({ active: 'unavailable', defaultProfile: '' });
+    // keeping only its last options (no default_profile).
+    const failed = makeHass({ active: 'unavailable' });
+    delete failed.states['select.comfort_band_profiles_active_profile'].attributes.default_profile;
     for (const hass of [unloaded, disabled, failed]) {
       const el = await profilesTab(hass);
       const text = el.shadowRoot!.querySelector('.empty')!.textContent!.replace(/\s+/g, ' ').trim();
@@ -140,6 +141,84 @@ describe('comfort-band-profiles-tab', () => {
       );
       el.remove();
     }
+  });
+
+  // A live select carries default_profile, so a profile that's really named
+  // "unavailable" still lists.
+  it('lists the profiles while one is actually named "unavailable"', async () => {
+    const el = await profilesTab(
+      makeHass({ options: ['home', 'unavailable'], active: 'unavailable' }),
+    );
+    expect(el.shadowRoot!.querySelectorAll('li[data-profile]')).toHaveLength(2);
+    expect(el.shadowRoot!.querySelector('.empty')).toBeNull();
+  });
+
+  // Escape on a pointer-opened menu, focus still on ⋮, closes the menu, not
+  // the whole dialog.
+  // Safari doesn't focus a button on click: focus is on the row.
+  it('closes a pointer-opened menu on Escape from the row too', async () => {
+    const el = await profilesTab(makeHass({ options: ['home', 'away'] }));
+    const rows = el.shadowRoot!.querySelectorAll<HTMLLIElement>('li');
+    rows[1]
+      .querySelector<HTMLButtonElement>('.overflow')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, detail: 1 }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('.menu')).not.toBeNull();
+    const outer = vi.fn();
+    el.addEventListener('keydown', outer);
+    const esc = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    rows[0].dispatchEvent(esc);
+    await el.updateComplete;
+    expect(esc.defaultPrevented).toBe(true);
+    expect(outer).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector('.menu')).toBeNull();
+  });
+
+  it('closes a pointer-opened menu on Escape without the dialog seeing it', async () => {
+    const el = await profilesTab(makeHass({ options: ['home', 'away'] }));
+    const overflow = el
+      .shadowRoot!.querySelectorAll<HTMLLIElement>('li')[1]
+      .querySelector<HTMLButtonElement>('.overflow')!;
+    overflow.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, detail: 1 }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('.menu')).not.toBeNull();
+    const outer = vi.fn();
+    el.addEventListener('keydown', outer);
+    const esc = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    overflow.dispatchEvent(esc);
+    await el.updateComplete;
+    expect(esc.defaultPrevented).toBe(true);
+    expect(outer).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector('.menu')).toBeNull();
+  });
+
+  // With no menu open, Escape on ⋮ is the dialog's, to close it.
+  it('leaves Escape on ⋮ to the dialog while its menu is closed', async () => {
+    const el = await profilesTab(makeHass({ options: ['home', 'away'] }));
+    const overflow = el
+      .shadowRoot!.querySelectorAll<HTMLLIElement>('li')[1]
+      .querySelector<HTMLButtonElement>('.overflow')!;
+    const outer = vi.fn();
+    el.addEventListener('keydown', outer);
+    const esc = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    overflow.dispatchEvent(esc);
+    expect(esc.defaultPrevented).toBe(false);
+    expect(outer).toHaveBeenCalledTimes(1);
   });
 
   // Enter or Space on the ⋮ button or a menu item bubbles to the row, which

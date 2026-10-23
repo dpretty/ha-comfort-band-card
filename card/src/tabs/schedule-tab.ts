@@ -26,7 +26,7 @@ import type { PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import '../schedule-chart.js';
 import '../transition-edit-dialog.js';
-import { findActiveProfileEntity } from '../helpers.js';
+import { findActiveProfileEntity, profileSelectReadable } from '../helpers.js';
 import { parseTime } from '../schedule-chart.js';
 import { setSchedule, subscribeSchedule } from '../services.js';
 import { bandText, degrees, formatClock } from '../now-status.js';
@@ -580,9 +580,12 @@ export class ComfortBandScheduleTab extends LitElement {
    * profile, a room follows the default profile's.
    */
   private _renderHeader() {
-    const profile = this.hass ? readActiveProfile(this.hass) : null;
-    // While the select can't be read, it has no name to give.
-    if (!profile || profile === 'unavailable' || profile === 'unknown') return nothing;
+    const entity = this.hass ? findActiveProfileEntity(this.hass) : null;
+    const state = entity ? this.hass!.states[entity] : undefined;
+    // While the select can't be read, it has no name to give. A profile
+    // that's actually named "unavailable" still can be.
+    const profile = profileSelectReadable(state) ? state!.state : null;
+    if (!profile || profile === 'unknown') return nothing;
     return html`<div class="header">
       <span class="profile-label">Schedule: ${profile}</span>
     </div>`;

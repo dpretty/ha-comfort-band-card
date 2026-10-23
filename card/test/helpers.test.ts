@@ -83,6 +83,41 @@ describe('findZoneEntities', () => {
     expect(out.roomSensorUnavailable).toBe('sensor.gym_room_sensor_unavailable');
   });
 
+  it('resolves the settings the Advanced tab shows', () => {
+    const device = makeDevice('dev-gym', [['comfort_band', 'zone:gym']], 'Gym');
+    const keys = {
+      cross_mode_min_minutes: 'crossModeMinMinutes',
+      lookahead_minutes: 'lookaheadMinutes',
+      passive_tolerance: 'passiveTolerance',
+      mpc_horizon_minutes: 'mpcHorizonMinutes',
+      band_ramp_minutes: 'bandRampMinutes',
+      peak_heat_offset: 'peakHeatOffset',
+      peak_cool_offset: 'peakCoolOffset',
+      peak_precondition_minutes: 'peakPreconditionMinutes',
+      mpc_enabled: 'mpcEnabled',
+      fan_control_enabled: 'fanControlEnabled',
+      peak_saving_enabled: 'peakSavingEnabled',
+      active_fan_mode: 'activeFanMode',
+      idle_fan_mode: 'idleFanMode',
+      schedule_assignment: 'scheduleAssignment',
+    } as const;
+    const hass = makeHass(
+      [device],
+      Object.keys(keys).map((key) => makeEntity(`x.gym_${key}`, key, 'dev-gym')),
+    );
+
+    const out = findZoneEntities(hass, 'gym');
+
+    for (const [key, field] of Object.entries(keys)) expect(out[field]).toBe(`x.gym_${key}`);
+  });
+
+  it('leaves the Advanced tab’s settings null when the integration has none', () => {
+    const device = makeDevice('dev-gym', [['comfort_band', 'zone:gym']], 'Gym');
+    const out = findZoneEntities(makeHass([device], []), 'gym');
+    expect(out.scheduleAssignment).toBeNull();
+    expect(out.peakSavingEnabled).toBeNull();
+  });
+
   it('resolves entities even when entity_ids have collision suffixes (`_2`)', () => {
     // Reproduces the post-cutover state: translation_key is canonical
     // but entity_id has a `_2` suffix because the legacy entity squatted the slug.

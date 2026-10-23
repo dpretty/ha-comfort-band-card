@@ -22,6 +22,7 @@ import type {
   ComfortBandCardConfig,
   DeviceRegistryEntry,
   EntityRegistryEntry,
+  HassEntity,
   HomeAssistant,
 } from './types.js';
 
@@ -57,6 +58,22 @@ export interface ZoneEntities {
   useApparentTemperature: string | null;
   // Additional sensor (v0.4+)
   apparentTemperature: string | null;
+  // Settings shown in the Advanced tab: null where the integration has no
+  // such entity. Optional only so older test fixtures needn't list them.
+  crossModeMinMinutes?: string | null;
+  lookaheadMinutes?: string | null;
+  passiveTolerance?: string | null;
+  mpcHorizonMinutes?: string | null;
+  bandRampMinutes?: string | null;
+  peakHeatOffset?: string | null;
+  peakCoolOffset?: string | null;
+  peakPreconditionMinutes?: string | null;
+  mpcEnabled?: string | null;
+  fanControlEnabled?: string | null;
+  peakSavingEnabled?: string | null;
+  activeFanMode?: string | null;
+  idleFanMode?: string | null;
+  scheduleAssignment?: string | null;
   // Device meta (null if device not found)
   deviceId: string | null;
   deviceName: string | null;
@@ -84,6 +101,20 @@ const KEY_TO_FIELD: Record<string, keyof ZoneEntities> = {
   enabled: 'enabled',
   learning_enabled: 'learningEnabled',
   use_apparent_temperature: 'useApparentTemperature',
+  cross_mode_min_minutes: 'crossModeMinMinutes',
+  lookahead_minutes: 'lookaheadMinutes',
+  passive_tolerance: 'passiveTolerance',
+  mpc_horizon_minutes: 'mpcHorizonMinutes',
+  band_ramp_minutes: 'bandRampMinutes',
+  peak_heat_offset: 'peakHeatOffset',
+  peak_cool_offset: 'peakCoolOffset',
+  peak_precondition_minutes: 'peakPreconditionMinutes',
+  mpc_enabled: 'mpcEnabled',
+  fan_control_enabled: 'fanControlEnabled',
+  peak_saving_enabled: 'peakSavingEnabled',
+  active_fan_mode: 'activeFanMode',
+  idle_fan_mode: 'idleFanMode',
+  schedule_assignment: 'scheduleAssignment',
 };
 
 function emptyZoneEntities(): ZoneEntities {
@@ -107,6 +138,20 @@ function emptyZoneEntities(): ZoneEntities {
     enabled: null,
     learningEnabled: null,
     useApparentTemperature: null,
+    crossModeMinMinutes: null,
+    lookaheadMinutes: null,
+    passiveTolerance: null,
+    mpcHorizonMinutes: null,
+    bandRampMinutes: null,
+    peakHeatOffset: null,
+    peakCoolOffset: null,
+    peakPreconditionMinutes: null,
+    mpcEnabled: null,
+    fanControlEnabled: null,
+    peakSavingEnabled: null,
+    activeFanMode: null,
+    idleFanMode: null,
+    scheduleAssignment: null,
     deviceId: null,
     deviceName: null,
   };
@@ -163,6 +208,18 @@ export function findZoneEntities(hass: HomeAssistant, zoneSlug: string): ZoneEnt
  *  its device stays in `hass.devices`. */
 export function profileManagerExists(hass: HomeAssistant): boolean {
   return findDeviceByIdentifier(hass, [DOMAIN, 'profile_manager']) !== null;
+}
+
+/**
+ * Whether the active-profile select's state is one to act on. Missing means
+ * not loaded or disabled. "unavailable" is what HA writes for an entry that
+ * failed to load or is reloading, with only the last `options`; a live
+ * select (v0.3.0+) always carries `default_profile`, so a profile that's
+ * actually named "unavailable" still reads.
+ */
+export function profileSelectReadable(state: HassEntity | undefined): boolean {
+  if (!state) return false;
+  return !(state.state === 'unavailable' && state.attributes.default_profile === undefined);
 }
 
 /** Resolve the singleton `select.{...}_active_profile` entity_id, if registered. */

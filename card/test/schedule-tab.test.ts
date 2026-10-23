@@ -975,6 +975,19 @@ describe('comfort-band-schedule-tab', () => {
       expect(shownWords(el.shadowRoot!)).not.toMatch(/follow/i);
     });
 
+    // A live select carries default_profile; one that failed to load doesn't.
+    it('names a profile that’s actually called "unavailable"', async () => {
+      const { hass } = makeHass({ initialSchedule: schedule, active: 'unavailable' });
+      hass.states['select.comfort_band_profiles_active_profile'].attributes = {
+        options: ['home', 'unavailable'],
+        default_profile: 'home',
+      };
+      const el = await tab(hass);
+      expect(el.shadowRoot!.querySelector('.header')!.textContent!.trim()).toBe(
+        'Schedule: unavailable',
+      );
+    });
+
     it.each(['unavailable', 'unknown'])(
       'names no profile while the profile select is %s',
       async (state) => {
