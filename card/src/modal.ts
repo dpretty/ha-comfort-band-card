@@ -257,6 +257,7 @@ export class ComfortBandModal extends LitElement {
         return html`<comfort-band-schedule-tab
           .hass=${this.hass}
           .zone=${this.zone}
+          .entities=${this.entities}
         ></comfort-band-schedule-tab>`;
       case 'advanced':
         return html`<comfort-band-advanced-tab

@@ -145,6 +145,19 @@ describe('comfort-band-modal tab a11y', () => {
     expect(tab.zone).not.toBe('');
   });
 
+  // The Schedule tab says what's in force now from the zone's entities (#33).
+  it('shows the Schedule tab, with what it needs', async () => {
+    const el = await openModal();
+    el.selectTab('schedule');
+    await el.updateComplete;
+    const tab = getPanel(el).querySelector('comfort-band-schedule-tab') as HTMLElement & {
+      hass: unknown;
+      zone: string;
+      entities: unknown;
+    };
+    expect([tab.hass, tab.zone, tab.entities]).toEqual([el.hass, el.zone, el.entities]);
+  });
+
   it('updates aria-labelledby when the active tab changes', async () => {
     const el = await openModal();
     el.selectTab('schedule');

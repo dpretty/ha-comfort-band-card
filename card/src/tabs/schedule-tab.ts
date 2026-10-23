@@ -7,14 +7,22 @@
  * change" button in the toolbar above the list. A row's Delete asks for
  * inline confirmation (no more long-press surprise from v0.8.x).
  *
+ * **#33**: above the chart, the range in force now, from the integration's
+ * entities. While this list is the one in force (the active profile's, not
+ * empty, and not while the room follows a shared schedule), a now marker on
+ * the chart and its current change marked "Current". A change that repeats
+ * the range before it is marked "Same as before". The list reads first:
+ * Add, Edit and Delete sit behind "Edit schedule".
+ *
  * Workflow:
  *   1. On mount, open a `comfort_band/subscribe_schedule` subscription for
  *      the active (zone, profile). The backend sends the current state
  *      immediately, then one event per future change — from any source.
- *   2. Render the read-only chart visualization + the editable list.
- *   3. User clicks Add → dialog (inline) seeded with sensible defaults.
- *      User clicks Edit or taps a row → dialog seeded with that row.
- *      User clicks Delete → inline confirm row replaces the normal row.
+ *   2. Render the read-only chart visualization + the list, read-only
+ *      until "Edit schedule" (and again after "Done").
+ *   3. In edit mode: user clicks Add → dialog (inline) seeded with sensible
+ *      defaults. User clicks Edit or taps a row → dialog seeded with that
+ *      row. User clicks Delete → inline confirm row replaces the normal row.
  *   4. All edits persist via `comfort_band.set_schedule` (full schedule
  *      replacement — atomic and simpler than per-transition mutations).
  *      The subscription delivers the echo, so two cards on different
@@ -26,7 +34,20 @@ import type { PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import '../schedule-chart.js';
 import '../transition-edit-dialog.js';
-import { findActiveProfileEntity, profileSelectReadable } from '../helpers.js';
+import {
+  findActiveProfileEntity,
+  profileManagerExists,
+  profileSelectReadable,
+  type ZoneEntities,
+} from '../helpers.js';
+import {
+  currentIndex,
+  minutesOfDay,
+  nowLine,
+  ownScheduleInForce,
+  sameAsBefore,
+  sharedScheduleName,
+} from '../schedule-now.js';
 import { parseTime } from '../schedule-chart.js';
 import { setSchedule, subscribeSchedule } from '../services.js';
 import { bandText, degrees, formatClock } from '../now-status.js';
@@ -74,25 +95,36 @@ type Mode = 'list' | 'add' | 'edit';
 export class ComfortBandScheduleTab extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
   @property({ type: String }) public zone = '';
+  /** The zone's entities, for what's in force now. */
+  @property({ attribute: false }) public entities?: ZoneEntities;
+  /** Whether the list shows its Add, Edit and Delete. */
+  @state() private _editingList = false;
+  /** The time "now" is shown for: moved on with each update from HA, and
+   *  at each minute. */
+  @state() private _now = Date.now();
+  private _clock: ReturnType<typeof setTimeout> | null = null;
+  /** Which button takes focus once the list's mode has changed. */
+  private _focusAfterMode: 'add' | 'edit' | null = null;
 
   @state() private _profile = '';
+  /** The profile the list shown is for. Across a change of profile it's
+   *  the old one's, kept on screen until the new one's arrives. */
+  @state() private _listProfile = '';
   @state() private _transitions: Transition[] = [];
   @state() private _loading = false;
   @state() private _error: string | null = null;
   @state() private _mode: Mode = 'list';
   @state() private _editing: Transition | null = null;
-  @state() private _newAt = '06:00';
   /** `at` of the row currently showing the inline delete-confirm UI. Cleared
-   *  by Cancel, by Confirm (after the write succeeds), or automatically in
+   *  by Cancel, by Confirm (before the write), by Done, or automatically in
    *  `willUpdate` when a remote write echoes back without the targeted row. */
   @state() private _confirmingDeleteAt: string | null = null;
-  // Plain fields — `_mode` is the @state that drives re-renders; these are
-  // read once when the dialog opens. Marking them @state would re-render on
-  // every assignment. **Contract:** any handler that sets these MUST set
-  // them BEFORE flipping `_mode = 'add'`, otherwise the dialog renders with
-  // stale defaults.
-  private _newLow: number | undefined;
-  private _newHigh: number | undefined;
+  /** The Add form's starting values, built once when Add is pressed. The
+   *  form starts over whenever it's given a new object, so one built on each
+   *  render would undo what's typed at each update from HA and at each
+   *  minute (#33 review). Plain, not @state: set it BEFORE `_mode = 'add'`,
+   *  which renders. */
+  private _adding: Transition | null = null;
   /** Re-query-by-key trigger descriptor — restored on dismiss so keyboard
    *  users don't get yanked to body. Storing a *descriptor* (rather than a
    *  DOM reference) survives the row's DOM being recreated by the
@@ -150,6 +182,9 @@ export class ComfortBandScheduleTab extends LitElement {
       }
       .row {
         display: flex;
+        /* A row with its tags and buttons wraps on a phone rather than
+           widening the dialog. */
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--cb-gap-sm);
         font-size: 13px;
@@ -179,10 +214,12 @@ export class ComfortBandScheduleTab extends LitElement {
       .row .band {
         color: var(--cb-text-secondary);
         flex: 1;
+        white-space: nowrap;
       }
       .row .actions {
         display: flex;
         gap: 4px;
+        margin-left: auto;
       }
       .row.confirm {
         background: var(--cb-track-bg);
@@ -222,6 +259,47 @@ export class ComfortBandScheduleTab extends LitElement {
         color: var(--error-color, #b71c1c);
         border-color: var(--divider-color, #cccccc);
       }
+      .now-line {
+        font-size: 14px;
+        color: var(--cb-text-primary);
+      }
+      .shared-note {
+        margin-top: 4px;
+        font-size: 12px;
+        line-height: 1.35;
+        color: var(--cb-text-secondary);
+      }
+      .list-toolbar {
+        gap: var(--cb-gap-sm);
+      }
+      /* Read first: rows aren't buttons until "Edit schedule". */
+      .row.read {
+        cursor: default;
+      }
+      .row.read:not(.current):hover {
+        background: none;
+      }
+      .row.current {
+        box-shadow: inset 3px 0 0 var(--cb-accent, var(--primary-color, #03a9f4));
+        background: var(--cb-track-bg);
+      }
+      /* On the highlight, secondary text would be too faint. */
+      .row.current .band,
+      .row.current .tag {
+        color: var(--cb-text-primary);
+      }
+      .tag {
+        flex: none;
+        padding: 2px 8px;
+        border-radius: var(--cb-radius-pill);
+        border: 1px solid var(--divider-color, #cccccc);
+        font-size: 11px;
+        color: var(--cb-text-secondary);
+      }
+      .tag.current {
+        border-color: var(--cb-accent, var(--primary-color, #03a9f4));
+        color: var(--cb-text-primary);
+      }
       .empty {
         text-align: center;
         padding: var(--cb-gap-lg);
@@ -232,6 +310,7 @@ export class ComfortBandScheduleTab extends LitElement {
   ];
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has('hass')) this._now = Date.now();
     if (changed.has('hass') && this.hass && this._profile === '') {
       this._profile = readActiveProfile(this.hass) ?? 'home';
       void this._subscribe();
@@ -274,10 +353,35 @@ export class ComfortBandScheduleTab extends LitElement {
       );
       cancel?.focus();
     }
+    // The button pressed is gone once the mode changes: focus goes to the
+    // one in its place.
+    if (this._focusAfterMode) {
+      const which = this._focusAfterMode;
+      this._focusAfterMode = null;
+      this.shadowRoot
+        ?.querySelector<HTMLButtonElement>(
+          which === 'add' ? '.list-toolbar .button.primary' : '.list-toolbar .button.secondary',
+        )
+        ?.focus();
+    }
   }
+
+  private _onEditSchedule = () => {
+    this._editingList = true;
+    this._focusAfterMode = 'add';
+  };
+
+  private _onDoneEditing = () => {
+    this._editingList = false;
+    this._confirmingDeleteAt = null;
+    this._focusAfterMode = 'edit';
+  };
 
   public override connectedCallback(): void {
     super.connectedCallback();
+    // "Now" moves on with the clock too, at each minute.
+    this._now = Date.now();
+    this._tick();
     // Re-subscribe after a DOM detach/reattach (e.g. switching dashboard
     // tabs). `willUpdate`'s `_profile === ''` guard doesn't fire here
     // because `_profile` is already set from the prior mount. On the very
@@ -288,7 +392,20 @@ export class ComfortBandScheduleTab extends LitElement {
     }
   }
 
+  /** Moves "now" on at the next minute, and again at each after it. */
+  private _tick(): void {
+    this._clock = setTimeout(
+      () => {
+        this._now = Date.now();
+        this._tick();
+      },
+      60_000 - (Date.now() % 60_000),
+    );
+  }
+
   public override disconnectedCallback(): void {
+    if (this._clock !== null) clearTimeout(this._clock);
+    this._clock = null;
     this._unsubscribe();
     super.disconnectedCallback();
   }
@@ -302,27 +419,25 @@ export class ComfortBandScheduleTab extends LitElement {
       return;
     }
     const gen = ++this._subscribeGen;
+    const profile = this._profile;
     // Only show the loading state when we have nothing to display. On a
     // re-subscribe (profile flip, reconnect) keep the stale data visible
     // so the tab doesn't flash empty.
     if (this._transitions.length === 0) this._loading = true;
     this._error = null;
     try {
-      const unsub = await subscribeSchedule(
-        this.hass,
-        { zone: this.zone, profile: this._profile },
-        (schedule) => {
-          if (gen !== this._subscribeGen) return;
-          // Sort defensively — the backend normalises and sorts on every
-          // write, but the WS payload type is `Transition[]` with no order
-          // guarantee, and the list view below renders straight from this
-          // array.
-          this._transitions = schedule?.baseline
-            ? [...schedule.baseline].sort(compareTransitions)
-            : [];
-          this._loading = false;
-        },
-      );
+      const unsub = await subscribeSchedule(this.hass, { zone: this.zone, profile }, (schedule) => {
+        if (gen !== this._subscribeGen) return;
+        this._listProfile = profile;
+        // Sort defensively — the backend normalises and sorts on every
+        // write, but the WS payload type is `Transition[]` with no order
+        // guarantee, and the list view below renders straight from this
+        // array.
+        this._transitions = schedule?.baseline
+          ? [...schedule.baseline].sort(compareTransitions)
+          : [];
+        this._loading = false;
+      });
       if (gen !== this._subscribeGen) {
         // Superseded while awaiting the round-trip — release the
         // dangling server-side subscription instead of leaking it.
@@ -357,9 +472,11 @@ export class ComfortBandScheduleTab extends LitElement {
 
   private _onAddClicked = () => {
     this._focusTrigger = { kind: 'add' };
-    this._newAt = nextDefaultTime(this._transitions);
-    this._newLow = defaultLow(this._transitions);
-    this._newHigh = defaultHigh(this._transitions);
+    this._adding = {
+      at: nextDefaultTime(this._transitions),
+      low: defaultLow(this._transitions),
+      high: defaultHigh(this._transitions),
+    };
     this._editing = null;
     this._mode = 'add';
   };
@@ -476,8 +593,7 @@ export class ComfortBandScheduleTab extends LitElement {
   private _exitDialogMode(): void {
     this._mode = 'list';
     this._editing = null;
-    this._newLow = undefined;
-    this._newHigh = undefined;
+    this._adding = null;
     // Defer focus restore so the dialog's DOM is gone before we try to focus
     // the trigger — focusing a not-yet-attached element silently no-ops.
     this.updateComplete.then(() => this._restoreFocus());
@@ -537,14 +653,7 @@ export class ComfortBandScheduleTab extends LitElement {
     if (!this.hass) return nothing;
 
     if (this._mode === 'add' || this._mode === 'edit') {
-      const seed: Transition | null =
-        this._mode === 'edit'
-          ? this._editing
-          : {
-              at: this._newAt,
-              low: this._newLow ?? defaultLow(this._transitions),
-              high: this._newHigh ?? defaultHigh(this._transitions),
-            };
+      const seed = this._mode === 'edit' ? this._editing : this._adding;
       return html`
         <transition-edit-dialog
           .transition=${seed}
@@ -556,8 +665,9 @@ export class ComfortBandScheduleTab extends LitElement {
       `;
     }
 
+    const inForce = this._listInForce();
     return html`
-      ${this._renderHeader()}
+      ${this._renderHeader()} ${this._renderNow()}
       ${this._loading
         ? html`<div class="loading">Loading schedule…</div>`
         : this._error
@@ -565,11 +675,19 @@ export class ComfortBandScheduleTab extends LitElement {
           : html`
               <comfort-band-schedule-chart
                 .transitions=${this._transitions}
+                .now=${inForce ? minutesOfDay(this._now, this.hass) : null}
               ></comfort-band-schedule-chart>
               <div class="list-toolbar">
-                <button class="button primary" @click=${this._onAddClicked}>+ Add a change</button>
+                ${this._editingList
+                  ? html`<button class="button primary" @click=${this._onAddClicked}>
+                        + Add a change
+                      </button>
+                      <button class="button secondary" @click=${this._onDoneEditing}>Done</button>`
+                  : html`<button class="button secondary" @click=${this._onEditSchedule}>
+                      Edit schedule
+                    </button>`}
               </div>
-              ${this._renderList()}
+              ${this._renderList(inForce)}
             `}
     `;
   }
@@ -591,34 +709,111 @@ export class ComfortBandScheduleTab extends LitElement {
     </div>`;
   }
 
-  private _renderList() {
+  /**
+   * Whether this list is the one in force: the room's own schedule (not a
+   * shared one) for the active profile, with changes in it (without, the
+   * room follows the default profile's schedule, or its own range). Where
+   * the profile select can't be read, the list shown may not be the active
+   * profile's, so it's only taken as in force without a profile manager at
+   * all. Across a change of profile, the list shown is the old one's until
+   * the new one's arrives.
+   */
+  private _listInForce(): boolean {
+    if (!this.hass || !this.entities || this._transitions.length === 0) return false;
+    if (ownScheduleInForce(this.hass, this.entities) !== true) return false;
+    const entity = findActiveProfileEntity(this.hass);
+    const state = entity ? this.hass.states[entity] : undefined;
+    if (profileSelectReadable(state)) return state!.state === this._listProfile;
+    return !profileManagerExists(this.hass);
+  }
+
+  /** The range in force now, from the integration's entities; and whether
+   *  the room follows a shared schedule. */
+  private _renderNow() {
+    if (!this.hass || !this.entities) return nothing;
+    const line = nowLine(this.hass, this.entities);
+    const following = ownScheduleInForce(this.hass, this.entities) === false;
+    const shared = sharedScheduleName(this.hass, this.entities);
+    return html`
+      ${line ? html`<div class="now-line">${line}</div>` : nothing}
+      ${following
+        ? html`<div class="shared-note">
+            This room follows ${shared ? `“${shared}”, a shared schedule` : 'a shared schedule'}.
+            The changes below are this room’s own, not the ones in force.
+          </div>`
+        : nothing}
+    `;
+  }
+
+  private _renderList(inForce: boolean) {
     if (this._transitions.length === 0) {
-      return html`<div class="empty">No changes yet. Use “Add a change” to create one.</div>`;
+      return html`<div class="empty">
+        ${this._editingList
+          ? 'No changes yet. Use “Add a change” to create one.'
+          : 'No changes yet.'}
+      </div>`;
     }
+    // Only this list's own change is marked, and only while it's in force.
+    const current = inForce
+      ? currentIndex(this._transitions, minutesOfDay(this._now, this.hass))
+      : null;
+    const same = sameAsBefore(this._transitions);
     return html`
       <ul class="list" role="list">
-        ${this._transitions.map((t) =>
-          this._confirmingDeleteAt === t.at ? this._renderConfirmRow(t) : this._renderRow(t),
+        ${this._transitions.map((t, i) =>
+          this._confirmingDeleteAt === t.at
+            ? this._renderConfirmRow(t)
+            : this._editingList
+              ? this._renderRow(t, i === current, same[i])
+              : this._renderReadRow(t, i === current, same[i]),
         )}
       </ul>
     `;
   }
 
-  private _renderRow(t: Transition) {
-    const at = formatClock(t.at, this.hass);
-    const ariaLabel = `Edit the ${at} change, ${degrees(t.low)} to ${degrees(t.high)} degrees`;
+  private _tags(current: boolean, same: boolean) {
+    return html`${current ? html`<span class="tag current">Current</span>` : nothing}
+    ${same ? html`<span class="tag same">Same as before</span>` : nothing}`;
+  }
+
+  private _renderReadRow(t: Transition, current: boolean, same: boolean) {
     return html`
       <li
-        class="row"
+        class="row read ${current ? 'current' : ''}"
+        role="listitem"
+        data-at=${t.at}
+        aria-current=${current ? 'true' : nothing}
+      >
+        <span class="at">${formatClock(t.at, this.hass)}</span>
+        <span class="band">${bandText(t)}</span>
+        ${this._tags(current, same)}
+      </li>
+    `;
+  }
+
+  private _renderRow(t: Transition, current: boolean, same: boolean) {
+    const at = formatClock(t.at, this.hass);
+    const ariaLabel = [
+      `Edit the ${at} change, ${degrees(t.low)} to ${degrees(t.high)} degrees`,
+      current ? 'current' : '',
+      same ? 'same as before' : '',
+    ]
+      .filter(Boolean)
+      .join(', ');
+    return html`
+      <li
+        class="row ${current ? 'current' : ''}"
         role="listitem"
         tabindex="0"
         data-at=${t.at}
         aria-label=${ariaLabel}
+        aria-current=${current ? 'true' : nothing}
         @click=${this._onRowClicked(t)}
         @keydown=${this._onRowKeydown(t)}
       >
         <span class="at">${at}</span>
         <span class="band">${bandText(t)}</span>
+        ${this._tags(current, same)}
         <span class="actions">
           <button
             class="button secondary"

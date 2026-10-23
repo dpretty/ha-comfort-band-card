@@ -95,7 +95,7 @@ const RELEASES = [
 type Release = (typeof RELEASES)[number][0];
 
 /** Whether the integration is at least that release, from its entities. */
-function hasSince(entities: ZoneEntities, release: Release): boolean {
+export function hasSince(entities: ZoneEntities, release: Release): boolean {
   const from = RELEASES.findIndex(([r]) => r === release);
   return RELEASES.slice(from).some(([, fields]) => hasAny(entities, fields));
 }
