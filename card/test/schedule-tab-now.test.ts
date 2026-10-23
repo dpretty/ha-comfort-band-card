@@ -197,6 +197,16 @@ describe('comfort-band-schedule-tab now', () => {
     expect(vi.getTimerCount()).toBe(1);
   });
 
+  // A timer can fire late (a phone asleep, a tab in the background): "now"
+  // is read from the clock, not counted on.
+  it('reads the clock when its timer fires late', async () => {
+    const el = await tab(makeHass(), makeEntities(), Date.UTC(2026, 9, 23, 12, 0, 30));
+    vi.setSystemTime(Date.UTC(2026, 9, 23, 17, 45));
+    vi.runOnlyPendingTimers();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('li.row.current')!.getAttribute('data-at')).toBe('17:30');
+  });
+
   // HA's update for a change comes at the change; the row moves with it.
   it('moves on with each update from HA', async () => {
     const hass = makeHass();

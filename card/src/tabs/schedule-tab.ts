@@ -116,7 +116,7 @@ export class ComfortBandScheduleTab extends LitElement {
   @state() private _mode: Mode = 'list';
   @state() private _editing: Transition | null = null;
   /** `at` of the row currently showing the inline delete-confirm UI. Cleared
-   *  by Cancel, by Confirm (after the write succeeds), or automatically in
+   *  by Cancel, by Confirm (before the write), by Done, or automatically in
    *  `willUpdate` when a remote write echoes back without the targeted row. */
   @state() private _confirmingDeleteAt: string | null = null;
   /** The Add form's starting values, built once when Add is pressed. The

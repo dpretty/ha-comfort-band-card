@@ -153,6 +153,10 @@ describe('comfort-band-schedule-chart', () => {
     expect(css).toMatch(/\.chart\s*\{[^}]*margin-bottom:\s*22px/);
     expect(css).toMatch(/\.now-label\s*\{[^}]*top:\s*-14px;[^}]*transform:\s*translateX\(-50%\)/);
     expect(css).toMatch(/\.now-line\s*\{[^}]*stroke-width:\s*1\.5/);
+    // Seen at all (an SVG line has no stroke of its own), and as thick on a
+    // phone as on a desktop.
+    expect(css).toMatch(/\.now-line\s*\{[^}]*stroke:\s*var\(--cb-text-secondary\)/);
+    expect(css).toMatch(/\.now-line\s*\{[^}]*vector-effect:\s*non-scaling-stroke/);
   });
 
   it('marks now, beside its gutter', async () => {
