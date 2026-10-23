@@ -172,7 +172,139 @@ function css(): string {
     .join('\n');
 }
 
+// Every row's words, pinned: each is checked against what the integration's
+// code does, so a change to one is a change to make on purpose.
+const WORDS: Record<SettingsSection, Array<[string, string, string]>> = {
+  comfort: [
+    [
+      'useApparentTemperature',
+      'Use “feels like”',
+      'When on, heating and cooling go by the humidity-adjusted “feels like” temperature instead of the room’s own reading. Falls back to the room’s reading automatically if the humidity sensor is unavailable.',
+    ],
+    [
+      'deadbandBelow',
+      'Heating starts below the range by',
+      'How far below the range the room may drop before heating starts; heating stops at the bottom of the range. Learning can start or stop it early, or hold off. Predictive control, while it’s planning, doesn’t use this, and heats towards the top of the range.',
+    ],
+    [
+      'deadbandAbove',
+      'Cooling starts above the range by',
+      'How far above the range the room may rise before cooling starts; cooling stops at the top of the range. Learning can start or stop it early, or hold off. Predictive control, while it’s planning, doesn’t use this, and cools towards the bottom of the range.',
+    ],
+    [
+      'bandRampMinutes',
+      'Ease schedule changes over',
+      'Spreads each change of range over this long, centred on its time, instead of changing all at once. 0 changes at once.',
+    ],
+    [
+      'overrideHours',
+      'Adjustments made elsewhere last',
+      'How long an adjustment lasts when it’s started without a length: from the device page, or an automation that doesn’t give one. Warmer, Cooler and the exact range here set their own length.',
+    ],
+  ],
+  automation: [
+    [
+      'enabled',
+      'Control this room',
+      'When off, this room still works out what it would do but sends nothing to the unit, and the Now tab says it’s paused.',
+    ],
+    [
+      'learningEnabled',
+      'Learning',
+      'Uses what this room has learned about how quickly it warms and cools to time heating and cooling: starting early rather than waiting for the room to get too cold or warm, stopping early so it doesn’t overshoot, and holding off while it’s already heading back on its own. Predictive control needs this on too. While it’s off, the room keeps recording readings.',
+    ],
+    [
+      'mpcEnabled',
+      'Predictive control',
+      'Plans heating and cooling ahead, from what the room has learned and the schedule coming up. Needs Learning on. It plans only while it has recent enough readings of how this room warms and cools, usually after a few hours of normal running.',
+    ],
+    [
+      'lookaheadMinutes',
+      'Look ahead by',
+      'How far ahead learning projects the room’s temperature, to start or stop early, or hold off.',
+    ],
+    [
+      'passiveTolerance',
+      'Let it drift back within',
+      'How far outside the range the room may be for learning to let it drift back on its own, rather than heat or cool.',
+    ],
+    [
+      'mpcHorizonMinutes',
+      'Plan ahead by',
+      'How far ahead predictive control plans, schedule changes included.',
+    ],
+    [
+      'minCycleMinutes',
+      'Repeat a command no sooner than',
+      'The least time before the unit is sent the same command again, such as a new setting while it’s already heating.',
+    ],
+    [
+      'crossModeMinMinutes',
+      'Switch between heating and cooling no sooner than',
+      'The least time between heating and then cooling, or the other way round.',
+    ],
+  ],
+  fan: [
+    [
+      'fanControlEnabled',
+      'Fan control',
+      'Sets the unit’s fan by what it’s doing, using the two choices below. Nothing changes until one is chosen.',
+    ],
+    [
+      'activeFanMode',
+      'Fan while heating or cooling',
+      'The fan speed while the unit is working. Peak saving can leave it as it is during a peak.',
+    ],
+    [
+      'idleFanMode',
+      'Fan while idle',
+      'The fan speed while the unit isn’t heating or cooling. A quiet one stops air rushing round at full speed.',
+    ],
+  ],
+  peak: [
+    [
+      'peakSavingEnabled',
+      'Peak saving',
+      'Runs heating and cooling less in expensive power times. During one, the range widens, so the room drifts further before heating or cooling starts. Ahead of one that’s announced, the room can be warmed or cooled a little within its range. An adjustment in force sets both aside. Needs a peak entity chosen under Settings → Devices & Services → Comfort Band → Configure.',
+    ],
+    [
+      'peakHeatOffset',
+      'Relax the bottom of the range by',
+      'How far the bottom of the range drops during a peak; heating still starts the usual amount below it. Ahead of one, up to how far the bottom rises to warm the room first.',
+    ],
+    [
+      'peakCoolOffset',
+      'Relax the top of the range by',
+      'How far the top of the range rises during a peak; cooling still starts the usual amount above it. Ahead of one, up to how far the top falls to cool the room first.',
+    ],
+    [
+      'peakPreconditionMinutes',
+      'Prepare ahead by',
+      'How long before an announced peak to warm or cool the room. 0 doesn’t prepare.',
+    ],
+  ],
+  schedules: [
+    [
+      'scheduleAssignment',
+      'Follows',
+      'Which schedule sets this room’s range: its own, or one shared with other rooms. The Schedule tab shows and changes the room’s own schedule, even while it follows a shared one.',
+    ],
+  ],
+};
+
 describe('comfort-band-settings-tab sections', () => {
+  it.each(Object.keys(WORDS) as SettingsSection[])('words %s as checked', async (section) => {
+    const el = await settingsTab(makeHass(), section);
+    const shownWords = Array.from(el.shadowRoot!.querySelectorAll('.row[data-setting]')).map(
+      (r) => [
+        r.getAttribute('data-setting'),
+        r.querySelector('.title')!.textContent!.trim(),
+        r.querySelector('.desc')!.textContent!.trim(),
+      ],
+    );
+    expect(shownWords).toEqual(WORDS[section]);
+  });
+
   it('shows comfort: "feels like", the deadbands, the ramp, the default length, the humidity sensor', async () => {
     const el = await settingsTab(makeHass());
     expect(rows(el)).toEqual([
@@ -268,7 +400,7 @@ describe('comfort-band-settings-tab sections', () => {
     const el = await settingsTab(makeHass(), 'automation');
     const desc = (setting: string) => row(el, setting).querySelector('.desc')!.textContent!;
     expect(desc('mpcEnabled')).toBe(
-      'Plans heating and cooling ahead, from what the room has learned and the schedule coming up. Needs Learning on. It plans only while it has recent enough readings of how this room warms and cools, usually after a few hours of normal running, and not during a peak or on a stand-in sensor.',
+      'Plans heating and cooling ahead, from what the room has learned and the schedule coming up. Needs Learning on. It plans only while it has recent enough readings of how this room warms and cools, usually after a few hours of normal running.',
     );
     expect(desc('crossModeMinMinutes')).toBe(
       'The least time between heating and then cooling, or the other way round.',
@@ -279,7 +411,7 @@ describe('comfort-band-settings-tab sections', () => {
   it('says the fan isn’t boosted during a peak', async () => {
     const el = await settingsTab(makeHass(), 'fan');
     expect(row(el, 'activeFanMode').querySelector('.desc')!.textContent).toContain(
-      'With peak saving on, it’s left as it is during a peak.',
+      'Peak saving can leave it as it is during a peak.',
     );
   });
 
@@ -354,6 +486,26 @@ describe('comfort-band-settings-tab missing settings', () => {
     expect(el.shadowRoot!.querySelector('.note')!.textContent!.replace(/\s+/g, ' ').trim()).toBe(
       'Some settings aren’t shown: they need a newer comfort_band, or their entities are turned off.',
     );
+  });
+
+  it('counts a fine-tuning setting that isn’t there', async () => {
+    const el = await settingsTab(
+      makeHass(),
+      'automation',
+      makeEntities('gym', { crossModeMinMinutes: null }),
+    );
+    expect(el.shadowRoot!.querySelector('.note')).not.toBeNull();
+  });
+
+  it('counts fine-tuning as something shown', async () => {
+    const el = await settingsTab(
+      makeHass(),
+      'automation',
+      makeEntities('gym', { enabled: null, learningEnabled: null, mpcEnabled: null }),
+    );
+    expect(el.shadowRoot!.querySelector('.upgrade-hint')).toBeNull();
+    expect(el.shadowRoot!.querySelector('.note')).not.toBeNull();
+    expect(el.shadowRoot!.querySelectorAll('details.fine .row')).toHaveLength(5);
   });
 
   it('has no note when every setting is there', async () => {
@@ -1069,6 +1221,13 @@ describe('comfort-band-settings-tab choices', () => {
     ]);
   });
 
+  it('words the idle fan speeds as people say them too', async () => {
+    const el = await settingsTab(makeHass(), 'fan');
+    expect(Array.from(select(el, 'idleFanMode').options).map((o) => o.textContent!.trim())).toEqual(
+      ['Leave as it is', 'Auto', 'Low', 'Medium low', 'Medium', 'High'],
+    );
+  });
+
   // Shared schedules are named by people; fan modes are the unit's words.
   it('shows schedule names as typed', async () => {
     const el = await settingsTab(
@@ -1275,6 +1434,23 @@ describe('comfort-band-settings-tab once a call has gone through', () => {
     await el.updateComplete;
     expect(shown(el, 'deadbandBelow')).toBe('0.4 °C');
     vi.advanceTimersByTime(1);
+    await el.updateComplete;
+    expect(shown(el, 'deadbandBelow')).toBe('0.3 °C');
+  });
+
+  // Any new state for it from HA ends the wait, even new attributes alone.
+  it('stops waiting on any new state for it from HA', async () => {
+    const { el, hass } = await sent();
+    el.hass = {
+      ...hass,
+      states: {
+        ...hass.states,
+        'number.gym_deadband_below': {
+          ...hass.states['number.gym_deadband_below'],
+          attributes: { ...hass.states['number.gym_deadband_below'].attributes, icon: 'x' },
+        },
+      },
+    };
     await el.updateComplete;
     expect(shown(el, 'deadbandBelow')).toBe('0.3 °C');
   });
@@ -1555,6 +1731,18 @@ describe('comfort-band-settings-tab once a call has gone through', () => {
       expect(vi.getTimerCount()).toBe(1);
     });
 
+    it('is ready for the next press at once after turning off too', async () => {
+      const r = reporting({ 'switch.gym_enabled': { state: 'off' } });
+      const el = r.set(await settingsTab(r.hass, 'automation'));
+      const toggle = () =>
+        row(el, 'enabled').querySelector<HTMLButtonElement>('button[role="switch"]')!;
+      expect(toggle().getAttribute('aria-checked')).toBe('true');
+      toggle().click();
+      await flush(el);
+      expect(toggle().getAttribute('aria-checked')).toBe('false');
+      expect(toggle().getAttribute('aria-disabled')).toBe('false');
+    });
+
     it('stops waiting for a number or a choice at once', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const r = reporting({
@@ -1660,6 +1848,30 @@ describe('comfort-band-settings-tab errors', () => {
     await flush(el);
     expect(alert(el)).not.toBeNull();
     vi.advanceTimersByTime(STEP_SEND_DELAY_MS);
+    await flush(el);
+    expect(alert(el)).toBeNull();
+  });
+
+  // A later value goes through while a still later one waits its turn.
+  it('clears once a later value goes through, even with another after it', async () => {
+    const settle: Array<{ ok: () => void; no: (e: Error) => void }> = [];
+    const slow = vi
+      .fn()
+      .mockImplementation(() => new Promise<void>((ok, no) => settle.push({ ok, no })));
+    const el = await settingsTab(makeHass({ callServiceImpl: slow }), 'fan');
+    const pick = (option: string) => {
+      const s = row(el, 'idleFanMode').querySelector('select')!;
+      s.value = option;
+      s.dispatchEvent(new Event('change'));
+    };
+    pick('high');
+    pick('auto');
+    pick('medium');
+    await flush(el);
+    settle[0].no(new Error('Busy'));
+    await flush(el);
+    expect(alert(el)).not.toBeNull();
+    settle[1].ok();
     await flush(el);
     expect(alert(el)).toBeNull();
   });

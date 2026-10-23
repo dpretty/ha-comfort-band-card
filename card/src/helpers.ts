@@ -58,8 +58,8 @@ export interface ZoneEntities {
   useApparentTemperature: string | null;
   // Additional sensor (v0.4+)
   apparentTemperature: string | null;
-  // Settings shown in the Advanced tab (optional: fixtures and older
-  // integrations may not have them).
+  // Settings shown in the Advanced tab: null where the integration has no
+  // such entity. Optional only so older test fixtures needn't list them.
   crossModeMinMinutes?: string | null;
   lookaheadMinutes?: string | null;
   passiveTolerance?: string | null;

@@ -12,10 +12,10 @@
  *
  * Switches flip at once and roll back on rejection. Steppers move a step
  * per tap and send once the taps stop; choices send when picked. What's
- * shown stays until HA reports the change, or goes back if the call is
- * refused. A setting
- * whose entity isn't there (an older integration, or the entity turned
- * off) is left out, and the section says so.
+ * shown stays until HA reports the change (15 s at most), or goes back if
+ * the call is refused. A setting whose entity isn't there (an older
+ * integration, or the entity turned off) is left out, and the section
+ * says so.
  */
 
 import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
@@ -66,8 +66,9 @@ const pick = (
 /** A name someone typed, shown as typed. */
 const asTyped = (option: string) => option;
 
-/** Each section's settings, in order, worded from the integration's own
- *  documentation of what each one does. */
+/** Each section's settings, in order, each worded from what the
+ *  integration's code does with it. Where another part of the controller
+ *  can override a setting, the wording says only what's always true. */
 export const SETTINGS: Record<SettingsSection, { main: Setting[]; fine?: Setting[] }> = {
   comfort: {
     main: [
@@ -108,12 +109,12 @@ export const SETTINGS: Record<SettingsSection, { main: Setting[]; fine?: Setting
       sw(
         'learningEnabled',
         'Learning',
-        'Uses what this room has learned about how quickly it warms and cools to time heating and cooling: starting early rather than waiting for the room to get too cold or warm, stopping early so it doesn’t overshoot, and holding off while it’s already heading back on its own. Predictive control needs this on too. While it’s off, the room keeps recording readings; it just doesn’t act on what it has learned.',
+        'Uses what this room has learned about how quickly it warms and cools to time heating and cooling: starting early rather than waiting for the room to get too cold or warm, stopping early so it doesn’t overshoot, and holding off while it’s already heading back on its own. Predictive control needs this on too. While it’s off, the room keeps recording readings.',
       ),
       sw(
         'mpcEnabled',
         'Predictive control',
-        'Plans heating and cooling ahead, from what the room has learned and the schedule coming up. Needs Learning on. It plans only while it has recent enough readings of how this room warms and cools, usually after a few hours of normal running, and not during a peak or on a stand-in sensor.',
+        'Plans heating and cooling ahead, from what the room has learned and the schedule coming up. Needs Learning on. It plans only while it has recent enough readings of how this room warms and cools, usually after a few hours of normal running.',
       ),
     ],
     fine: [
@@ -154,7 +155,7 @@ export const SETTINGS: Record<SettingsSection, { main: Setting[]; fine?: Setting
       pick(
         'activeFanMode',
         'Fan while heating or cooling',
-        'The fan speed while the unit is working. With peak saving on, it’s left as it is during a peak.',
+        'The fan speed while the unit is working. Peak saving can leave it as it is during a peak.',
         optionLabel,
       ),
       pick(
@@ -170,17 +171,17 @@ export const SETTINGS: Record<SettingsSection, { main: Setting[]; fine?: Setting
       sw(
         'peakSavingEnabled',
         'Peak saving',
-        'Runs heating and cooling less in expensive power times. During one, the range widens, so the room drifts further before heating or cooling starts. Ahead of one that’s announced, the room is warmed or cooled a little within its range. An adjustment in force sets both aside. Needs a peak entity chosen under Settings → Devices & Services → Comfort Band → Configure.',
+        'Runs heating and cooling less in expensive power times. During one, the range widens, so the room drifts further before heating or cooling starts. Ahead of one that’s announced, the room can be warmed or cooled a little within its range. An adjustment in force sets both aside. Needs a peak entity chosen under Settings → Devices & Services → Comfort Band → Configure.',
       ),
       num(
         'peakHeatOffset',
         'Relax the bottom of the range by',
-        'How far the bottom of the range drops during a peak; heating still starts the usual amount below it. Ahead of one, how far the bottom rises to warm the room first.',
+        'How far the bottom of the range drops during a peak; heating still starts the usual amount below it. Ahead of one, up to how far the bottom rises to warm the room first.',
       ),
       num(
         'peakCoolOffset',
         'Relax the top of the range by',
-        'How far the top of the range rises during a peak; cooling still starts the usual amount above it. Ahead of one, how far the top falls to cool the room first.',
+        'How far the top of the range rises during a peak; cooling still starts the usual amount above it. Ahead of one, up to how far the top falls to cool the room first.',
       ),
       num(
         'peakPreconditionMinutes',
@@ -837,8 +838,9 @@ export class ComfortBandSettingsTab extends LitElement {
     desc: TemplateResult;
   }) {
     const on = this._isOn(opts.entityId);
-    // Takes no press from the tap until HA reports the change (or refuses
-    // it), so a double tap can't send turn_on and turn_off together.
+    // Takes no press from the tap until HA reports the change (15 s at most)
+    // or refuses it, so a double tap can't send turn_on and turn_off
+    // together.
     const pending = this._pending[opts.entityId] !== undefined;
     // Neither on nor off: HA says so rather than the switch looking off. HA
     // skips an unavailable entity in a call without an error.
