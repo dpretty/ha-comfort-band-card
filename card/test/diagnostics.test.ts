@@ -8,6 +8,7 @@ import {
   readRates,
   readRoomSource,
   roomSource,
+  type Rates,
 } from '../src/diagnostics.js';
 import type { ZoneEntities } from '../src/helpers.js';
 import type { HomeAssistant } from '../src/types.js';
@@ -15,6 +16,10 @@ import { stubConnection } from './_fixture.js';
 
 const ENTITIES = {
   roomTemperature: 'sensor.gym_room_temperature',
+  useApparentTemperature: 'switch.gym_use_apparent_temperature',
+  lookaheadMinutes: 'number.gym_lookahead_minutes',
+  mpcHorizonMinutes: 'number.gym_mpc_horizon_minutes',
+  peakHeatOffset: 'number.gym_peak_heat_offset',
   enabled: 'switch.gym_enabled',
   learningEnabled: 'switch.gym_learning_enabled',
   mpcEnabled: 'switch.gym_mpc_enabled',
@@ -42,9 +47,9 @@ const BASE: Record<string, Spec> = {
   'binary_sensor.gym_mpc_ready': 'on',
   'switch.gym_peak_saving_enabled': 'on',
   'sensor.gym_peak_saving': 'waiting',
-  'sensor.gym_current_action': 'heat',
+  'sensor.gym_current_action': 'heating',
   'sensor.gym_predicted_action': 'idle',
-  'sensor.gym_mpc_action': 'heat',
+  'sensor.gym_mpc_action': 'heating',
 };
 
 function makeHass(
@@ -77,9 +82,9 @@ describe('readDeciding', () => {
       noReading: false,
       controller: 'predictive',
       reason: null,
-      decision: 'heat',
+      decision: 'heating',
       learning: 'idle',
-      predictive: 'heat',
+      predictive: 'heating',
     });
   });
 
@@ -90,7 +95,7 @@ describe('readDeciding', () => {
 
   it('has Learning decide while predictive control is off', () => {
     const d = readDeciding(makeHass({ 'switch.gym_mpc_enabled': 'off' }), makeEntities());
-    expect([d.controller, d.reason, d.predictive]).toEqual(['learning', null, 'heat']);
+    expect([d.controller, d.reason, d.predictive]).toEqual(['learning', null, 'heating']);
   });
 
   it('has basic control decide while Learning is off, even with predictive control on', () => {
@@ -98,10 +103,100 @@ describe('readDeciding', () => {
     expect([d.controller, d.reason]).toEqual(['basic', 'learning-off']);
   });
 
+  // The integration's actions are "heating" and "cooling" (its ACTION_*).
+  it('reads the integration’s heating and cooling', () => {
+    const d = readDeciding(
+      makeHass({
+        'sensor.gym_current_action': 'cooling',
+        'sensor.gym_predicted_action': 'heating',
+      }),
+      makeEntities(),
+    );
+    expect([d.decision, d.learning]).toEqual(['cooling', 'heating']);
+  });
+
   // Before integration v0.4.0 there was no learning.
-  it('has basic control decide without a learning switch', () => {
+  it('has basic control decide where the integration has no learning', () => {
+    const d = readDeciding(
+      makeHass(),
+      makeEntities({
+        learningEnabled: null,
+        useApparentTemperature: null,
+        predictedAction: null,
+        thermalSlope: null,
+        lookaheadMinutes: null,
+        mpcEnabled: null,
+        mpcReady: null,
+        mpcAction: null,
+        mpcHorizonMinutes: null,
+      }),
+    );
+    expect([d.controller, d.reason]).toEqual(['basic', 'no-learning']);
+  });
+
+  // A turned-off entity drops out of the registry; the switch's setting
+  // still decides.
+  it('can’t tell with learning’s switch turned off as an entity', () => {
     const d = readDeciding(makeHass(), makeEntities({ learningEnabled: null }));
-    expect([d.controller, d.reason]).toEqual(['basic', 'learning-off']);
+    expect(d.controller).toBeNull();
+  });
+
+  // v0.4.0 and v0.5 had learning's switch but no learning.
+  it('can’t tell with learning on but no learning to be had', () => {
+    const d = readDeciding(
+      makeHass(),
+      makeEntities({
+        predictedAction: null,
+        thermalSlope: null,
+        lookaheadMinutes: null,
+        mpcEnabled: null,
+        mpcReady: null,
+        mpcAction: null,
+        mpcHorizonMinutes: null,
+      }),
+    );
+    expect(d.controller).toBeNull();
+  });
+
+  it('has Learning decide where the integration has no predictive control', () => {
+    const d = readDeciding(
+      makeHass(),
+      makeEntities({ mpcEnabled: null, mpcReady: null, mpcAction: null, mpcHorizonMinutes: null }),
+    );
+    expect([d.controller, d.reason]).toEqual(['learning', null]);
+  });
+
+  it('can’t tell with predictive control’s switch turned off as an entity', () => {
+    const d = readDeciding(makeHass(), makeEntities({ mpcEnabled: null }));
+    expect(d.controller).toBeNull();
+  });
+
+  // A stand-in may be in use without it.
+  it('can’t tell without the room temperature entity, or while it can’t be read', () => {
+    expect(readDeciding(makeHass(), makeEntities({ roomTemperature: null })).controller).toBeNull();
+    const unavailable = readDeciding(
+      makeHass({ 'sensor.gym_room_temperature': 'unavailable' }),
+      makeEntities(),
+    );
+    expect([unavailable.controller, unavailable.noReading]).toEqual([null, false]);
+  });
+
+  it('puts a stand-in before an unreadable peak status', () => {
+    const d = readDeciding(
+      makeHass({
+        'sensor.gym_room_temperature': { state: '21', attributes: { source: 'climate' } },
+        'sensor.gym_peak_saving': 'unavailable',
+      }),
+      makeEntities(),
+    );
+    expect([d.controller, d.reason]).toEqual(['basic', 'stand-in']);
+  });
+
+  it('can’t tell whether it’s paused without its switch', () => {
+    expect(readDeciding(makeHass(), makeEntities({ enabled: null })).paused).toBeNull();
+    expect(
+      readDeciding(makeHass({ 'switch.gym_enabled': 'unavailable' }), makeEntities()).paused,
+    ).toBeNull();
   });
 
   it('has basic control decide while a peak relaxes the range', () => {
@@ -142,7 +237,10 @@ describe('readDeciding', () => {
 
   // Before integration v0.24.0 there was no peak saving.
   it('tells there’s no peak without peak saving at all', () => {
-    const d = readDeciding(makeHass(), makeEntities({ peakSaving: null, peakSavingEnabled: null }));
+    const d = readDeciding(
+      makeHass(),
+      makeEntities({ peakSaving: null, peakSavingEnabled: null, peakHeatOffset: null }),
+    );
     expect(d.controller).toBe('predictive');
   });
 
@@ -176,12 +274,12 @@ describe('readDeciding', () => {
   it('can’t tell without the readiness sensor while predictive control is on', () => {
     const d = readDeciding(makeHass(), makeEntities({ mpcReady: null }));
     expect(d.controller).toBeNull();
-    expect(d.predictive).toBe('heat');
+    expect(d.predictive).toBe('heating');
   });
 
   it('says it’s paused while "Control this room" is off, and still what it decides', () => {
     const d = readDeciding(makeHass({ 'switch.gym_enabled': 'off' }), makeEntities());
-    expect([d.paused, d.controller, d.decision]).toEqual([true, 'predictive', 'heat']);
+    expect([d.paused, d.controller, d.decision]).toEqual([true, 'predictive', 'heating']);
   });
 
   it('says there’s no reading, from the source or an old integration’s state', () => {
@@ -251,10 +349,10 @@ describe('readRates', () => {
 
   it('says how the room drifts on its own, and where that came from', () => {
     const at = (attributes: Record<string, unknown>) =>
-      readRates(slope(attributes), makeEntities())!.idle;
+      (readRates(slope(attributes), makeEntities()) as Rates).idle;
     expect(at({ idle_slope: 0.398, idle_slope_source: 'live' })).toEqual({
       value: 'Warms about 0.4° an hour',
-      source: 'Learned from recent readings.',
+      source: 'From the latest readings while idle.',
       known: true,
     });
     expect(
@@ -283,7 +381,7 @@ describe('readRates', () => {
 
   it('says how fast heating and cooling move it, and where that came from', () => {
     const r = (attributes: Record<string, unknown>) =>
-      readRates(slope(attributes), makeEntities())!;
+      readRates(slope(attributes), makeEntities()) as Rates;
     expect(r({ recovery_slope_heat: 1.234, method_recovery_heat: 'wls' }).heat).toEqual({
       value: 'Warms it about 1.2° an hour',
       source: 'From the latest heating run.',
@@ -291,7 +389,7 @@ describe('readRates', () => {
     });
     expect(r({ recovery_slope_heat: 0.04, method_recovery_heat: 'previous' }).heat).toEqual({
       value: 'Warms it under 0.1° an hour',
-      source: 'From the heating run before this one, which is too short to tell yet.',
+      source: 'From an earlier heating run, as the latest is too short to tell.',
       known: true,
     });
     expect(r({ recovery_slope_cool: -0.81, method_recovery_cool: 'wls' }).cool).toEqual({
@@ -315,6 +413,22 @@ describe('readRates', () => {
     });
   });
 
+  // One decimal is shown: under 0.1 would read as 0.
+  it('words the edges of its roundings', () => {
+    const r = (attributes: Record<string, unknown>) =>
+      readRates(slope(attributes), makeEntities()) as Rates;
+    expect(r({ idle_slope: 0.049 }).idle.value).toBe('Holds steady');
+    expect(r({ idle_slope: -0.05 }).idle.value).toBe('Cools under 0.1° an hour');
+    expect(r({ recovery_slope_heat: 0.099 }).heat.value).toBe('Warms it under 0.1° an hour');
+    expect(r({ recovery_slope_heat: 0.1 }).heat.value).toBe('Warms it about 0.1° an hour');
+    const aged = (minutes: number) =>
+      r({ idle_slope: 0.3, idle_slope_source: 'cached', idle_slope_cached_age_min: minutes }).idle
+        .source;
+    expect(aged(0.2)).toBe('From earlier readings, 1 minute old.');
+    expect(aged(89)).toBe('From earlier readings, 89 minutes old.');
+    expect(aged(90)).toBe('From earlier readings, about 2 hours old.');
+  });
+
   it('keeps the raw numbers for the details', () => {
     const r = readRates(
       slope({
@@ -335,7 +449,7 @@ describe('readRates', () => {
         method_recovery_cool: 'none',
       }),
       makeEntities(),
-    )!;
+    ) as Rates;
     expect(r.details).toEqual([
       { name: 'On its own', perHour: 0.398, samples: 12, spread: 0.1174, method: 'wls' },
       { name: 'Heating', perHour: 1.234, samples: 7, spread: 0.21, method: 'previous' },
@@ -351,7 +465,10 @@ describe('readRates', () => {
   // Its state is unknown when the latest action's rate is; the rest stands.
   it('reads the rates while the sensor’s own state is unknown, not while it’s unavailable', () => {
     expect(readRates(slope({ idle_slope: 0.4 }, 'unknown'), makeEntities())).not.toBeNull();
-    expect(readRates(slope({ idle_slope: 0.4 }, 'unavailable'), makeEntities())).toBeNull();
+    expect(readRates(slope({ idle_slope: 0.4 }, 'unavailable'), makeEntities())).toBe(
+      'unavailable',
+    );
+    expect(readRates(makeHass(), makeEntities())).toBe('unavailable');
     expect(readRates(makeHass(), makeEntities({ thermalSlope: null }))).toBeNull();
   });
 });
@@ -418,12 +535,12 @@ describe('readRoomSource', () => {
     ).toEqual({
       title: 'Room reading',
       value: 'Its own sensor',
-      desc: `If that goes offline, after a short wait Hall temperature, then the unit’s own reading stands in. ${CONFIGURE}`,
+      desc: `If that goes offline for 5 minutes, Hall temperature stands in if it has a reading, otherwise the unit’s own reading if it has one. ${CONFIGURE}`,
     });
     expect(
       at({ source: 'primary', fallback_temp_sensor: null, fallback_to_climate: true })!.desc,
     ).toBe(
-      `If that goes offline, after a short wait the unit’s own reading stands in. ${CONFIGURE}`,
+      `If that goes offline for 5 minutes, the unit’s own reading stands in if it has a reading. ${CONFIGURE}`,
     );
     expect(
       at({ source: 'primary', fallback_temp_sensor: null, fallback_to_climate: false })!.desc,
@@ -431,6 +548,15 @@ describe('readRoomSource', () => {
     expect(at({ source: 'primary' })!.desc).toBe(
       `If that goes offline, control is on hold until it’s back. ${CONFIGURE}`,
     );
+  });
+
+  it('names a stand-in without a name by its entity', () => {
+    expect(
+      at(
+        { source: 'fallback_sensor', fallback_temp_sensor: 'sensor.hall' },
+        { 'sensor.hall': { state: '20', attributes: { friendly_name: '' } } },
+      )!.value,
+    ).toBe('Stand-in: sensor.hall');
   });
 
   it('names the stand-in in use', () => {
@@ -451,8 +577,12 @@ describe('readRoomSource', () => {
     expect(at({ source: 'none' })).toEqual({
       title: 'Room reading',
       value: 'None right now',
-      desc: 'Neither its own sensor nor a stand-in has a reading, so control is on hold.',
+      desc: 'Its own sensor has no reading and no stand-in is set up, so control is on hold.',
     });
+    // FALLBACK_GRACE_S: no stand-in is tried for the first 5 minutes.
+    expect(at({ source: 'none', fallback_to_climate: true })!.desc).toBe(
+      'Its own sensor has no reading, so control is on hold. Once it has been offline for 5 minutes, the unit’s own reading stands in if it has a reading.',
+    );
   });
 
   // Integration v0.18.0 added stand-ins and the source.
@@ -474,6 +604,39 @@ describe('formatWhen', () => {
     expect(formatWhen(at(-3, 9), now, hass)).toBe('Tue 09:30');
     expect(formatWhen(at(4, 9), now, hass)).toBe('Tue 09:30');
     expect(formatWhen(at(-10, 9), now, hass)).toBe('13 Oct, 09:30');
+    expect(formatWhen(at(-7, 9), now, hass)).toBe('16 Oct, 09:30');
+    expect(formatWhen(at(7, 9), now, hass)).toBe('30 Oct, 09:30');
+  });
+
+  // The feedback goes back up to 2000 taps.
+  it('gives the year of another year', () => {
+    expect(formatWhen(new Date(2025, 8, 21, 13, 0).getTime(), now, hass)).toBe(
+      '21 Sept 2025, 13:00',
+    );
+  });
+
+  // The card's words are English: so are its days and months.
+  it('words days and months in English, whatever HA’s language', () => {
+    const de = { locale: { language: 'de', time_format: '24' as const } };
+    expect(formatWhen(at(-3, 9), now, de)).toBe('Tue 09:30');
+    const us = { locale: { language: 'en-US', time_format: '12' as const } };
+    expect(formatWhen(at(-10, 9), now, us)).toBe('Oct 13, 9:30 AM');
+  });
+
+  // A day that's 23 hours long: the clocks went forward overnight.
+  it('counts days across a change of the clocks', () => {
+    const env = (globalThis as unknown as { process: { env: Record<string, string | undefined> } })
+      .process.env;
+    const was = env.TZ;
+    env.TZ = 'Europe/London';
+    try {
+      const before = new Date(2026, 2, 28, 12, 0).getTime();
+      expect(formatWhen(new Date(2026, 2, 29, 13, 0).getTime(), before, hass)).toBe(
+        'tomorrow 13:00',
+      );
+    } finally {
+      env.TZ = was;
+    }
   });
 });
 
@@ -535,6 +698,13 @@ describe('readPeak', () => {
       value: 'Cooling ahead',
       desc: 'Getting the room ready for the peak: the top down 0.5°.',
     });
+  });
+
+  // Clamped by the unit's limits, an edge can move by next to nothing.
+  it('leaves out an edge moved by less than 0.05°', () => {
+    expect(at('active', { low_adjustment: -0.04, high_adjustment: 0.05 })!.desc).toBe(
+      'The range is relaxed: the top up 0.1°. Basic control decides meanwhile.',
+    );
   });
 
   it('says how a peak on relaxes the range, and until when', () => {

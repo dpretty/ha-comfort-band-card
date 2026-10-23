@@ -112,7 +112,7 @@ const row = (el: ComfortBandDiagnosticsTab, id: string) => rows(el).find((r) => 
 
 describe('comfort-band-diagnostics-tab deciding', () => {
   it('says who decides, what it decided, and what each would do', async () => {
-    const el = await diagnostics(makeHass({ 'sensor.gym_mpc_action': 'heat' }));
+    const el = await diagnostics(makeHass({ 'sensor.gym_mpc_action': 'heating' }));
     expect(rows(el).slice(0, 4)).toEqual([
       {
         id: 'controller',
@@ -128,7 +128,7 @@ describe('comfort-band-diagnostics-tab deciding', () => {
 
   it('says what predictive control would do once it’s ready', async () => {
     const el = await diagnostics(
-      makeHass({ 'binary_sensor.gym_mpc_ready': 'on', 'sensor.gym_mpc_action': 'heat' }),
+      makeHass({ 'binary_sensor.gym_mpc_ready': 'on', 'sensor.gym_mpc_action': 'heating' }),
     );
     expect(row(el, 'controller')!.value).toBe('Predictive control');
     expect(row(el, 'controller')!.desc).toBeNull();
@@ -136,17 +136,11 @@ describe('comfort-band-diagnostics-tab deciding', () => {
   });
 
   it.each([
-    [
-      { 'switch.gym_learning_enabled': 'off' },
-      'Learning is off. It starts heating or cooling once the room passes the range in force by the amounts set under Comfort, and stops at the range.',
-    ],
-    [
-      { 'sensor.gym_peak_saving': 'active' },
-      'While a peak is on. It starts heating or cooling once the room passes the range in force by the amounts set under Comfort, and stops at the range.',
-    ],
+    [{ 'switch.gym_learning_enabled': 'off' }, 'Learning is off.'],
+    [{ 'sensor.gym_peak_saving': 'active' }, 'While a peak is on.'],
     [
       { 'sensor.gym_room_temperature': { state: '21', attributes: { source: 'climate' } } },
-      'While a stand-in sensor is in use. It starts heating or cooling once the room passes the range in force by the amounts set under Comfort, and stops at the range.',
+      'While a stand-in sensor is in use.',
     ],
   ])('says why basic control decides', async (states, desc) => {
     const el = await diagnostics(makeHass(states));
@@ -188,6 +182,47 @@ describe('comfort-band-diagnostics-tab deciding', () => {
   });
 
   // Before integration v0.6.0 / v0.8.0.
+  // The integration's actions are "heating" and "cooling".
+  it('words heating and cooling', async () => {
+    const el = await diagnostics(
+      makeHass({
+        'binary_sensor.gym_mpc_ready': 'on',
+        'sensor.gym_current_action': 'heating',
+        'sensor.gym_predicted_action': 'cooling',
+        'sensor.gym_mpc_action': 'heating',
+      }),
+    );
+    expect(['decision', 'learning', 'predictive'].map((id) => row(el, id)!.value)).toEqual([
+      'Heat',
+      'Cool',
+      'Heat',
+    ]);
+  });
+
+  it('says it can’t tell whether it’s paused, or that it is with no reading', async () => {
+    const unknown = await diagnostics(makeHass({ 'switch.gym_enabled': 'unavailable' }));
+    expect(row(unknown, 'paused')).toEqual({
+      id: 'paused',
+      title: 'Control this room',
+      value: 'Can’t tell',
+      desc: 'Whether it’s paused can’t be read right now.',
+    });
+    unknown.remove();
+    const both = await diagnostics(
+      makeHass({
+        'switch.gym_enabled': 'off',
+        'sensor.gym_room_temperature': { state: 'unknown', attributes: { source: 'none' } },
+      }),
+    );
+    expect(rows(both).map((r) => r.id)).toEqual(['paused', 'on-hold', 'idle', 'heat', 'cool']);
+  });
+
+  // Its readiness alone says whether it's ready (v0.8.0+).
+  it('says whether predictive control is ready without what it would do', async () => {
+    const el = await diagnostics(makeHass(), makeEntities({ mpcAction: null }));
+    expect(row(el, 'predictive')!.value).toBe('Not ready yet');
+  });
+
   it('leaves out a controller the integration doesn’t have', async () => {
     const el = await diagnostics(
       makeHass(),
@@ -206,7 +241,7 @@ describe('comfort-band-diagnostics-tab rates', () => {
         id: 'idle',
         title: 'On its own',
         value: 'Warms about 0.4° an hour',
-        desc: 'Learned from recent readings.',
+        desc: 'From the latest readings while idle.',
       },
       {
         id: 'heat',
@@ -236,7 +271,7 @@ describe('comfort-band-diagnostics-tab rates', () => {
       ['Heating', '+1.23', '7', '0.21°', 'Fitted'],
       ['Cooling', '—', '0', '0.00°', '—'],
     ]);
-    expect(text(details.querySelector('.note'))).toBe('From 19 readings over the last 88 minutes.');
+    expect(text(details.querySelector('.note'))).toBe('From 19 readings spanning 88 minutes.');
   });
 
   it('says when they were worked out', async () => {
@@ -249,7 +284,7 @@ describe('comfort-band-diagnostics-tab rates', () => {
       }),
     );
     expect(text(el.shadowRoot!.querySelector('details.more .note'))).toMatch(
-      /^From 19 readings over the last 88 minutes\. Worked out (\d\d:\d\d|yesterday \d\d:\d\d)\.$/,
+      /^From 19 readings spanning 88 minutes\. The newest is from (\d\d:\d\d|yesterday \d\d:\d\d)\.$/,
     );
   });
 
@@ -263,13 +298,41 @@ describe('comfort-band-diagnostics-tab rates', () => {
       }),
     );
     const first = el.shadowRoot!.querySelector('details.more tbody tr')!;
+    // Its readings and spread are the latest run's, not this rate's.
     expect(Array.from(first.children).map((c) => text(c))).toEqual([
       'On its own',
       '−0.50',
-      '12',
-      '0.12°',
+      '—',
+      '—',
       'Earlier',
     ]);
+  });
+
+  it('leaves out the latest run’s readings beside a rate from the run before', async () => {
+    const el = await diagnostics(
+      makeHass({
+        'sensor.gym_thermal_slope': {
+          state: '1.2',
+          attributes: { ...SLOPE, method_recovery_heat: 'previous' },
+        },
+      }),
+    );
+    const heat = el.shadowRoot!.querySelectorAll('details.more tbody tr')[1];
+    expect(Array.from(heat.children).map((c) => text(c))).toEqual([
+      'Heating',
+      '+1.23',
+      '—',
+      '—',
+      'Run before',
+    ]);
+  });
+
+  // During a restart or a reload: not an old integration.
+  it('says it can’t read what it has learned while that sensor is unavailable', async () => {
+    const el = await diagnostics(makeHass({ 'sensor.gym_thermal_slope': 'unavailable' }));
+    expect(Array.from(el.shadowRoot!.querySelectorAll('.note')).map((n) => text(n))).toContain(
+      'What it has learned can’t be read right now.',
+    );
   });
 
   it('says what it needs without the learning sensor', async () => {
@@ -317,10 +380,10 @@ describe('comfort-band-diagnostics-tab feedback', () => {
     const el = await diagnostics(makeHass({}, callWS));
     await settle(el);
     expect(items(el)).toEqual([
-      { said: 'Just right', detail: '21° in 19.5–22.5° · stand-in reading · ahead of a peak' },
+      { said: 'Just right', detail: '21°, range 19.5–22.5° · stand-in reading · ahead of a peak' },
       { said: 'Just right', detail: 'no reading, range 19.5–22.5°' },
-      { said: 'Too warm', detail: '23.4° in 20–23° · during a peak' },
-      { said: 'Too cool', detail: '19.2° in 19.5–22.5°' },
+      { said: 'Too warm', detail: '23.4°, range 20–23° · during a peak' },
+      { said: 'Too cool', detail: '19.2°, range 19.5–22.5°' },
     ]);
   });
 
@@ -333,14 +396,51 @@ describe('comfort-band-diagnostics-tab feedback', () => {
     );
   });
 
+  it('says nothing more with exactly that many', async () => {
+    const entries = Array.from({ length: FEEDBACK_SHOWN }, (_, i) => entry(10 - i));
+    const el = await diagnostics(makeHass({}, vi.fn().mockResolvedValue({ entries })));
+    await settle(el);
+    expect(items(el)).toHaveLength(FEEDBACK_SHOWN);
+    expect(el.shadowRoot!.querySelector('[role="status"] .note')).toBeNull();
+  });
+
+  it('leaves out a time it can’t read', async () => {
+    const el = await diagnostics(
+      makeHass({}, vi.fn().mockResolvedValue({ entries: [entry(1, { timestamp: 'soon' })] })),
+    );
+    await settle(el);
+    expect(text(el.shadowRoot!.querySelector('li .detail'))).toBe('21°, range 19.5–22.5°');
+  });
+
+  // Loading, its answer, and nothing yet are announced as they change.
+  it('announces the feedback as it loads', async () => {
+    const el = await diagnostics();
+    await settle(el);
+    expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toContain('None yet.');
+  });
+
+  it('says it’s loading again for another room', async () => {
+    const callWS = vi
+      .fn()
+      .mockResolvedValueOnce({ entries: [entry(1)] })
+      .mockReturnValue(new Promise(() => {}));
+    const el = await diagnostics(makeHass({}, callWS));
+    await settle(el);
+    expect(items(el)).toHaveLength(1);
+    el.zone = 'office';
+    await settle(el);
+    expect(lastNote(el)).toBe('Loading…');
+    expect(items(el)).toHaveLength(0);
+  });
+
   it(`shows the last ${FEEDBACK_SHOWN}, and says how many there are`, async () => {
     const entries = Array.from({ length: 14 }, (_, i) => entry(14 - i, { room_temp: 10 + i }));
     const el = await diagnostics(makeHass({}, vi.fn().mockResolvedValue({ entries })));
     await settle(el);
     const shown = items(el);
     expect(shown).toHaveLength(10);
-    expect(shown[0].detail).toBe('23° in 19.5–22.5°');
-    expect(shown[9].detail).toBe('14° in 19.5–22.5°');
+    expect(shown[0].detail).toBe('23°, range 19.5–22.5°');
+    expect(shown[9].detail).toBe('14°, range 19.5–22.5°');
     expect(lastNote(el)).toBe('The last 10 of 14.');
   });
 

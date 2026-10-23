@@ -7,7 +7,10 @@
  * Each reading mirrors the integration's own code: the coordinator's choice
  * of controller, and the `thermal_slope`, `mpc_ready`, `predicted_action`,
  * `mpc_action`, `room_temperature` and `peak_saving` entities. Where an input
- * can't be read, it says it can't tell rather than guess.
+ * can't be read, it says it can't tell rather than guess. An entity that's
+ * missing counts as a feature the integration doesn't have only where none
+ * of the entities that came with it is there either; otherwise it's turned
+ * off, and can't be read.
  */
 
 import type { ZoneEntities } from './helpers.js';
@@ -15,7 +18,8 @@ import type { HassEntity, HomeAssistant } from './types.js';
 import { degrees, formatTime } from './now-status.js';
 
 export type Controller = 'basic' | 'learning' | 'predictive';
-export type Action = 'heat' | 'cool' | 'idle' | 'unknown';
+/** The integration's actions (`ACTION_*` in its `const.py`). */
+export type Action = 'heating' | 'cooling' | 'idle' | 'unknown';
 
 export const CONTROLLER_NAMES: Record<Controller, string> = {
   basic: 'Basic control',
@@ -24,8 +28,8 @@ export const CONTROLLER_NAMES: Record<Controller, string> = {
 };
 
 export const ACTION_WORDS: Record<Action, string> = {
-  heat: 'Heat',
-  cool: 'Cool',
+  heating: 'Heat',
+  cooling: 'Cool',
   idle: 'Stay idle',
   unknown: 'Nothing',
 };
@@ -52,10 +56,38 @@ function switchState(
 }
 
 function action(state: string | undefined): Action | null {
-  return state === 'heat' || state === 'cool' || state === 'idle' || state === 'unknown'
+  return state === 'heating' || state === 'cooling' || state === 'idle' || state === 'unknown'
     ? state
     : null;
 }
+
+/** Whether the integration has any of the entities that came with a
+ *  feature: then a missing one of them is turned off, not absent. */
+function hasAny(entities: ZoneEntities, fields: Array<keyof ZoneEntities>): boolean {
+  return fields.some((f) => typeof entities[f] === 'string');
+}
+
+/** The entities each release brought, to tell a turned-off entity from one
+ *  the integration doesn't have. */
+const SINCE_V0_4: Array<keyof ZoneEntities> = ['learningEnabled', 'useApparentTemperature'];
+const SINCE_V0_6: Array<keyof ZoneEntities> = [
+  'predictedAction',
+  'thermalSlope',
+  'lookaheadMinutes',
+];
+const SINCE_V0_8: Array<keyof ZoneEntities> = [
+  'mpcEnabled',
+  'mpcReady',
+  'mpcAction',
+  'mpcHorizonMinutes',
+];
+const SINCE_V0_24: Array<keyof ZoneEntities> = [
+  'peakSaving',
+  'peakSavingEnabled',
+  'peakHeatOffset',
+  'peakCoolOffset',
+  'peakPreconditionMinutes',
+];
 
 /** Where the room's reading comes from (`room_temperature`'s `source`,
  *  integration v0.18.0+). Before then there was no stand-in: "primary". */
@@ -82,21 +114,20 @@ function peakRelaxing(hass: HomeAssistant, entities: ZoneEntities): boolean | nu
   if (peak && PEAK_STATES.includes(peak.state)) return peak.state === 'active';
   // Without its status: no peak saving at all before integration v0.24.0, and
   // none while it's switched off.
-  const enabled = switchState(hass, entities, 'peakSavingEnabled');
-  if (enabled === 'off') return false;
-  if (enabled === 'missing' && typeof entities.peakSaving !== 'string') return false;
-  return null;
+  if (switchState(hass, entities, 'peakSavingEnabled') === 'off') return false;
+  return hasAny(entities, SINCE_V0_24) ? null : false;
 }
 
 export interface Deciding {
-  /** "Control this room" is off: nothing is sent, but it still decides. */
-  paused: boolean;
+  /** "Control this room" is off: nothing is sent, but it still decides.
+   *  Null where that switch can't be read. */
+  paused: boolean | null;
   /** No reading from the room's sensor or a stand-in: nothing is decided. */
   noReading: boolean;
   /** Who decides now, or null where it can't be told. */
   controller: Controller | null;
   /** Why it's that one, where there's more to say. */
-  reason: 'stand-in' | 'peak' | 'learning-off' | 'not-ready' | null;
+  reason: 'stand-in' | 'peak' | 'learning-off' | 'no-learning' | 'not-ready' | null;
   /** What it decided (`current_action`). */
   decision: Action | null;
   /** What learning would do now (`predicted_action`). */
@@ -115,8 +146,9 @@ export interface Deciding {
 export function readDeciding(hass: HomeAssistant, entities: ZoneEntities): Deciding {
   const source = roomSource(hass, entities);
   const ready = switchState(hass, entities, 'mpcReady');
+  const enabled = switchState(hass, entities, 'enabled');
   const result: Deciding = {
-    paused: switchState(hass, entities, 'enabled') === 'off',
+    paused: enabled === 'on' ? false : enabled === 'off' ? true : null,
     noReading: source === 'none',
     controller: null,
     reason: null,
@@ -124,6 +156,8 @@ export function readDeciding(hass: HomeAssistant, entities: ZoneEntities): Decid
     learning: action(entity(hass, entities, 'predictedAction')?.state),
     predictive: ready === 'off' ? 'not-ready' : action(entity(hass, entities, 'mpcAction')?.state),
   };
+  // Where the reading comes from can't be told: a stand-in may be in use.
+  if (source === null) return result;
   if (source === 'fallback_sensor' || source === 'climate') {
     return { ...result, controller: 'basic', reason: 'stand-in' };
   }
@@ -132,10 +166,20 @@ export function readDeciding(hass: HomeAssistant, entities: ZoneEntities): Decid
   if (relaxing) return { ...result, controller: 'basic', reason: 'peak' };
   const learning = switchState(hass, entities, 'learningEnabled');
   if (learning === 'unknown') return result;
-  if (learning !== 'on') return { ...result, controller: 'basic', reason: 'learning-off' };
+  if (learning === 'missing') {
+    return hasAny(entities, SINCE_V0_4)
+      ? result
+      : { ...result, controller: 'basic', reason: 'no-learning' };
+  }
+  if (learning === 'off') return { ...result, controller: 'basic', reason: 'learning-off' };
+  // Learning's switch came before learning did (v0.4.0, v0.6.0).
+  if (!hasAny(entities, SINCE_V0_6)) return result;
   const mpc = switchState(hass, entities, 'mpcEnabled');
   if (mpc === 'unknown') return result;
-  if (mpc !== 'on') return { ...result, controller: 'learning' };
+  if (mpc === 'missing') {
+    return hasAny(entities, SINCE_V0_8) ? result : { ...result, controller: 'learning' };
+  }
+  if (mpc === 'off') return { ...result, controller: 'learning' };
   if (ready === 'on') return { ...result, controller: 'predictive' };
   if (ready === 'off') return { ...result, controller: 'learning', reason: 'not-ready' };
   return result;
@@ -143,7 +187,7 @@ export function readDeciding(hass: HomeAssistant, entities: ZoneEntities): Decid
 
 /** The Diagnostics section's one-line summary. */
 export function decidingSummary(d: Deciding): string {
-  if (d.paused) return 'Paused';
+  if (d.paused === true) return 'Paused';
   if (d.noReading) return 'On hold';
   return d.controller ? `${CONTROLLER_NAMES[d.controller]} deciding` : '';
 }
@@ -220,17 +264,22 @@ function recoveryRate(kind: 'heat' | 'cool', perHour: number | null, method: unk
     value: `${verb} ${amount(perHour)} an hour`,
     source:
       method === 'previous'
-        ? `From the ${run} run before this one, which is too short to tell yet.`
+        ? `From an earlier ${run} run, as the latest is too short to tell.`
         : `From the latest ${run} run.`,
     known: true,
   };
 }
 
 /** What learning has learned (`thermal_slope`'s attributes, integration
- *  v0.6.0+), or null without that sensor. */
-export function readRates(hass: HomeAssistant, entities: ZoneEntities): Rates | null {
+ *  v0.6.0+): null without that sensor, "unavailable" while it can't be
+ *  read. */
+export function readRates(
+  hass: HomeAssistant,
+  entities: ZoneEntities,
+): Rates | 'unavailable' | null {
+  if (typeof entities.thermalSlope !== 'string') return null;
   const slope = entity(hass, entities, 'thermalSlope');
-  if (!slope || slope.state === 'unavailable') return null;
+  if (!slope || slope.state === 'unavailable') return 'unavailable';
   const a = slope.attributes;
   const idlePerHour = num(a.idle_slope);
   const cachedAge = num(a.idle_slope_cached_age_min);
@@ -250,7 +299,7 @@ export function readRates(hass: HomeAssistant, entities: ZoneEntities): Rates | 
       source:
         a.idle_slope_source === 'cached'
           ? `From earlier readings${cachedAge !== null ? `, ${age(cachedAge)} old` : ''}.`
-          : 'Learned from recent readings.',
+          : 'From the latest readings while idle.',
       known: true,
     };
   }
@@ -316,7 +365,8 @@ export function readReadiness(hass: HomeAssistant, entities: ZoneEntities): Stat
       desc: 'It has learned how this room drifts on its own and how fast heating or cooling moves it.',
     };
   }
-  const rates = readRates(hass, entities);
+  const read = readRates(hass, entities);
+  const rates = read === 'unavailable' ? null : read;
   const missing: string[] = [];
   if (rates && !rates.idle.known) missing.push('how this room drifts on its own');
   if (rates && !rates.heat.known && !rates.cool.known) {
@@ -350,17 +400,21 @@ export function readRoomSource(hass: HomeAssistant, entities: ZoneEntities): Sta
   const title = 'Room reading';
   const standIn = friendlyName(hass, room.attributes.fallback_temp_sensor);
   const climate = room.attributes.fallback_to_climate === true;
+  const backups = [standIn, climate ? 'the unit’s own reading' : null].filter(Boolean);
+  // The coordinator tries the stand-ins only once its own sensor has been
+  // offline for FALLBACK_GRACE_S (5 minutes).
+  const standsIn = `${backups[0]} stands in if it has a reading${
+    backups.length > 1 ? `, otherwise ${backups[1]} if it has one` : ''
+  }`;
   switch (room.attributes.source) {
-    case 'primary': {
-      const backups = [standIn, climate ? 'the unit’s own reading' : null].filter(Boolean);
+    case 'primary':
       return {
         title,
         value: 'Its own sensor',
         desc: backups.length
-          ? `If that goes offline, after a short wait ${backups.join(', then ')} stands in. ${CONFIGURE}`
+          ? `If that goes offline for 5 minutes, ${standsIn}. ${CONFIGURE}`
           : `If that goes offline, control is on hold until it’s back. ${CONFIGURE}`,
       };
-    }
     case 'fallback_sensor':
       return {
         title,
@@ -377,7 +431,9 @@ export function readRoomSource(hass: HomeAssistant, entities: ZoneEntities): Sta
       return {
         title,
         value: 'None right now',
-        desc: 'Neither its own sensor nor a stand-in has a reading, so control is on hold.',
+        desc: backups.length
+          ? `Its own sensor has no reading, so control is on hold. Once it has been offline for 5 minutes, ${standsIn}.`
+          : 'Its own sensor has no reading and no stand-in is set up, so control is on hold.',
       };
     default:
       return null;
@@ -396,11 +452,20 @@ export function formatWhen(ms: number, now: number, hass?: Pick<HomeAssistant, '
   if (days === 0) return time;
   if (days === 1) return `tomorrow ${time}`;
   if (days === -1) return `yesterday ${time}`;
-  const language = hass?.locale?.language;
+  // The words around the time are English, as the card's are; HA's own
+  // language only where it's an English one, for its date order.
+  const own = hass?.locale?.language;
+  const language = own?.startsWith('en') ? own : 'en';
   if (Math.abs(days) < 7) {
     return `${new Intl.DateTimeFormat(language, { weekday: 'short' }).format(ms)} ${time}`;
   }
-  return `${new Intl.DateTimeFormat(language, { day: 'numeric', month: 'short' }).format(ms)}, ${time}`;
+  const sameYear = new Date(ms).getFullYear() === new Date(now).getFullYear();
+  const date = new Intl.DateTimeFormat(language, {
+    day: 'numeric',
+    month: 'short',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  }).format(ms);
+  return `${date}, ${time}`;
 }
 
 function when(value: unknown, now: number, hass: HomeAssistant): string | null {

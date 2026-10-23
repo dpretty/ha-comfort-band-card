@@ -297,6 +297,8 @@ export class ComfortBandSettingsTab extends LitElement {
       }
       .row-label .desc {
         margin-top: 4px;
+        /* An entity ID named in it wraps rather than widening the dialog. */
+        overflow-wrap: anywhere;
         font-size: 12px;
         color: var(--cb-text-secondary);
         line-height: 1.35;

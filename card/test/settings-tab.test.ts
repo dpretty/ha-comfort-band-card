@@ -1304,7 +1304,7 @@ describe('comfort-band-settings-tab status', () => {
     expect(status(el, 'source')).toEqual([
       'Room reading',
       'Its own sensor',
-      'If that goes offline, after a short wait the unit’s own reading stands in. Set under Settings → Devices & Services → Comfort Band → Configure.',
+      'If that goes offline for 5 minutes, the unit’s own reading stands in if it has a reading. Set under Settings → Devices & Services → Comfort Band → Configure.',
     ]);
   });
 
@@ -1358,6 +1358,11 @@ describe('comfort-band-settings-tab status', () => {
 });
 
 describe('comfort-band-settings-tab humidity sensor', () => {
+  // A stand-in named only by its entity ID.
+  it('wraps a long word in an explanation rather than widening the dialog', () => {
+    expect(css()).toMatch(/\.row-label \.desc\s*\{[^}]*overflow-wrap:\s*anywhere/);
+  });
+
   const withRoom = (attributes: Record<string, unknown>, extra: Record<string, StateSpec> = {}) =>
     makeHass({
       states: { 'sensor.gym_room_temperature': { state: '21.0', attributes }, ...extra },

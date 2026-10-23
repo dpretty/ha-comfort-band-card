@@ -110,6 +110,7 @@ export class ComfortBandDiagnosticsTab extends LitElement {
       }
       .desc,
       .note {
+        overflow-wrap: anywhere;
         margin-top: 4px;
         font-size: 12px;
         line-height: 1.35;
@@ -242,14 +243,16 @@ export class ComfortBandDiagnosticsTab extends LitElement {
       <h3>Heating and cooling</h3>
       ${this._renderDeciding(deciding)}
       <h3>What it has learned</h3>
-      ${rates
-        ? this._renderRates(rates)
-        : html`<div class="note">
-            What it has learned needs the <code>comfort_band</code> integration v0.6.0 or later,
-            with its entities turned on.
-          </div>`}
+      ${rates === 'unavailable'
+        ? html`<div class="note">What it has learned can’t be read right now.</div>`
+        : rates
+          ? this._renderRates(rates)
+          : html`<div class="note">
+              What it has learned needs the <code>comfort_band</code> integration v0.6.0 or later,
+              with its entities turned on.
+            </div>`}
       <h3>Feedback</h3>
-      ${this._renderFeedback()}
+      <div role="status">${this._renderFeedback()}</div>
     `;
   }
 
@@ -265,32 +268,42 @@ export class ComfortBandDiagnosticsTab extends LitElement {
 
   private _renderDeciding(d: Deciding) {
     const e = this.entities!;
-    if (d.noReading) {
-      return this._row(
-        'On hold',
-        '',
-        'There’s no room reading, so nothing is decided until there is.',
-        'on-hold',
-      );
-    }
-    const basic =
-      'It starts heating or cooling once the room passes the range in force by the amounts set under Comfort, and stops at the range.';
-    const why: Record<NonNullable<Deciding['reason']>, string> = {
-      'stand-in': `While a stand-in sensor is in use. ${basic}`,
-      peak: `While a peak is on. ${basic}`,
-      'learning-off': `Learning is off. ${basic}`,
-      'not-ready': 'Predictive control is on, but not ready to plan yet.',
-    };
-    const word = (a: Action | null) => (a ? ACTION_WORDS[a] : 'Can’t tell');
-    return html`
-      ${d.paused
+    const paused =
+      d.paused === true
         ? this._row(
             'Paused',
             '',
             '“Control this room” is off, so nothing is sent to the unit. Below is what it would do.',
             'paused',
           )
-        : nothing}
+        : d.paused === null
+          ? this._row(
+              'Control this room',
+              'Can’t tell',
+              'Whether it’s paused can’t be read right now.',
+              'paused',
+            )
+          : nothing;
+    if (d.noReading) {
+      return html`${paused}
+      ${this._row(
+        'On hold',
+        '',
+        'There’s no room reading, so nothing is decided until there is.',
+        'on-hold',
+      )}`;
+    }
+    // Only why: how each controller works is for the settings to explain.
+    const why: Record<NonNullable<Deciding['reason']>, string> = {
+      'stand-in': 'While a stand-in sensor is in use.',
+      peak: 'While a peak is on.',
+      'learning-off': 'Learning is off.',
+      'no-learning': 'This version of the integration has no learning.',
+      'not-ready': 'Predictive control is on, but not ready to plan yet.',
+    };
+    const word = (a: Action | null) => (a ? ACTION_WORDS[a] : 'Can’t tell');
+    return html`
+      ${paused}
       ${this._row(
         'Deciding now',
         d.controller ? CONTROLLER_NAMES[d.controller] : 'Can’t tell',
@@ -319,6 +332,9 @@ export class ComfortBandDiagnosticsTab extends LitElement {
   private _renderRates(r: Rates) {
     const perHour = (v: number | null) =>
       v === null ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(2)}`;
+    // The integration counts the readings of the latest run, which aren't
+    // the ones behind a rate from earlier or from the run before.
+    const own = (d: Rates['details'][number]) => d.method !== 'cached' && d.method !== 'previous';
     return html`
       ${this._row('On its own', r.idle.value, r.idle.source, 'idle')}
       ${this._row('Heating', r.heat.value, r.heat.source, 'heat')}
@@ -342,8 +358,8 @@ export class ComfortBandDiagnosticsTab extends LitElement {
                   html`<tr>
                     <th scope="row">${d.name}</th>
                     <td>${perHour(d.perHour)}</td>
-                    <td>${d.samples ?? '—'}</td>
-                    <td>${d.spread === null ? '—' : `${d.spread.toFixed(2)}°`}</td>
+                    <td>${own(d) && d.samples !== null ? d.samples : '—'}</td>
+                    <td>${own(d) && d.spread !== null ? `${d.spread.toFixed(2)}°` : '—'}</td>
                     <td>${d.method ? (METHOD_WORDS[d.method] ?? d.method) : '—'}</td>
                   </tr>`,
               )}
@@ -352,9 +368,11 @@ export class ComfortBandDiagnosticsTab extends LitElement {
         </div>
         <div class="note">
           ${r.windowMinutes !== null && r.sampleCount !== null
-            ? `From ${r.sampleCount} readings over the last ${Math.round(r.windowMinutes)} minutes.`
+            ? `From ${r.sampleCount} readings spanning ${Math.round(r.windowMinutes)} minutes.`
             : ''}
-          ${r.updated !== null ? `Worked out ${formatWhen(r.updated, Date.now(), this.hass)}.` : ''}
+          ${r.updated !== null
+            ? `The newest is from ${formatWhen(r.updated, Date.now(), this.hass)}.`
+            : ''}
         </div>
       </details>
     `;
@@ -393,7 +411,7 @@ export class ComfortBandDiagnosticsTab extends LitElement {
     const band = bandText({ low: entry.low, high: entry.high });
     const reading =
       typeof entry.room_temp === 'number'
-        ? `${degrees(entry.room_temp)}° in ${band}`
+        ? `${degrees(entry.room_temp)}°, range ${band}`
         : `no reading, range ${band}`;
     const notes = [
       entry.room_source === 'fallback_sensor' || entry.room_source === 'climate'
