@@ -30,6 +30,12 @@ import {
   type Rates,
 } from '../diagnostics.js';
 
+/** "Yesterday 17:30 · …": a line that starts with a word starts with a
+ *  capital. */
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 /** How many feedback taps show. */
 export const FEEDBACK_SHOWN = 10;
 
@@ -280,7 +286,7 @@ export class ComfortBandDiagnosticsTab extends LitElement {
           ? this._row(
               'Control this room',
               'Can’t tell',
-              'Whether it’s paused can’t be read right now.',
+              'Whether it’s paused can’t be read.',
               'paused',
             )
           : nothing;
@@ -307,11 +313,7 @@ export class ComfortBandDiagnosticsTab extends LitElement {
       ${this._row(
         'Deciding now',
         d.controller ? CONTROLLER_NAMES[d.controller] : 'Can’t tell',
-        d.controller
-          ? d.reason
-            ? why[d.reason]
-            : ''
-          : 'Some of what decides it can’t be read right now.',
+        d.controller ? (d.reason ? why[d.reason] : '') : 'Some of what decides it can’t be read.',
         'controller',
       )}
       ${this._row('Its decision', word(d.decision), '', 'decision')}
@@ -368,7 +370,7 @@ export class ComfortBandDiagnosticsTab extends LitElement {
         </div>
         <div class="note">
           ${r.windowMinutes !== null && r.sampleCount !== null
-            ? `From ${r.sampleCount} readings spanning ${Math.round(r.windowMinutes)} minutes.`
+            ? `Learning keeps ${r.sampleCount} readings, spanning ${Math.round(r.windowMinutes)} minutes.`
             : ''}
           ${r.updated !== null
             ? `The newest is from ${formatWhen(r.updated, Date.now(), this.hass)}.`
@@ -426,9 +428,11 @@ export class ComfortBandDiagnosticsTab extends LitElement {
     return html`<li>
       <span class="said">${FEEDBACK_WORDS[entry.label] ?? entry.label}</span>
       <div class="detail">
-        ${[Number.isFinite(at) ? formatWhen(at, now, this.hass) : '', reading, ...notes]
-          .filter(Boolean)
-          .join(' · ')}
+        ${capitalise(
+          [Number.isFinite(at) ? formatWhen(at, now, this.hass) : '', reading, ...notes]
+            .filter(Boolean)
+            .join(' · '),
+        )}
       </div>
     </li>`;
   }

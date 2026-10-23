@@ -158,6 +158,8 @@ describe('comfort-band-diagnostics-tab deciding', () => {
         mpcEnabled: null,
         mpcReady: null,
         mpcAction: null,
+        peakSaving: null,
+        peakSavingEnabled: null,
       }),
     );
     expect(row(el, 'controller')).toMatchObject({
@@ -172,7 +174,7 @@ describe('comfort-band-diagnostics-tab deciding', () => {
     );
     expect(row(el, 'controller')).toMatchObject({
       value: 'Can’t tell',
-      desc: 'Some of what decides it can’t be read right now.',
+      desc: 'Some of what decides it can’t be read.',
     });
     expect(row(el, 'decision')!.value).toBe('Can’t tell');
   });
@@ -224,7 +226,7 @@ describe('comfort-band-diagnostics-tab deciding', () => {
       id: 'paused',
       title: 'Control this room',
       value: 'Can’t tell',
-      desc: 'Whether it’s paused can’t be read right now.',
+      desc: 'Whether it’s paused can’t be read.',
     });
     unknown.remove();
     const both = await diagnostics(
@@ -234,6 +236,17 @@ describe('comfort-band-diagnostics-tab deciding', () => {
       }),
     );
     expect(rows(both).map((r) => r.id)).toEqual(['paused', 'on-hold', 'idle', 'heat', 'cool']);
+  });
+
+  // While its readiness can't be read, what it would do may be Learning's.
+  it('says it can’t tell what predictive control would do without its readiness', async () => {
+    const el = await diagnostics(
+      makeHass({
+        'binary_sensor.gym_mpc_ready': 'unavailable',
+        'sensor.gym_mpc_action': 'heating',
+      }),
+    );
+    expect(row(el, 'predictive')!.value).toBe('Can’t tell');
   });
 
   // Its readiness alone says whether it's ready (v0.8.0+).
@@ -290,7 +303,12 @@ describe('comfort-band-diagnostics-tab rates', () => {
       ['Heating', '+1.23', '7', '0.21°', 'Fitted'],
       ['Cooling', '—', '0', '0.00°', '—'],
     ]);
-    expect(text(details.querySelector('.note'))).toBe('From 19 readings spanning 88 minutes.');
+    expect(text(details.querySelector('.note'))).toBe(
+      'Learning keeps 19 readings, spanning 88 minutes.',
+    );
+    expect(
+      Array.from(details.querySelectorAll('tbody th')).map((th) => th.getAttribute('scope')),
+    ).toEqual(['row', 'row', 'row']);
   });
 
   it('says when they were worked out', async () => {
@@ -303,7 +321,7 @@ describe('comfort-band-diagnostics-tab rates', () => {
       }),
     );
     expect(text(el.shadowRoot!.querySelector('details.more .note'))).toMatch(
-      /^From 19 readings spanning 88 minutes\. The newest is from (\d\d:\d\d|yesterday \d\d:\d\d)\.$/,
+      /^Learning keeps 19 readings, spanning 88 minutes\. The newest is from (\d\d:\d\d|yesterday \d\d:\d\d)\.$/,
     );
   });
 
@@ -347,6 +365,28 @@ describe('comfort-band-diagnostics-tab rates', () => {
   });
 
   // During a restart or a reload: not an old integration.
+  it('gives a rate of exactly 0 no sign', async () => {
+    const el = await diagnostics(
+      makeHass({
+        'sensor.gym_thermal_slope': { state: '0', attributes: { ...SLOPE, idle_slope: 0 } },
+      }),
+    );
+    const first = el.shadowRoot!.querySelector('details.more tbody tr')!;
+    expect(text(first.children[1])).toBe('0.00');
+  });
+
+  it('gives "Details" a 44px target', () => {
+    const css = (
+      customElements.get('comfort-band-diagnostics-tab') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((st) => st.cssText)
+      .join('\n');
+    expect(css).toMatch(/details\.more > summary\s*\{[^}]*min-height:\s*44px/);
+  });
+
   it('says it can’t read what it has learned while that sensor is unavailable', async () => {
     const el = await diagnostics(makeHass({ 'sensor.gym_thermal_slope': 'unavailable' }));
     expect(Array.from(el.shadowRoot!.querySelectorAll('.note')).map((n) => text(n))).toContain(
@@ -393,6 +433,7 @@ describe('comfort-band-diagnostics-tab feedback', () => {
         entry(30, { label: 'too_cold', room_temp: 19.2 }),
         entry(5, { label: 'too_hot', room_temp: 23.4, low: 20, high: 23, peak_state: 'active' }),
         entry(1, { room_temp: null, room_source: 'none' }),
+        entry(0.7, { label: 'too_hot', room_temp: 22, room_source: 'fallback_sensor' }),
         entry(0.5, { room_source: 'climate', peak_state: 'preconditioning' }),
       ],
     });
@@ -400,6 +441,7 @@ describe('comfort-band-diagnostics-tab feedback', () => {
     await settle(el);
     expect(items(el)).toEqual([
       { said: 'Just right', detail: '21°, range 19.5–22.5° · stand-in reading · ahead of a peak' },
+      { said: 'Too warm', detail: '22°, range 19.5–22.5° · stand-in reading' },
       { said: 'Just right', detail: 'no reading, range 19.5–22.5°' },
       { said: 'Too warm', detail: '23.4°, range 20–23° · during a peak' },
       { said: 'Too cool', detail: '19.2°, range 19.5–22.5°' },
@@ -411,7 +453,7 @@ describe('comfort-band-diagnostics-tab feedback', () => {
     const el = await diagnostics(makeHass({}, callWS));
     await settle(el);
     expect(text(el.shadowRoot!.querySelector('li .detail'))).toMatch(
-      /^(yesterday|\w{3}) \d\d:\d\d · /,
+      /^(Yesterday|\w{3}) \d\d:\d\d · /,
     );
   });
 
