@@ -166,6 +166,7 @@ describe('comfort-band-schedule-tab now', () => {
       { at: '22:00', current: null, tags: [] },
     ]);
     expect(el.shadowRoot!.querySelector('li.row.current')!.getAttribute('data-at')).toBe('09:00');
+    expect(text(el.shadowRoot!.querySelector('li.row.current .tag.current'))).toBe('Current');
     const chart = el.shadowRoot!.querySelector(
       'comfort-band-schedule-chart',
     ) as ComfortBandScheduleChart;
@@ -418,6 +419,7 @@ describe('comfort-band-schedule-tab layout', () => {
     expect(css()).toMatch(
       /\.row\.current \.band,\s*\.row\.current \.tag\s*\{[^}]*color:\s*var\(--cb-text-primary\)/,
     );
+    expect(css()).toMatch(/\.tag\.current\s*\{[^}]*border-color:\s*var\(--cb-accent/);
   });
 });
 

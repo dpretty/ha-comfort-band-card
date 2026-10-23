@@ -131,6 +131,21 @@ describe('comfort-band-schedule-chart', () => {
     }
   });
 
+  // Real browsers check the spacing itself (#33 review): the now label sits
+  // 14 px above the plot, and the hour labels 16 px below it.
+  it('leaves room for the now label above and the hour labels below', () => {
+    const css = (
+      customElements.get('comfort-band-schedule-chart') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((s) => s.cssText)
+      .join('\n');
+    expect(css).toMatch(/:host\s*\{[^}]*margin:\s*18px 0 var\(--cb-gap-md\)/);
+    expect(css).toMatch(/\.chart\s*\{[^}]*margin-bottom:\s*16px/);
+  });
+
   it('marks now, beside its gutter', async () => {
     const el = await mount('comfort-band-schedule-chart', { transitions: SCHEDULE, now: 18 * 60 });
     const line = el.shadowRoot!.querySelector('.now-line')!;
