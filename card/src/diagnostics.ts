@@ -8,9 +8,9 @@
  * of controller, and the `thermal_slope`, `mpc_ready`, `predicted_action`,
  * `mpc_action`, `room_temperature` and `peak_saving` entities. Where an input
  * can't be read, it says it can't tell rather than guess. An entity that's
- * missing counts as a feature the integration doesn't have only where none
- * of the entities that came with it is there either; otherwise it's turned
- * off, and can't be read.
+ * missing counts as a feature the integration doesn't have only where no
+ * entity from that feature's release or a later one is there either;
+ * otherwise it's turned off, and can't be read.
  */
 
 import type { ZoneEntities } from './helpers.js';
@@ -61,8 +61,7 @@ function action(state: string | undefined): Action | null {
     : null;
 }
 
-/** Whether the integration has any of the entities that came with a
- *  feature: then a missing one of them is turned off, not absent. */
+/** Whether any of these entities is there. */
 function hasAny(entities: ZoneEntities, fields: ReadonlyArray<keyof ZoneEntities>): boolean {
   return fields.some((f) => typeof entities[f] === 'string');
 }

@@ -150,7 +150,7 @@ describe('comfort-band-diagnostics-tab deciding', () => {
   // Before integration v0.4.0.
   it('says the integration has no learning', async () => {
     const el = await diagnostics(
-      makeHass(),
+      makeHass({ 'sensor.gym_room_temperature': '21' }),
       makeEntities({
         learningEnabled: null,
         predictedAction: null,
@@ -202,7 +202,12 @@ describe('comfort-band-diagnostics-tab deciding', () => {
     expect(row(el, 'controller')).toBeUndefined();
   });
 
-  // Before integration v0.6.0 / v0.8.0.
+  // "unknown" is the integration's own word for no decision.
+  it('words a decision of nothing', async () => {
+    const el = await diagnostics(makeHass({ 'sensor.gym_current_action': 'unknown' }));
+    expect(row(el, 'decision')!.value).toBe('Nothing');
+  });
+
   // The integration's actions are "heating" and "cooling".
   it('words heating and cooling', async () => {
     const el = await diagnostics(
@@ -255,6 +260,7 @@ describe('comfort-band-diagnostics-tab deciding', () => {
     expect(row(el, 'predictive')!.value).toBe('Not ready yet');
   });
 
+  // Before integration v0.6.0 / v0.8.0.
   it('leaves out a controller the integration doesn’t have', async () => {
     const el = await diagnostics(
       makeHass(),
@@ -364,7 +370,53 @@ describe('comfort-band-diagnostics-tab rates', () => {
     ]);
   });
 
-  // During a restart or a reload: not an old integration.
+  it('says a run whose readings were set aside was', async () => {
+    const el = await diagnostics(
+      makeHass({
+        'sensor.gym_thermal_slope': {
+          state: '0.4',
+          attributes: { ...SLOPE, recovery_slope_heat: null, method_recovery_heat: 'rejected' },
+        },
+      }),
+    );
+    const heat = el.shadowRoot!.querySelectorAll('details.more tbody tr')[1];
+    expect(text(heat.children[4])).toBe('Set aside');
+  });
+
+  it('heads the table’s columns and the section’s parts', async () => {
+    const el = await diagnostics();
+    expect(
+      Array.from(el.shadowRoot!.querySelectorAll('details.more thead th')).map((th) => [
+        th.getAttribute('scope'),
+        text(th),
+      ]),
+    ).toEqual([
+      ['col', '°C an hour'],
+      ['col', 'Readings'],
+      ['col', 'Spread'],
+      ['col', 'How'],
+    ]);
+    expect(Array.from(el.shadowRoot!.querySelectorAll('h3')).map((h) => text(h))).toEqual([
+      'Heating and cooling',
+      'What it has learned',
+      'Feedback',
+    ]);
+  });
+
+  it('counts one reading and one minute as one', async () => {
+    const el = await diagnostics(
+      makeHass({
+        'sensor.gym_thermal_slope': {
+          state: '0.4',
+          attributes: { ...SLOPE, sample_count: 1, window_minutes: 1 },
+        },
+      }),
+    );
+    expect(text(el.shadowRoot!.querySelector('details.more .note'))).toBe(
+      'Learning keeps 1 reading, spanning 1 minute.',
+    );
+  });
+
   it('gives a rate of exactly 0 no sign', async () => {
     const el = await diagnostics(
       makeHass({
@@ -387,6 +439,7 @@ describe('comfort-band-diagnostics-tab rates', () => {
     expect(css).toMatch(/details\.more > summary\s*\{[^}]*min-height:\s*44px/);
   });
 
+  // During a restart or a reload: not an old integration.
   it('says it can’t read what it has learned while that sensor is unavailable', async () => {
     const el = await diagnostics(makeHass({ 'sensor.gym_thermal_slope': 'unavailable' }));
     expect(Array.from(el.shadowRoot!.querySelectorAll('.note')).map((n) => text(n))).toContain(
@@ -448,12 +501,17 @@ describe('comfort-band-diagnostics-tab feedback', () => {
     ]);
   });
 
-  it('says when each was', async () => {
-    const callWS = vi.fn().mockResolvedValue({ entries: [entry(30)] });
+  it('says when each was, starting with a capital', async () => {
+    const noonYesterday = new Date();
+    noonYesterday.setDate(noonYesterday.getDate() - 1);
+    noonYesterday.setHours(12, 0, 0, 0);
+    const callWS = vi.fn().mockResolvedValue({
+      entries: [{ ...entry(0), timestamp: noonYesterday.toISOString() }],
+    });
     const el = await diagnostics(makeHass({}, callWS));
     await settle(el);
-    expect(text(el.shadowRoot!.querySelector('li .detail'))).toMatch(
-      /^(Yesterday|\w{3}) \d\d:\d\d · /,
+    expect(text(el.shadowRoot!.querySelector('li .detail'))).toBe(
+      'Yesterday 12:00 · 21°, range 19.5–22.5°',
     );
   });
 

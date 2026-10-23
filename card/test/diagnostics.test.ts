@@ -74,6 +74,10 @@ function makeHass(
   };
 }
 
+/** A room temperature from before integration v0.18.0, which had no
+ *  `source`: for fixtures of integrations that old. */
+const BEFORE_V0_18: Record<string, Spec> = { 'sensor.gym_room_temperature': '21.0' };
+
 describe('readDeciding', () => {
   // As the coordinator chooses (coordinator.py, the three-way gate).
   it('has predictive control decide with Learning and it on, and it ready', () => {
@@ -118,7 +122,7 @@ describe('readDeciding', () => {
   // Before integration v0.4.0 there was no learning.
   it('has basic control decide where the integration has no learning', () => {
     const d = readDeciding(
-      makeHass(),
+      makeHass(BEFORE_V0_18),
       makeEntities({
         learningEnabled: null,
         useApparentTemperature: null,
@@ -147,7 +151,7 @@ describe('readDeciding', () => {
   // v0.4.0 and v0.5 had learning's switch but no learning.
   it('can’t tell with learning on but no learning to be had', () => {
     const d = readDeciding(
-      makeHass(),
+      makeHass(BEFORE_V0_18),
       makeEntities({
         predictedAction: null,
         thermalSlope: null,
@@ -166,7 +170,7 @@ describe('readDeciding', () => {
 
   it('has Learning decide where the integration has no predictive control', () => {
     const d = readDeciding(
-      makeHass(),
+      makeHass(BEFORE_V0_18),
       makeEntities({
         mpcEnabled: null,
         mpcReady: null,
@@ -237,9 +241,10 @@ describe('readDeciding', () => {
       'lookaheadMinutes',
       'passiveTolerance',
     ]) {
-      expect(readDeciding(makeHass(), only(['learningEnabled', field])).controller, field).toBe(
-        'learning',
-      );
+      expect(
+        readDeciding(makeHass(BEFORE_V0_18), only(['learningEnabled', field])).controller,
+        field,
+      ).toBe('learning');
     }
   });
 
@@ -686,7 +691,24 @@ describe('readRoomSource', () => {
     expect(at({ source: 'fallback_sensor', fallback_temp_sensor: 'sensor.gone' })!.value).toBe(
       'Stand-in: sensor.gone',
     );
-    expect(at({ source: 'climate' })!.value).toBe('Stand-in: the unit’s own reading');
+    expect(at({ source: 'climate' })).toEqual({
+      title: 'Room reading',
+      value: 'Stand-in: the unit’s own reading',
+      desc: 'Its own sensor is offline. Basic control decides until it’s back.',
+    });
+    expect(
+      at(
+        { source: 'none', fallback_temp_sensor: 'sensor.hall', fallback_to_climate: true },
+        {
+          'sensor.hall': {
+            state: 'unavailable',
+            attributes: { friendly_name: 'Hall temperature' },
+          },
+        },
+      )!.desc,
+    ).toBe(
+      'Its own sensor has no reading, so control is on hold. A stand-in is used only once its own sensor has been offline for 5 minutes, and only while it has a reading: Hall temperature, otherwise the unit’s own reading.',
+    );
     expect(at({ source: 'none' })).toEqual({
       title: 'Room reading',
       value: 'None right now',
@@ -717,6 +739,8 @@ describe('formatWhen', () => {
     expect(formatWhen(at(-3, 9), now, hass)).toBe('Tue 09:30');
     expect(formatWhen(at(4, 9), now, hass)).toBe('Tue 09:30');
     expect(formatWhen(at(-10, 9), now, hass)).toBe('13 Oct, 09:30');
+    expect(formatWhen(at(-6, 9), now, hass)).toBe('Sat 09:30');
+    expect(formatWhen(at(6, 9), now, hass)).toBe('Thu 09:30');
     expect(formatWhen(at(-7, 9), now, hass)).toBe('16 Oct, 09:30');
     expect(formatWhen(at(7, 9), now, hass)).toBe('30 Oct, 09:30');
   });
@@ -742,15 +766,23 @@ describe('formatWhen', () => {
       .process.env;
     const was = env.TZ;
     env.TZ = 'Europe/London';
+    // Unset, it must go back to unset: "undefined" would read as UTC.
     try {
       // The clocks go forward at 1 am on 29 March: its midnight to the next
       // is 23 hours.
       const before = new Date(2026, 2, 29, 12, 0).getTime();
+      // The clocks go back at 2 am on 25 October: its midnight to the next
+      // is 25 hours.
+      const october = new Date(2026, 9, 25, 12, 0).getTime();
+      expect(formatWhen(new Date(2026, 9, 26, 13, 0).getTime(), october, hass)).toBe(
+        'tomorrow 13:00',
+      );
       expect(formatWhen(new Date(2026, 2, 30, 13, 0).getTime(), before, hass)).toBe(
         'tomorrow 13:00',
       );
     } finally {
-      env.TZ = was;
+      if (was === undefined) delete env.TZ;
+      else env.TZ = was;
     }
   });
 });

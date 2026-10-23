@@ -36,6 +36,11 @@ function capitalise(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** "1 reading", "19 readings". */
+function count(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
 /** How many feedback taps show. */
 export const FEEDBACK_SHOWN = 10;
 
@@ -370,7 +375,7 @@ export class ComfortBandDiagnosticsTab extends LitElement {
         </div>
         <div class="note">
           ${r.windowMinutes !== null && r.sampleCount !== null
-            ? `Learning keeps ${r.sampleCount} readings, spanning ${Math.round(r.windowMinutes)} minutes.`
+            ? `Learning keeps ${count(r.sampleCount, 'reading')}, spanning ${count(Math.round(r.windowMinutes), 'minute')}.`
             : ''}
           ${r.updated !== null
             ? `The newest is from ${formatWhen(r.updated, Date.now(), this.hass)}.`
