@@ -3,7 +3,10 @@
  *
  * Renders the active profile's baseline schedule as two stepped lines
  * (low + high band edges) with the area between filled lightly. Each
- * transition shows a small marker circle at the low + high points.
+ * transition shows a small marker circle at the low + high points. The low
+ * edge takes the heating colour and the high edge the cooling colour, each
+ * labelled ("Low", "High") so colour isn't the only cue. With `now` set, a
+ * marker shows the time of day (#33).
  *
  * **v0.9.0**: editing moved out of the chart. The chart is now a pure
  * data-in, SVG-out visualization with no pointer or keyboard handlers,
@@ -14,7 +17,7 @@
  * Add / Edit / Delete buttons + the existing `transition-edit-dialog`.
  */
 
-import { LitElement, css, html, svg } from 'lit';
+import { LitElement, css, html, svg, unsafeCSS } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { tokens } from './styles.js';
 import type { Transition } from './types.js';
@@ -26,6 +29,8 @@ const VIEW_W = 600;
 const VIEW_H = 200;
 
 const HOUR_TICKS = [0, 6, 12, 18, 24];
+/** The left gutter, in px, that the temperature labels sit in. */
+const GUTTER = 32;
 const TEMP_TICKS = [14, 18, 22, 26];
 
 /** Parse an `HH:MM` (or `H:MM`) string to minutes-since-midnight.
@@ -44,6 +49,9 @@ function clamp(v: number, lo: number, hi: number): number {
 @customElement('comfort-band-schedule-chart')
 export class ComfortBandScheduleChart extends LitElement {
   @property({ type: Array }) public transitions: Transition[] = [];
+  /** Minutes past midnight now, in HA's time zone, for the now marker; null
+   *  for none. */
+  @property({ attribute: false }) public now: number | null = null;
 
   public static override styles = [
     tokens,
@@ -61,7 +69,7 @@ export class ComfortBandScheduleChart extends LitElement {
            inside the chart's bounding box. Without this they overflow
            the schedule-tab's 12 px padding and the modal clips their
            leading digit ("25°" rendered as "5°"). */
-        padding-left: 32px;
+        padding-left: ${unsafeCSS(GUTTER)}px;
         box-sizing: border-box;
       }
       svg {
@@ -89,12 +97,55 @@ export class ComfortBandScheduleChart extends LitElement {
         vector-effect: non-scaling-stroke;
         pointer-events: none;
       }
+      .line.low,
+      .marker.low {
+        stroke: var(--cb-action-heating);
+      }
+      .line.high,
+      .marker.high {
+        stroke: var(--cb-action-cooling);
+      }
       .marker {
         fill: var(--ha-card-background, #ffffff);
-        stroke: var(--cb-accent, var(--primary-color, #03a9f4));
         stroke-width: 2;
         vector-effect: non-scaling-stroke;
         pointer-events: none;
+      }
+      .now-line {
+        stroke: var(--cb-text-secondary);
+        stroke-width: 1.5;
+        stroke-dasharray: 4 3;
+        vector-effect: non-scaling-stroke;
+        pointer-events: none;
+      }
+      /* Text in HTML over the chart, as the axis labels are: the SVG
+         stretches to the card's width. */
+      .edge-label,
+      .now-label {
+        position: absolute;
+        font-size: 11px;
+        line-height: 1;
+        color: var(--cb-text-secondary);
+        pointer-events: none;
+        white-space: nowrap;
+      }
+      /* A swatch of the line's colour: text in it would be too faint. */
+      .edge-label {
+        right: 2px;
+        padding-left: 6px;
+        border-left: 3px solid;
+      }
+      .edge-label.low {
+        border-left-color: var(--cb-action-heating);
+        transform: translateY(4px);
+      }
+      .edge-label.high {
+        border-left-color: var(--cb-action-cooling);
+        transform: translateY(calc(-100% - 4px));
+      }
+      .now-label {
+        top: -14px;
+        transform: translateX(-50%);
       }
       .axis-label {
         position: absolute;
@@ -177,6 +228,13 @@ export class ComfortBandScheduleChart extends LitElement {
     const lowPath = hasTransitions ? this._pointsToPath(lowPts) : '';
     const highPath = hasTransitions ? this._pointsToPath(highPts) : '';
     const fillPath = hasTransitions ? this._fillFromPoints(highPts, lowPts) : '';
+    // Each edge is labelled where it ends the day, at the right.
+    const last = rendered[rendered.length - 1];
+    const endPct = (pick: 'low' | 'high') => (this._tempToY(last[pick]) / VIEW_H) * 100;
+    const nowX =
+      this.now !== null && Number.isFinite(this.now)
+        ? this._timeToX(clamp(this.now, 0, 24 * 60))
+        : null;
 
     return html`
       <div class="chart">
@@ -209,7 +267,22 @@ export class ComfortBandScheduleChart extends LitElement {
               <circle class="marker high" cx=${x} cy=${this._tempToY(t.high)} r="5"></circle>
             `;
           })}
+          ${nowX !== null
+            ? svg`<line class="now-line" x1=${nowX} x2=${nowX} y1="0" y2=${VIEW_H}></line>`
+            : null}
         </svg>
+        ${hasTransitions
+          ? html`<div class="edge-label high" style="top: ${endPct('high')}%">High</div>
+              <div class="edge-label low" style="top: ${endPct('low')}%">Low</div>`
+          : null}
+        ${nowX !== null
+          ? html`<div
+              class="now-label"
+              style="left: calc(${GUTTER}px + (100% - ${GUTTER}px) * ${nowX / VIEW_W})"
+            >
+              Now
+            </div>`
+          : null}
         ${TEMP_TICKS.map(
           (t) =>
             html`<div

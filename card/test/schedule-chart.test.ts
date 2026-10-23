@@ -67,6 +67,53 @@ describe('comfort-band-schedule-chart', () => {
     expect(parseTime('garbage')).toBe(0);
   });
 
+  // #33: colour isn't the only cue.
+  it('colours the low edge for heating and the high for cooling, and labels them', async () => {
+    const el = await chart();
+    const css = (
+      customElements.get('comfort-band-schedule-chart') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((s) => s.cssText)
+      .join('\n');
+    expect(css).toMatch(
+      /\.line\.low,\s*\.marker\.low\s*\{[^}]*stroke:\s*var\(--cb-action-heating\)/,
+    );
+    expect(css).toMatch(
+      /\.line\.high,\s*\.marker\.high\s*\{[^}]*stroke:\s*var\(--cb-action-cooling\)/,
+    );
+    const labels = Array.from(el.shadowRoot!.querySelectorAll<HTMLElement>('.edge-label'));
+    expect(labels.map((l) => [l.className, l.textContent!.trim()])).toEqual([
+      ['edge-label high', 'High'],
+      ['edge-label low', 'Low'],
+    ]);
+    // Where each edge ends the day: 22:00's 21° and 18°, on a 14–28° axis.
+    expect(labels[0].style.top).toBe(`${((28 - 21) / 14) * 100}%`);
+    expect(labels[1].style.top).toBe(`${((28 - 18) / 14) * 100}%`);
+  });
+
+  it('labels no edges without changes', async () => {
+    const el = await chart([]);
+    expect(el.shadowRoot!.querySelector('.edge-label')).toBeNull();
+  });
+
+  it('marks now, beside its gutter', async () => {
+    const el = await mount('comfort-band-schedule-chart', { transitions: SCHEDULE, now: 18 * 60 });
+    const line = el.shadowRoot!.querySelector('.now-line')!;
+    expect([line.getAttribute('x1'), line.getAttribute('x2')]).toEqual(['450', '450']);
+    const label = el.shadowRoot!.querySelector<HTMLElement>('.now-label')!;
+    expect(label.textContent!.trim()).toBe('Now');
+    expect(label.getAttribute('style')).toContain('calc(32px + (100% - 32px) * 0.75)');
+  });
+
+  it('marks no now without one', async () => {
+    const el = await chart();
+    expect(el.shadowRoot!.querySelector('.now-line')).toBeNull();
+    expect(el.shadowRoot!.querySelector('.now-label')).toBeNull();
+  });
+
   it('describes itself in plain words', async () => {
     const el = await chart();
     const svg = el.shadowRoot!.querySelector('svg')!;

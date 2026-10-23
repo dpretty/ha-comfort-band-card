@@ -7,6 +7,13 @@
  * change" button in the toolbar above the list. A row's Delete asks for
  * inline confirmation (no more long-press surprise from v0.8.x).
  *
+ * **#33**: above the chart, the range in force now and when the schedule
+ * next changes it, from the integration's entities; a now marker on the
+ * chart; the list reads first, with the change in force marked (only while
+ * this list is the one in force: not while the room follows a shared
+ * schedule) and a change that repeats the range before it marked "Same as
+ * before". Add, Edit and Delete sit behind "Edit schedule".
+ *
  * Workflow:
  *   1. On mount, open a `comfort_band/subscribe_schedule` subscription for
  *      the active (zone, profile). The backend sends the current state
@@ -26,7 +33,15 @@ import type { PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import '../schedule-chart.js';
 import '../transition-edit-dialog.js';
-import { findActiveProfileEntity, profileSelectReadable } from '../helpers.js';
+import { findActiveProfileEntity, profileSelectReadable, type ZoneEntities } from '../helpers.js';
+import {
+  currentIndex,
+  minutesOfDay,
+  nowLine,
+  ownScheduleInForce,
+  sameAsBefore,
+  sharedScheduleName,
+} from '../schedule-now.js';
 import { parseTime } from '../schedule-chart.js';
 import { setSchedule, subscribeSchedule } from '../services.js';
 import { bandText, degrees, formatClock } from '../now-status.js';
@@ -74,6 +89,15 @@ type Mode = 'list' | 'add' | 'edit';
 export class ComfortBandScheduleTab extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
   @property({ type: String }) public zone = '';
+  /** The zone's entities, for what's in force now. */
+  @property({ attribute: false }) public entities?: ZoneEntities;
+  /** Whether the list shows its Add, Edit and Delete. */
+  @state() private _editingList = false;
+  /** The time "now" is shown for, moved on each minute. */
+  @state() private _now = Date.now();
+  private _clock: ReturnType<typeof setInterval> | null = null;
+  /** Which button takes focus once the list's mode has changed. */
+  private _focusAfterMode: 'add' | 'edit' | null = null;
 
   @state() private _profile = '';
   @state() private _transitions: Transition[] = [];
@@ -222,6 +246,42 @@ export class ComfortBandScheduleTab extends LitElement {
         color: var(--error-color, #b71c1c);
         border-color: var(--divider-color, #cccccc);
       }
+      .now-line {
+        font-size: 14px;
+        color: var(--cb-text-primary);
+      }
+      .shared-note {
+        margin-top: 4px;
+        font-size: 12px;
+        line-height: 1.35;
+        color: var(--cb-text-secondary);
+      }
+      .list-toolbar {
+        gap: var(--cb-gap-sm);
+      }
+      /* Read first: rows aren't buttons until "Edit schedule". */
+      .row.read {
+        cursor: default;
+      }
+      .row.read:hover {
+        background: none;
+      }
+      .row.current {
+        box-shadow: inset 3px 0 0 var(--cb-accent, var(--primary-color, #03a9f4));
+        background: var(--cb-track-bg);
+      }
+      .tag {
+        flex: none;
+        padding: 2px 8px;
+        border-radius: var(--cb-radius-pill);
+        border: 1px solid var(--divider-color, #cccccc);
+        font-size: 11px;
+        color: var(--cb-text-secondary);
+      }
+      .tag.now {
+        border-color: var(--cb-accent, var(--primary-color, #03a9f4));
+        color: var(--cb-text-primary);
+      }
       .empty {
         text-align: center;
         padding: var(--cb-gap-lg);
@@ -274,10 +334,35 @@ export class ComfortBandScheduleTab extends LitElement {
       );
       cancel?.focus();
     }
+    // The button pressed is gone once the mode changes: focus goes to the
+    // one in its place.
+    if (this._focusAfterMode) {
+      const which = this._focusAfterMode;
+      this._focusAfterMode = null;
+      this.shadowRoot
+        ?.querySelector<HTMLButtonElement>(
+          which === 'add' ? '.list-toolbar .button.primary' : '.list-toolbar .button.secondary',
+        )
+        ?.focus();
+    }
   }
+
+  private _onEditSchedule = () => {
+    this._editingList = true;
+    this._focusAfterMode = 'add';
+  };
+
+  private _onDoneEditing = () => {
+    this._editingList = false;
+    this._confirmingDeleteAt = null;
+    this._focusAfterMode = 'edit';
+  };
 
   public override connectedCallback(): void {
     super.connectedCallback();
+    // "Now" moves on with the clock, not only with HA's updates.
+    this._now = Date.now();
+    this._clock = setInterval(() => (this._now = Date.now()), 60_000);
     // Re-subscribe after a DOM detach/reattach (e.g. switching dashboard
     // tabs). `willUpdate`'s `_profile === ''` guard doesn't fire here
     // because `_profile` is already set from the prior mount. On the very
@@ -289,6 +374,8 @@ export class ComfortBandScheduleTab extends LitElement {
   }
 
   public override disconnectedCallback(): void {
+    if (this._clock !== null) clearInterval(this._clock);
+    this._clock = null;
     this._unsubscribe();
     super.disconnectedCallback();
   }
@@ -557,7 +644,7 @@ export class ComfortBandScheduleTab extends LitElement {
     }
 
     return html`
-      ${this._renderHeader()}
+      ${this._renderHeader()} ${this._renderNow()}
       ${this._loading
         ? html`<div class="loading">Loading schedule…</div>`
         : this._error
@@ -565,9 +652,17 @@ export class ComfortBandScheduleTab extends LitElement {
           : html`
               <comfort-band-schedule-chart
                 .transitions=${this._transitions}
+                .now=${minutesOfDay(this._now, this.hass)}
               ></comfort-band-schedule-chart>
               <div class="list-toolbar">
-                <button class="button primary" @click=${this._onAddClicked}>+ Add a change</button>
+                ${this._editingList
+                  ? html`<button class="button primary" @click=${this._onAddClicked}>
+                        + Add a change
+                      </button>
+                      <button class="button secondary" @click=${this._onDoneEditing}>Done</button>`
+                  : html`<button class="button secondary" @click=${this._onEditSchedule}>
+                      Edit schedule
+                    </button>`}
               </div>
               ${this._renderList()}
             `}
@@ -591,34 +686,89 @@ export class ComfortBandScheduleTab extends LitElement {
     </div>`;
   }
 
+  /** The range in force now and when the schedule next changes it, from
+   *  the integration's entities; and whether this list is the one in force. */
+  private _renderNow() {
+    if (!this.hass || !this.entities) return nothing;
+    const line = nowLine(this.hass, this.entities, this._now);
+    const following = ownScheduleInForce(this.hass, this.entities) === false;
+    const shared = sharedScheduleName(this.hass, this.entities);
+    return html`
+      ${line ? html`<div class="now-line">${line}</div>` : nothing}
+      ${following
+        ? html`<div class="shared-note">
+            This room follows ${shared ? `“${shared}”, a shared schedule` : 'a shared schedule'}.
+            The changes below are its own, not the ones in force.
+          </div>`
+        : nothing}
+    `;
+  }
+
   private _renderList() {
     if (this._transitions.length === 0) {
-      return html`<div class="empty">No changes yet. Use “Add a change” to create one.</div>`;
+      return html`<div class="empty">
+        ${this._editingList
+          ? 'No changes yet. Use “Add a change” to create one.'
+          : 'No changes yet.'}
+      </div>`;
     }
+    // Only this list's own change is marked, and only while it's in force.
+    const inForce =
+      this.hass && this.entities ? ownScheduleInForce(this.hass, this.entities) === true : false;
+    const current = inForce
+      ? currentIndex(this._transitions, minutesOfDay(this._now, this.hass))
+      : null;
+    const same = sameAsBefore(this._transitions);
     return html`
       <ul class="list" role="list">
-        ${this._transitions.map((t) =>
-          this._confirmingDeleteAt === t.at ? this._renderConfirmRow(t) : this._renderRow(t),
+        ${this._transitions.map((t, i) =>
+          this._confirmingDeleteAt === t.at
+            ? this._renderConfirmRow(t)
+            : this._editingList
+              ? this._renderRow(t, i === current, same[i])
+              : this._renderReadRow(t, i === current, same[i]),
         )}
       </ul>
     `;
   }
 
-  private _renderRow(t: Transition) {
+  private _tags(current: boolean, same: boolean) {
+    return html`${current ? html`<span class="tag now">Now</span>` : nothing}
+    ${same ? html`<span class="tag same">Same as before</span>` : nothing}`;
+  }
+
+  private _renderReadRow(t: Transition, current: boolean, same: boolean) {
+    return html`
+      <li
+        class="row read ${current ? 'current' : ''}"
+        role="listitem"
+        data-at=${t.at}
+        aria-current=${current ? 'true' : nothing}
+      >
+        <span class="at">${formatClock(t.at, this.hass)}</span>
+        <span class="band">${bandText(t)}</span>
+        ${this._tags(current, same)}
+      </li>
+    `;
+  }
+
+  private _renderRow(t: Transition, current: boolean, same: boolean) {
     const at = formatClock(t.at, this.hass);
     const ariaLabel = `Edit the ${at} change, ${degrees(t.low)} to ${degrees(t.high)} degrees`;
     return html`
       <li
-        class="row"
+        class="row ${current ? 'current' : ''}"
         role="listitem"
         tabindex="0"
         data-at=${t.at}
         aria-label=${ariaLabel}
+        aria-current=${current ? 'true' : nothing}
         @click=${this._onRowClicked(t)}
         @keydown=${this._onRowKeydown(t)}
       >
         <span class="at">${at}</span>
         <span class="band">${bandText(t)}</span>
+        ${this._tags(current, same)}
         <span class="actions">
           <button
             class="button secondary"

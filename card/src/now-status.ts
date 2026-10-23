@@ -213,13 +213,30 @@ function inForce(s: StatusInput): { kind: StatusKind; text: string } {
   return { kind, text };
 }
 
+/** A time zone Intl knows, or undefined (the browser's). */
+export function knownZone(timeZone: string | undefined): string | undefined {
+  if (!timeZone) return undefined;
+  try {
+    new Intl.DateTimeFormat('en', { timeZone });
+    return timeZone;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * A wall-clock time in HA's chosen language and 12/24-hour setting where the
  * frontend provides them: "9 pm" or "4:30 pm" on a 12-hour clock, "21:00" or
  * "09:05" on a 24-hour one, where an hour on its own would read as a number.
+ * In `timeZone` where given (a schedule's times are HA's), else the browser's.
  */
-export function formatTime(ms: number, hass?: Pick<HomeAssistant, 'locale'>): string {
+export function formatTime(
+  ms: number,
+  hass?: Pick<HomeAssistant, 'locale'>,
+  timeZone?: string,
+): string {
   const date = new Date(ms);
+  const zone = knownZone(timeZone);
   const pref = hass?.locale?.time_format;
   const language = hass?.locale?.language;
   let twelveHour: boolean;
@@ -239,8 +256,16 @@ export function formatTime(ms: number, hass?: Pick<HomeAssistant, 'locale'>): st
   const options: Intl.DateTimeFormatOptions = {
     hourCycle: twelveHour ? 'h12' : 'h23',
     hour: twelveHour ? 'numeric' : '2-digit',
+    ...(zone ? { timeZone: zone } : {}),
   };
-  if (!twelveHour || date.getMinutes() !== 0) options.minute = '2-digit';
+  const minutes = zone
+    ? Number(
+        new Intl.DateTimeFormat('en', { timeZone: zone, minute: 'numeric' })
+          .formatToParts(date)
+          .find((p) => p.type === 'minute')?.value,
+      )
+    : date.getMinutes();
+  if (!twelveHour || minutes !== 0) options.minute = '2-digit';
   return new Intl.DateTimeFormat(language, options).format(date);
 }
 

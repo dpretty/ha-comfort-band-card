@@ -105,11 +105,24 @@ function makeHass(opts: FakeHassOptions = {}): FakeHass {
   };
 }
 
-async function tab(hass: HomeAssistant, zone = 'gym'): Promise<ComfortBandScheduleTab> {
+/** Mounts the tab and, unless `edit` is false, presses "Edit schedule" so
+ *  the list offers Add, Edit and Delete (#33: it reads first). */
+async function tab(
+  hass: HomeAssistant,
+  zone = 'gym',
+  edit = true,
+): Promise<ComfortBandScheduleTab> {
   const el = await mount('comfort-band-schedule-tab', { hass, zone });
   // Allow the async subscribe + initial-value microtask to resolve.
   await new Promise((r) => setTimeout(r, 0));
   await el.updateComplete;
+  if (edit) {
+    const button = Array.from(
+      el.shadowRoot!.querySelectorAll<HTMLButtonElement>('.list-toolbar button'),
+    ).find((b) => b.textContent!.trim() === 'Edit schedule');
+    button?.click();
+    await el.updateComplete;
+  }
   return el;
 }
 

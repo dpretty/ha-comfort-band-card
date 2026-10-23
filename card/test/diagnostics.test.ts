@@ -745,6 +745,22 @@ describe('formatWhen', () => {
     expect(formatWhen(at(7, 9), now, hass)).toBe('30 Oct, 09:30');
   });
 
+  // Days and dates in a given zone: 23:00 UTC on the 23rd is the 24th in
+  // Sydney, whatever the machine's zone.
+  it('counts days and writes dates in a given time zone', () => {
+    const late = Date.UTC(2026, 9, 23, 23, 0);
+    expect(formatWhen(Date.UTC(2026, 9, 24, 1, 0), late, hass, 'UTC')).toBe('tomorrow 01:00');
+    expect(formatWhen(Date.UTC(2026, 9, 24, 1, 0), late, hass, 'Australia/Sydney')).toBe('12:00');
+    expect(formatWhen(Date.UTC(2026, 9, 21, 9, 0), late, hass, 'UTC')).toBe('Wed 09:00');
+    expect(formatWhen(Date.UTC(2026, 9, 1, 9, 0), late, hass, 'UTC')).toBe('1 Oct, 09:00');
+    expect(formatWhen(Date.UTC(2025, 11, 31, 23, 30), late, hass, 'UTC')).toBe(
+      '31 Dec 2025, 23:30',
+    );
+    expect(formatWhen(Date.UTC(2025, 11, 31, 23, 30), late, hass, 'Australia/Sydney')).toBe(
+      '1 Jan, 10:30',
+    );
+  });
+
   // The feedback goes back up to 2000 taps.
   it('gives the year of another year', () => {
     expect(formatWhen(new Date(2025, 8, 21, 13, 0).getTime(), now, hass)).toBe(
