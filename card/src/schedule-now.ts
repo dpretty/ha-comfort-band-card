@@ -1,20 +1,20 @@
 /**
- * What the Schedule tab says about now (#33): the range in force and when
- * the schedule next changes it, which of the list's changes is in force,
- * and which changes repeat the range before them.
+ * What the Schedule tab says about now (#33): the range in force, which of
+ * the list's changes is in force, and which changes repeat the range before
+ * them.
  *
- * The range in force and the next change come from the integration's
- * entities (`effective_low`/`effective_high`, `next_band_change`), as on the
- * Now tab, not from the list: an adjustment, peak saving or a shared
- * schedule can each make them differ from it. The list's times are HA's
- * local time, so "now" on the chart, and the times in the line, are too.
+ * The range in force comes from the integration's entities
+ * (`effective_low`/`effective_high`), as on the Now tab, not from the list:
+ * an adjustment, peak saving or a shared schedule can each make it differ
+ * from it. The list's times are HA's local time, so "now" on the chart and
+ * in the list is too.
  */
 
 import type { ZoneEntities } from './helpers.js';
 import type { HomeAssistant, Transition } from './types.js';
 import { readRoom } from './room-status.js';
 import { bandText } from './now-status.js';
-import { formatWhen, hasSince } from './diagnostics.js';
+import { hasSince } from './diagnostics.js';
 import { parseTime } from './schedule-chart.js';
 
 /** Minutes past midnight at `ms`, in HA's time zone where the frontend
@@ -87,44 +87,14 @@ export function sharedScheduleName(hass: HomeAssistant, entities: ZoneEntities):
 }
 
 /**
- * "Now 19.5–22.5° · the schedule’s next change: 9 pm → 18–22°": the range in
- * force, why it's not the schedule's where that's known, and the schedule's
- * next change. That's said as the schedule's, not as what will be in force
- * then: an adjustment, a peak (announced or on) or a band ramp can each
- * make those differ. Null while the range in force can't be read.
+ * "Now 19.5–22.5°": the range in force, and nothing more. Why it differs from
+ * the schedule's, and the schedule's next change, are left out: review
+ * found each untrue in some cases (an adjustment that outlasts the change,
+ * a peak that moved nothing, the band ramp) (#33). Null while the range in
+ * force can't be read.
  */
-export function nowLine(hass: HomeAssistant, entities: ZoneEntities, now: number): string | null {
+export function nowLine(hass: HomeAssistant, entities: ZoneEntities): string | null {
   const r = readRoom(hass, entities);
   if (!Number.isFinite(r.band.low) || !Number.isFinite(r.band.high)) return null;
-  let line = `Now ${bandText(r.band)}`;
-  // In HA's time zone, as the list's times are.
-  const zone = hass.config?.time_zone;
-  if (r.overrideActive) {
-    // Without a schedule an adjustment's range is simply the room's range.
-    if (r.scheduled === true) {
-      line +=
-        r.overrideEnds !== null && r.overrideEnds > now
-          ? `, adjusted until ${formatWhen(r.overrideEnds, now, hass, zone)}`
-          : ', adjusted';
-    }
-  } else {
-    const peakId = entities.peakSaving;
-    const peak = typeof peakId === 'string' ? hass.states[peakId]?.state : undefined;
-    if (peak === 'active') line += ', relaxed for a peak';
-    if (peak === 'preconditioning') line += ', moved ahead of a peak';
-  }
-  const nextId = entities.nextBandChange;
-  const next = nextId !== null ? hass.states[nextId] : undefined;
-  const low = next?.attributes.low;
-  const high = next?.attributes.high;
-  if (
-    r.scheduled === true &&
-    r.nextChange !== null &&
-    r.nextChange > now &&
-    typeof low === 'number' &&
-    typeof high === 'number'
-  ) {
-    line += ` · the schedule’s next change: ${formatWhen(r.nextChange, now, hass, zone)} → ${bandText({ low, high })}`;
-  }
-  return line;
+  return `Now ${bandText(r.band)}`;
 }

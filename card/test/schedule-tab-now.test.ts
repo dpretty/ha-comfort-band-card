@@ -152,11 +152,9 @@ const rows = (el: ComfortBandScheduleTab) =>
   }));
 
 describe('comfort-band-schedule-tab now', () => {
-  it('says the range in force and when the schedule next changes it', async () => {
+  it('says the range in force', async () => {
     const el = await tab();
-    expect(text(el.shadowRoot!.querySelector('.now-line'))).toBe(
-      'Now 17–25° · the schedule’s next change: 17:30 → 19.5–22.5°',
-    );
+    expect(text(el.shadowRoot!.querySelector('.now-line'))).toBe('Now 17–25°');
   });
 
   it('marks the change in force, and now on the chart', async () => {
@@ -277,6 +275,40 @@ describe('comfort-band-schedule-tab now', () => {
     expect(chart().now).toBe(12 * 60);
   });
 
+  // HA can deliver a superseded subscription's answer late: home, then
+  // away, then home again, before the new home answer.
+  it('marks nothing on a list after a late answer for another profile', async () => {
+    const AWAY: Transition[] = [{ at: '00:00', low: 18, high: 21 }];
+    const profiles = (state: string) => ({
+      'select.comfort_band_profiles_active_profile': {
+        state,
+        attributes: { options: ['home', 'away'], default_profile: 'home' },
+      },
+    });
+    const hass = makeHass(profiles('home'));
+    const answers: Array<(list: Transition[]) => void> = [];
+    hass.connection.subscribeMessage = (async (
+      callback: (event: { schedule: ProfileSchedule | null }) => void,
+      message: { profile: string },
+    ) => {
+      const answer = (list: Transition[]) =>
+        callback({ schedule: { baseline: list, current: list } });
+      answers.push(answer);
+      if (answers.length === 1) Promise.resolve().then(() => answer(DAY));
+      if (message.profile === 'away') Promise.resolve().then(() => answer(AWAY));
+      return () => {};
+    }) as unknown as HassConnection['subscribeMessage'];
+    const el = await tab(hass);
+    el.hass = { ...hass, states: { ...hass.states, ...makeHass(profiles('away')).states } };
+    await settle(el);
+    expect(rows(el)).toEqual([{ at: '00:00', current: 'true', tags: ['Current'] }]);
+    el.hass = { ...hass, states: { ...hass.states, ...makeHass(profiles('home')).states } };
+    await settle(el);
+    answers[0](DAY);
+    await settle(el);
+    expect(rows(el)).toEqual([{ at: '00:00', current: null, tags: [] }]);
+  });
+
   // Without a profile manager, the room's schedule is home's.
   it('marks the change in force without a profile manager', async () => {
     const hass = makeHass({ 'select.comfort_band_profiles_active_profile': null });
@@ -318,14 +350,12 @@ describe('comfort-band-schedule-tab now', () => {
     );
   });
 
-  // Not UTC, which CI runs in: the line, the row and the marker all use HA's.
-  it('says it all in HA’s time zone', async () => {
+  // Not UTC, which CI runs in: the row and the marker both use HA's.
+  it('marks now in HA’s time zone, a half-hour one too', async () => {
     const hass = makeHass();
     hass.config = { time_zone: 'Asia/Kolkata' };
     const el = await tab(hass);
-    expect(text(el.shadowRoot!.querySelector('.now-line'))).toBe(
-      'Now 17–25° · the schedule’s next change: 23:00 → 19.5–22.5°',
-    );
+    expect(el.shadowRoot!.querySelector('li.row.current')!.getAttribute('data-at')).toBe('17:30');
     const chart = el.shadowRoot!.querySelector(
       'comfort-band-schedule-chart',
     ) as ComfortBandScheduleChart;
@@ -336,6 +366,15 @@ describe('comfort-band-schedule-tab now', () => {
     const el = await tab(makeHass({ 'select.gym_schedule_assignment': 'unavailable' }));
     expect(el.shadowRoot!.querySelector('li.row.current')).toBeNull();
     expect(el.shadowRoot!.querySelector('.shared-note')).toBeNull();
+  });
+
+  // The room then follows the default profile's schedule, or its own range.
+  it('marks no now on an empty list', async () => {
+    const el = await tab(makeHass({}, []));
+    const chart = el.shadowRoot!.querySelector(
+      'comfort-band-schedule-chart',
+    ) as ComfortBandScheduleChart;
+    expect(chart.now).toBeNull();
   });
 
   it('says nothing about now without the zone’s entities', async () => {

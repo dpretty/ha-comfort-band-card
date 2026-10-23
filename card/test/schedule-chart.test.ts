@@ -111,10 +111,31 @@ describe('comfort-band-schedule-chart', () => {
     expect(el.shadowRoot!.querySelector('.legend')).toBeNull();
   });
 
+  // A dot is a line of no length with a round cap, its stroke unscaled.
+  it('draws each change as a round dot', async () => {
+    const el = await chart();
+    const css = (
+      customElements.get('comfort-band-schedule-chart') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((s) => s.cssText)
+      .join('\n');
+    const marker = /\.marker\s*\{([^}]*)\}/.exec(css)![1];
+    expect(marker).toMatch(/stroke-linecap:\s*round/);
+    expect(marker).toMatch(/vector-effect:\s*non-scaling-stroke/);
+    for (const m of Array.from(el.shadowRoot!.querySelectorAll('.marker'))) {
+      expect(m.getAttribute('x2')).toBe(m.getAttribute('x1'));
+      expect(m.getAttribute('y2')).toBe(m.getAttribute('y1'));
+    }
+  });
+
   it('marks now, beside its gutter', async () => {
     const el = await mount('comfort-band-schedule-chart', { transitions: SCHEDULE, now: 18 * 60 });
     const line = el.shadowRoot!.querySelector('.now-line')!;
     expect([line.getAttribute('x1'), line.getAttribute('x2')]).toEqual(['450', '450']);
+    expect([line.getAttribute('y1'), line.getAttribute('y2')]).toEqual(['0', '200']);
     const label = el.shadowRoot!.querySelector<HTMLElement>('.now-label')!;
     expect(label.textContent!.trim()).toBe('Now');
     expect(label.getAttribute('aria-hidden')).toBe('true');

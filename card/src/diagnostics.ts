@@ -15,7 +15,7 @@
 
 import type { ZoneEntities } from './helpers.js';
 import type { HassEntity, HomeAssistant } from './types.js';
-import { degrees, formatTime, knownZone } from './now-status.js';
+import { degrees, formatTime } from './now-status.js';
 
 export type Controller = 'basic' | 'learning' | 'predictive';
 /** The integration's actions (`ACTION_*` in its `const.py`). */
@@ -92,7 +92,7 @@ const RELEASES = [
   ],
 ] as const satisfies ReadonlyArray<readonly [string, ReadonlyArray<keyof ZoneEntities>]>;
 
-export type Release = (typeof RELEASES)[number][0];
+type Release = (typeof RELEASES)[number][0];
 
 /** Whether the integration is at least that release, from its entities. */
 export function hasSince(entities: ZoneEntities, release: Release): boolean {
@@ -462,53 +462,29 @@ export function readRoomSource(hass: HomeAssistant, entities: ZoneEntities): Sta
 
 /** "5 pm" today, "tomorrow 5 pm", "Mon 5 pm", "21 Oct, 5 pm": when, in HA's
  *  language and 12/24-hour setting. */
-export function formatWhen(
-  ms: number,
-  now: number,
-  hass?: Pick<HomeAssistant, 'locale'>,
-  timeZone?: string,
-): string {
+export function formatWhen(ms: number, now: number, hass?: Pick<HomeAssistant, 'locale'>): string {
   // The time as HA shows it, as on the Now tab. The day and month words
   // around it are English, as the card's are: HA's own language only where
   // it's an English one, for its date order.
-  const zone = knownZone(timeZone);
-  const time = formatTime(ms, hass, zone);
+  const time = formatTime(ms, hass);
   const own = hass?.locale?.language;
   const language = own?.startsWith('en') ? own : 'en';
-  // A day's number: its midnight in UTC, from the date in the zone.
-  const ymd = (t: number) => {
-    if (!zone) {
-      const d = new Date(t);
-      return [d.getFullYear(), d.getMonth(), d.getDate()];
-    }
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: zone,
-      year: 'numeric',
-      month: 'numeric',
-      day: 'numeric',
-    }).formatToParts(t);
-    const part = (type: string) => Number(parts.find((p) => p.type === type)?.value);
-    return [part('year'), part('month') - 1, part('day')];
-  };
-  // Counted on UTC midnights, so a change of the clocks doesn't count.
   const day = (t: number) => {
-    const [y, m, d] = ymd(t);
-    return Date.UTC(y, m, d);
+    const d = new Date(t);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   };
   const days = Math.round((day(ms) - day(now)) / 86_400_000);
-  const inZone = zone ? { timeZone: zone } : {};
   if (days === 0) return time;
   if (days === 1) return `tomorrow ${time}`;
   if (days === -1) return `yesterday ${time}`;
   if (Math.abs(days) < 7) {
-    return `${new Intl.DateTimeFormat(language, { weekday: 'short', ...inZone }).format(ms)} ${time}`;
+    return `${new Intl.DateTimeFormat(language, { weekday: 'short' }).format(ms)} ${time}`;
   }
-  const sameYear = ymd(ms)[0] === ymd(now)[0];
+  const sameYear = new Date(ms).getFullYear() === new Date(now).getFullYear();
   const date = new Intl.DateTimeFormat(language, {
     day: 'numeric',
     month: 'short',
     ...(sameYear ? {} : { year: 'numeric' }),
-    ...inZone,
   }).format(ms);
   return `${date}, ${time}`;
 }

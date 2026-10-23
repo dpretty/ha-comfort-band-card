@@ -60,7 +60,8 @@ export class ComfortBandScheduleChart extends LitElement {
       :host {
         display: block;
         position: relative;
-        margin: var(--cb-gap-md) 0;
+        /* Room above for the now label, clear of the line over the chart. */
+        margin: 18px 0 var(--cb-gap-md);
       }
       .chart {
         position: relative;
@@ -72,6 +73,8 @@ export class ComfortBandScheduleChart extends LitElement {
            leading digit ("25°" rendered as "5°"). */
         padding-left: ${unsafeCSS(GUTTER)}px;
         box-sizing: border-box;
+        /* Room below for the hour labels, with or without the legend. */
+        margin-bottom: 16px;
       }
       svg {
         display: block;
@@ -139,7 +142,7 @@ export class ComfortBandScheduleChart extends LitElement {
         display: flex;
         justify-content: flex-end;
         gap: var(--cb-gap-md);
-        margin-top: 22px;
+        margin-top: 6px;
         font-size: 11px;
         color: var(--cb-text-secondary);
       }

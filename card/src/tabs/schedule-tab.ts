@@ -7,22 +7,22 @@
  * change" button in the toolbar above the list. A row's Delete asks for
  * inline confirmation (no more long-press surprise from v0.8.x).
  *
- * **#33**: above the chart, the range in force now and the schedule's next
- * change, from the integration's entities. While this list is the one in
- * force (the active profile's, and not while the room follows a shared
- * schedule), a now marker on the chart and its current change marked
- * "Current". A change that repeats the range before it is marked "Same as
- * before". The list reads first: Add, Edit and Delete sit behind "Edit
- * schedule".
+ * **#33**: above the chart, the range in force now, from the integration's
+ * entities. While this list is the one in force (the active profile's, not
+ * empty, and not while the room follows a shared schedule), a now marker on
+ * the chart and its current change marked "Current". A change that repeats
+ * the range before it is marked "Same as before". The list reads first:
+ * Add, Edit and Delete sit behind "Edit schedule".
  *
  * Workflow:
  *   1. On mount, open a `comfort_band/subscribe_schedule` subscription for
  *      the active (zone, profile). The backend sends the current state
  *      immediately, then one event per future change — from any source.
- *   2. Render the read-only chart visualization + the editable list.
- *   3. User clicks Add → dialog (inline) seeded with sensible defaults.
- *      User clicks Edit or taps a row → dialog seeded with that row.
- *      User clicks Delete → inline confirm row replaces the normal row.
+ *   2. Render the read-only chart visualization + the list, read-only
+ *      until "Edit schedule" (and again after "Done").
+ *   3. In edit mode: user clicks Add → dialog (inline) seeded with sensible
+ *      defaults. User clicks Edit or taps a row → dialog seeded with that
+ *      row. User clicks Delete → inline confirm row replaces the normal row.
  *   4. All edits persist via `comfort_band.set_schedule` (full schedule
  *      replacement — atomic and simpler than per-transition mutations).
  *      The subscription delivers the echo, so two cards on different
@@ -298,7 +298,7 @@ export class ComfortBandScheduleTab extends LitElement {
         font-size: 11px;
         color: var(--cb-text-secondary);
       }
-      .tag.now {
+      .tag.current {
         border-color: var(--cb-accent, var(--primary-color, #03a9f4));
         color: var(--cb-text-primary);
       }
@@ -673,6 +673,7 @@ export class ComfortBandScheduleTab extends LitElement {
       `;
     }
 
+    const inForce = this._listInForce();
     return html`
       ${this._renderHeader()} ${this._renderNow()}
       ${this._loading
@@ -682,7 +683,7 @@ export class ComfortBandScheduleTab extends LitElement {
           : html`
               <comfort-band-schedule-chart
                 .transitions=${this._transitions}
-                .now=${this._listInForce() ? minutesOfDay(this._now, this.hass) : null}
+                .now=${inForce ? minutesOfDay(this._now, this.hass) : null}
               ></comfort-band-schedule-chart>
               <div class="list-toolbar">
                 ${this._editingList
@@ -694,7 +695,7 @@ export class ComfortBandScheduleTab extends LitElement {
                       Edit schedule
                     </button>`}
               </div>
-              ${this._renderList()}
+              ${this._renderList(inForce)}
             `}
     `;
   }
@@ -718,13 +719,15 @@ export class ComfortBandScheduleTab extends LitElement {
 
   /**
    * Whether this list is the one in force: the room's own schedule (not a
-   * shared one) for the active profile. The tab falls back to "home" where
-   * the profile select can't be read, so that's only taken as in force
-   * without a profile manager at all. Across a change of profile, the list
-   * shown is the old one's until the new one's arrives.
+   * shared one) for the active profile, with changes in it (without, the
+   * room follows the default profile's schedule, or its own range). Where
+   * the profile select can't be read, the list shown may not be the active
+   * profile's, so it's only taken as in force without a profile manager at
+   * all. Across a change of profile, the list shown is the old one's until
+   * the new one's arrives.
    */
   private _listInForce(): boolean {
-    if (!this.hass || !this.entities) return false;
+    if (!this.hass || !this.entities || this._transitions.length === 0) return false;
     if (ownScheduleInForce(this.hass, this.entities) !== true) return false;
     const entity = findActiveProfileEntity(this.hass);
     const state = entity ? this.hass.states[entity] : undefined;
@@ -732,11 +735,11 @@ export class ComfortBandScheduleTab extends LitElement {
     return !profileManagerExists(this.hass);
   }
 
-  /** The range in force now and the schedule's next change, from the
-   *  integration's entities; and whether the room follows a shared schedule. */
+  /** The range in force now, from the integration's entities; and whether
+   *  the room follows a shared schedule. */
   private _renderNow() {
     if (!this.hass || !this.entities) return nothing;
-    const line = nowLine(this.hass, this.entities, this._now);
+    const line = nowLine(this.hass, this.entities);
     const following = ownScheduleInForce(this.hass, this.entities) === false;
     const shared = sharedScheduleName(this.hass, this.entities);
     return html`
@@ -750,7 +753,7 @@ export class ComfortBandScheduleTab extends LitElement {
     `;
   }
 
-  private _renderList() {
+  private _renderList(inForce: boolean) {
     if (this._transitions.length === 0) {
       return html`<div class="empty">
         ${this._editingList
@@ -759,7 +762,7 @@ export class ComfortBandScheduleTab extends LitElement {
       </div>`;
     }
     // Only this list's own change is marked, and only while it's in force.
-    const current = this._listInForce()
+    const current = inForce
       ? currentIndex(this._transitions, minutesOfDay(this._now, this.hass))
       : null;
     const same = sameAsBefore(this._transitions);
@@ -777,7 +780,7 @@ export class ComfortBandScheduleTab extends LitElement {
   }
 
   private _tags(current: boolean, same: boolean) {
-    return html`${current ? html`<span class="tag now">Current</span>` : nothing}
+    return html`${current ? html`<span class="tag current">Current</span>` : nothing}
     ${same ? html`<span class="tag same">Same as before</span>` : nothing}`;
   }
 
