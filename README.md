@@ -24,7 +24,15 @@ Entity discovery is by device identifier (`(comfort_band, zone:{slug})`), so ren
 
 ## Installation
 
-### Via HACS (recommended)
+[![Open your Home Assistant instance and open this repository in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=dpretty&repository=ha-comfort-band-card&category=plugin)
+
+### Home Assistant 2026.11 and later: Marketplace (recommended)
+
+1. Select the button above. Or go to **Settings → Marketplace → Add from link**, enter `dpretty/ha-comfort-band-card`, and select **Add** (choose **Dashboard** if it asks for a type). Adding a repository from a link needs a GitHub connection; the Marketplace asks you to connect the first time.
+2. Open **Comfort Band Card** and select **Install**. The Marketplace adds the resource at `/local/community/ha-comfort-band-card/comfort-band-card.js`. If you manage dashboard resources in YAML, add that resource yourself (type `module`).
+3. Hard-refresh the browser (`Cmd-Shift-R` / `Ctrl-Shift-R`).
+
+### Earlier versions: HACS
 
 1. **HACS → Frontend → ⋮ → Custom repositories** → URL `https://github.com/dpretty/ha-comfort-band-card`, category **Dashboard** → Add.
 2. Click **Download** on the Comfort Band Card row. HACS adds the resource at `/hacsfiles/ha-comfort-band-card/comfort-band-card.js`.
@@ -32,7 +40,7 @@ Entity discovery is by device identifier (`(comfort_band, zone:{slug})`), so ren
 
 ### Manual install
 
-1. Download `comfort-band-card.js` from the [latest release](https://github.com/dpretty/ha-comfort-band-card/releases/latest).
+1. Open the [latest release](https://github.com/dpretty/ha-comfort-band-card/releases/latest), download its source code, and take `dist/comfort-band-card.js` from it. The built card is committed in `dist/`; releases don't attach it as a separate file.
 2. Copy to `/config/www/comfort-band-card.js` on your HA instance.
 3. **Settings → Dashboards → ⋮ → Resources → Add Resource:**
    - URL: `/local/comfort-band-card.js`
