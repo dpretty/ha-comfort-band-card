@@ -320,6 +320,18 @@ describe('comfort-band-schedule-tab across a change of active profile', () => {
   });
 });
 
+describe('comfort-band-schedule-tab header', () => {
+  // It names the list on screen, so not before there is one.
+  it('names no profile until its list arrives', async () => {
+    const { hass, answer } = setup(select('home'), {});
+    const el = await tab(hass);
+    expect(root(el).querySelector('.header')).toBeNull();
+    answer('home', HOME);
+    await settle(el);
+    expect(text(root(el).querySelector('.header'))).toBe('Schedule: home');
+  });
+});
+
 describe('comfort-band-schedule-tab with the profile select unreadable', () => {
   it('doesn’t take “unavailable” or “unknown” as a profile', async () => {
     const { hass, subscribed } = setup(select('unavailable', {}), { home: HOME, away: AWAY });
