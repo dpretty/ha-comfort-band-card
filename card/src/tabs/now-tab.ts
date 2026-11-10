@@ -221,6 +221,13 @@ export class ComfortBandNowTab extends LitElement {
       .steps {
         margin-top: var(--cb-gap-sm);
       }
+      /* "Until 10:30 pm" takes more room than "1 h": the time on one line. */
+      .lengths button[data-length='next'] {
+        flex: 1.6;
+      }
+      .lengths .time {
+        white-space: nowrap;
+      }
       .steps button {
         font-size: 15px;
       }
@@ -657,7 +664,9 @@ export class ComfortBandNowTab extends LitElement {
                       data-length=${h}
                       @click=${() => this._onPickLength(h)}
                     >
-                      ${h === 'next' ? `Until ${formatTime(next!, this.hass)}` : `${h} h`}
+                      ${h === 'next'
+                        ? html`Until <span class="time">${formatTime(next!, this.hass)}</span>`
+                        : `${h} h`}
                     </button>`,
                 )}
               </div>`}

@@ -1386,7 +1386,7 @@ let Nt = class extends Ce {
                       data-length=${a}
                       @click=${() => this._onPickLength(a)}
                     >
-                      ${a === "next" ? `Until ${xi(o, this.hass)}` : `${a} h`}
+                      ${a === "next" ? v`Until <span class="time">${xi(o, this.hass)}</span>` : `${a} h`}
                     </button>`
     )}
               </div>`}
@@ -1516,6 +1516,13 @@ Nt.styles = [
       }
       .steps {
         margin-top: var(--cb-gap-sm);
+      }
+      /* "Until 10:30 pm" takes more room than "1 h": the time on one line. */
+      .lengths button[data-length='next'] {
+        flex: 1.6;
+      }
+      .lengths .time {
+        white-space: nowrap;
       }
       .steps button {
         font-size: 15px;
