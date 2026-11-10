@@ -254,6 +254,44 @@ describe('comfort-band-schedule-tab across a change of active profile', () => {
     expect(rows(el)).toEqual(['00:00']);
   });
 
+  it('says nothing of a delete from the form already on its way', async () => {
+    const { hass } = setup(select('home'), { home: HOME, away: AWAY });
+    let finish: () => void = () => {};
+    hass.callService = vi.fn(() => new Promise<undefined>((r) => (finish = () => r(undefined))));
+    const el = await tab(hass);
+    await editing(el);
+    row(el, '06:00').querySelector<HTMLButtonElement>('button.secondary')!.click();
+    await el.updateComplete;
+    dialog(el)!.dispatchEvent(
+      new CustomEvent('dialog-delete', { detail: { at: '06:00' }, bubbles: true, composed: true }),
+    );
+    await switchTo(el, select('away'));
+    finish();
+    await settle(el);
+    expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'set_schedule', {
+      zone: 'gym',
+      profile: 'home',
+      transitions: [{ at: '22:00', low: 17, high: 25 }],
+    });
+    expect(notice(el)).toBeUndefined();
+  });
+
+  // Two changes of profile before the first's list arrives: the change was
+  // to the list on screen, home's, not to the profile in between.
+  it('names the schedule the change was to', async () => {
+    const three = { options: ['home', 'away', 'guest'], default_profile: 'home' };
+    const { hass } = setup(select('home', three));
+    const el = await tab(hass);
+    await editing(el);
+    await switchTo(el, select('away', three));
+    row(el, '06:00').querySelector<HTMLButtonElement>('button.danger')!.click();
+    await el.updateComplete;
+    await switchTo(el, select('guest', three));
+    expect(notice(el)).toBe(
+      'The active profile changed to “guest”, so your change to the “home” schedule wasn’t saved.',
+    );
+  });
+
   it('says nothing when the profile changes with no change being made', async () => {
     const { hass } = setup(select('home'), { home: HOME, away: AWAY });
     const el = await tab(hass);
