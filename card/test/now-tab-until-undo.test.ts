@@ -241,6 +241,21 @@ describe('comfort-band-now-tab Undo', () => {
     expect(undoButton(el)).toBeNull();
   });
 
+  // HA's states can arrive before the call's answer: Undo needn't wait for
+  // another update after it.
+  it('is offered at once where HA shows the change before the call returns', async () => {
+    const { hass, deliver } = setup();
+    const el = await nowTab(hass);
+    const call = hass.callService as unknown as ReturnType<typeof vi.fn>;
+    const real = call.getMockImplementation()!;
+    call.mockImplementationOnce(async (...args: Parameters<typeof real>) => {
+      await real(...args);
+      await deliver(el);
+    });
+    await tap(el, 'warmer');
+    expect(undoButton(el)).not.toBeNull();
+  });
+
   it('puts back an earlier adjustment with its own end', async () => {
     const ends = NOW + 2 * HOUR;
     const { hass, deliver } = setup({
