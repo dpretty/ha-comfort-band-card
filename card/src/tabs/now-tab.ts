@@ -275,16 +275,18 @@ export class ComfortBandNowTab extends LitElement {
       .status-row.with-undo {
         min-height: 44px;
       }
+      /* In em, as Undo's text is: at a larger text size the button grows,
+         and a slot in px would grow with it when it comes (#25 review). */
       .undo-slot {
         flex: none;
-        min-width: 72px;
+        min-width: 5em;
         display: flex;
         justify-content: flex-end;
       }
       .undo {
         font: inherit;
         min-height: 44px;
-        padding: 6px 16px;
+        padding: 0.4em 1.1em;
         border-radius: var(--cb-radius-pill);
         border: 1px solid var(--divider-color, #cccccc);
         background: transparent;
@@ -338,6 +340,8 @@ export class ComfortBandNowTab extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    // Another room's: Undo would put this one's band there.
+    if (changed.has('zone') || changed.has('entities')) this._dropUndo();
     if (changed.has('hass')) this._checkUndo();
   }
 
@@ -365,9 +369,14 @@ export class ComfortBandNowTab extends LitElement {
   }
 
   /** Offers Undo for a change HA shows, and looks again when an earlier end
-   *  it would put back gets too near to. */
+   *  it would put back gets too near to. None where it would change nothing
+   *  already: Back to schedule in an adjustment's last seconds. */
   private _armUndo(undo: Undo): void {
     this._clearUndoTimers();
+    if (undoPlan(undo.before, undo.shown!) === null) {
+      this._undo = null;
+      return;
+    }
     this._undo = undo;
     const { before } = undo;
     if (!restoresEnd(before)) return;
@@ -431,8 +440,8 @@ export class ComfortBandNowTab extends LitElement {
   }
 
   /** The length in force: the one picked here, else three hours. A picked
-   *  "Until" is for the change it named: once that's passed (and HA names
-   *  the following one), three hours. */
+   *  "Until" is for the change it named: once that's passed, or HA names
+   *  another, three hours. */
   private _hours(): Length {
     const length = this._length ?? DEFAULT_HOURS;
     if (length !== 'next') return length;
