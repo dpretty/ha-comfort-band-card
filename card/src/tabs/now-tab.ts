@@ -10,13 +10,16 @@
  *     whole range by 0.5°; taps made close together are sent as one
  *     `comfort_band.start_override` once they stop, for the length picked.
  *     Picking a length while an adjustment runs re-times it. The lengths are
- *     relative, or HA's own time of the next change (#26), so the panel's
- *     clock doesn't come into it; the end shown is HA's.
+ *     relative, or HA's own time of the next change (#26); the panel's clock
+ *     decides only whether that change is still ahead. The end shown is HA's.
+ *     A picked "Until" is for that change: once it's passed, three hours.
  *   - "Back to schedule" while an adjustment runs.
- *   - With integration v0.25.0+, "Undo" after a change made here, once HA
- *     shows it (#25): it puts back what the change replaced. It goes when
- *     another change is made here, the tab closes, or the room's adjustment
- *     changes from elsewhere, so it never undoes someone else's change.
+ *   - With integration v0.25.0+, "Undo" beside the status line after a change
+ *     made here, once HA shows it (#25): it puts back what the change
+ *     replaced. It goes when another change is made here, the tab closes,
+ *     the room's adjustment changes from elsewhere, or putting it back would
+ *     change nothing. Its place is kept while it's away, so nothing moves
+ *     under a finger when it comes or goes.
  *   - While a call from this tab is going through, these controls ignore
  *     presses (marked aria-disabled, so they keep focus), so nothing is
  *     built on a state the tab has just changed.
@@ -83,7 +86,8 @@ interface Adjustment {
 }
 
 /** What a change made here replaced, and what it's to show once HA has it
- *  (#25). Undo is offered from then until HA shows anything else. */
+ *  (#25). Undo is offered from then until HA shows anything else; before,
+ *  it lapses at the first state that's neither, or after a short wait. */
 interface Undo {
   before: Adjustment;
   expect: { active: boolean; low?: number; high?: number; ends?: number };
@@ -118,6 +122,8 @@ export class ComfortBandNowTab extends LitElement {
 
   /** The length picked under "Adjust for" in this tab, if any. */
   @state() private _length: Length | null = null;
+  /** The change a picked "Until" was for (ms). */
+  private _pickedNext: number | null = null;
   @state() private _burst: Burst | null = null;
   private _burstTimer: ReturnType<typeof setTimeout> | null = null;
   /** What a call from this tab is doing while it goes through, such as
@@ -127,8 +133,13 @@ export class ComfortBandNowTab extends LitElement {
   @state() private _busy: string | null = null;
   /** What Undo would put back, once HA shows the change it undoes (#25). */
   @state() private _undo: Undo | null = null;
-  /** Focus goes to the steps once Undo's button has gone from under it. */
-  private _focusSteps = false;
+  /** Ends the wait for HA to show the change Undo undoes. */
+  private _undoWait: ReturnType<typeof setTimeout> | null = null;
+  /** Fires when an earlier end gets too near to put back. */
+  private _undoTick: ReturnType<typeof setTimeout> | null = null;
+  /** Focus goes to the status line once Undo's button has gone from under it:
+   *  something that doesn't act, so a key meant for Undo does nothing. */
+  private _focusStatus = false;
 
   public static override styles = [
     tokens,
@@ -249,10 +260,26 @@ export class ComfortBandNowTab extends LitElement {
         width: 100%;
         margin-top: var(--cb-gap-sm);
       }
-      .undo-row {
+      /* Undo's place beside the status line is kept while it's away, and
+         the line kept two lines high, so nothing below moves under a finger
+         when Undo comes or goes (#25 review). */
+      .status-row {
+        display: flex;
+        align-items: center;
+        gap: var(--cb-gap-sm);
+      }
+      .status-row .status {
+        flex: 1;
+        min-width: 0;
+      }
+      .status-row.with-undo {
+        min-height: 44px;
+      }
+      .undo-slot {
+        flex: none;
+        min-width: 72px;
         display: flex;
         justify-content: flex-end;
-        margin-top: var(--cb-gap-sm);
       }
       .undo {
         font: inherit;
@@ -307,26 +334,72 @@ export class ComfortBandNowTab extends LitElement {
     // Closing the dialog mid-burst still makes the change the taps asked for.
     this._commitBurst();
     // Closing it also ends what Undo would put back.
-    this._undo = null;
+    this._dropUndo();
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
-    if (!changed.has('hass') || !this._undo) return;
-    const undo = this._undo;
-    const shown = this._adjustment();
-    if (undo.shown === null) {
-      if (shown && landed(undo, shown)) this._undo = { ...undo, shown };
-    } else if (!shown || !sameAdjustment(undo.shown, shown)) {
-      // Changed from elsewhere: Undo would undo someone else's change.
-      if (this.shadowRoot?.activeElement?.classList.contains('undo')) this._focusSteps = true;
-      this._undo = null;
+    if (!changed.has('hass')) return;
+    // A picked "Until" was for that change: once it's passed, three hours.
+    if (this._length === 'next' && this._nextChange() !== this._pickedNext) {
+      this._length = null;
+      this._pickedNext = null;
     }
+    this._checkUndo();
   }
 
   protected override updated(): void {
-    if (!this._focusSteps || this._undo) return;
-    this._focusSteps = false;
-    this.shadowRoot?.querySelector<HTMLElement>('.steps button')?.focus();
+    if (!this._focusStatus || this._undo) return;
+    this._focusStatus = false;
+    this.shadowRoot?.querySelector<HTMLElement>('.status')?.focus();
+  }
+
+  /** Keeps Undo only while it would put back what the change it undoes
+   *  replaced, and nothing has changed since (#25 review). */
+  private _checkUndo(): void {
+    const undo = this._undo;
+    if (!undo) return;
+    const shown = this._adjustment();
+    if (!shown) {
+      this._dropUndo();
+    } else if (undo.shown === null) {
+      if (landed(undo, shown)) this._armUndo({ ...undo, shown });
+      // Something other than the change came first: not ours to undo.
+      else if (!sameAdjustment(undo.before, shown)) this._dropUndo();
+    } else if (!sameAdjustment(undo.shown, shown) || undoPlan(undo.before, shown) === null) {
+      this._dropUndo();
+    }
+  }
+
+  /** Offers Undo for a change HA shows, and looks again when an earlier end
+   *  it would put back gets too near to. */
+  private _armUndo(undo: Undo): void {
+    this._clearUndoTimers();
+    this._undo = undo;
+    const { before } = undo;
+    if (!restoresEnd(before)) return;
+    this._undoTick = setTimeout(
+      () => {
+        this._undoTick = null;
+        this._checkUndo();
+        this.requestUpdate();
+      },
+      before.ends! - UNDO_MARGIN_MS - Date.now() + 1,
+    );
+  }
+
+  private _dropUndo(): void {
+    if (this._undo && this.shadowRoot?.activeElement?.classList.contains('undo')) {
+      this._focusStatus = true;
+    }
+    this._clearUndoTimers();
+    this._undo = null;
+  }
+
+  private _clearUndoTimers(): void {
+    if (this._undoWait !== null) clearTimeout(this._undoWait);
+    if (this._undoTick !== null) clearTimeout(this._undoTick);
+    this._undoWait = null;
+    this._undoTick = null;
   }
 
   private get _stateOf() {
@@ -363,11 +436,14 @@ export class ComfortBandNowTab extends LitElement {
     return scheduled === true && nextChange !== null && nextChange > now ? nextChange : null;
   }
 
-  /** The length in force: the one picked here, else three hours. "Until
-   *  the next change" falls back to three hours while there's none. */
+  /** The length in force: the one picked here, else three hours. A picked
+   *  "Until" is for the change it named: once that's passed (and HA names
+   *  the following one), three hours. */
   private _hours(): Length {
     const length = this._length ?? DEFAULT_HOURS;
-    return length === 'next' && this._nextChange() === null ? DEFAULT_HOURS : length;
+    if (length !== 'next') return length;
+    const next = this._nextChange();
+    return next !== null && next === this._pickedNext ? 'next' : DEFAULT_HOURS;
   }
 
   /** The room's adjustment as HA shows it, or null where its manual band
@@ -395,7 +471,18 @@ export class ComfortBandNowTab extends LitElement {
       if (undo && this.isConnected) {
         // HA may already show the change: its state can arrive first.
         const shown = this._adjustment();
-        this._undo = { ...undo, shown: shown && landed(undo, shown) ? shown : null };
+        if (shown && landed(undo, shown)) {
+          this._armUndo({ ...undo, shown });
+        } else if (shown && sameAdjustment(undo.before, shown)) {
+          this._undo = { ...undo, shown: null };
+          // Not shown soon: overtaken unseen, or not coming.
+          this._undoWait = setTimeout(() => {
+            this._undoWait = null;
+            if (this._undo?.shown === null) {
+              this._undo = null;
+            }
+          }, UNDO_WAIT_MS);
+        }
       }
     } catch {
       // The status falls back to what is actually in force.
@@ -405,9 +492,12 @@ export class ComfortBandNowTab extends LitElement {
   }
 
   /** What Undo would need to put back the adjustment in force, where the
-   *  integration can (v0.25.0+). */
+   *  integration can (v0.25.0+). Not one whose end can't be read: it
+   *  couldn't be put back. */
   private _undoFrom(): Adjustment | null {
-    return this.hass && overrideEndsSupported(this.hass) ? this._adjustment() : null;
+    if (!this.hass || !overrideEndsSupported(this.hass)) return null;
+    const adjustment = this._adjustment();
+    return adjustment && !(adjustment.active && adjustment.ends === null) ? adjustment : null;
   }
 
   private _sendBand(band: Band, length: Length): void {
@@ -438,8 +528,6 @@ export class ComfortBandNowTab extends LitElement {
   private _onStep = (direction: 1 | -1) => {
     if (this._busy) return;
     let burst = this._burst;
-    // A new change: Undo would put back what's now in force only before it.
-    this._undo = null;
     if (!burst) {
       const base = this._bandInForce();
       if (!base) return;
@@ -449,6 +537,8 @@ export class ComfortBandNowTab extends LitElement {
     const before = shiftBand(burst.base, burst.steps);
     const after = shiftBand(burst.base, burst.steps + direction);
     if (after.low === before.low && after.high === before.high) return;
+    // A new change: Undo would put back what's now in force only before it.
+    this._dropUndo();
     this._burst = { ...burst, steps: burst.steps + direction };
     if (this._burstTimer !== null) clearTimeout(this._burstTimer);
     this._burstTimer = setTimeout(() => this._commitBurst(), ADJUST_DELAY_MS);
@@ -478,12 +568,14 @@ export class ComfortBandNowTab extends LitElement {
   private _onPickLength = (length: Length) => {
     if (this._busy) return;
     this._length = length;
-    this._undo = null;
+    this._pickedNext = length === 'next' ? this._nextChange() : null;
     // Taps still being made take the length when they're sent.
     if (this._burst) {
       this._burst = { ...this._burst, picked: true };
       return;
     }
+    // It re-times a running adjustment, a change; with none, nothing's sent.
+    if (this._stateOf(this.entities?.overrideActive ?? null)?.state === 'on') this._dropUndo();
     this._retime(length);
   };
 
@@ -502,7 +594,7 @@ export class ComfortBandNowTab extends LitElement {
     const hass = this.hass;
     const zone = this.zone;
     this._dropBurst();
-    this._undo = null;
+    this._dropUndo();
     const before = this._undoFrom();
     const doing =
       this._schedule().scheduled === true ? 'Going back to the schedule' : 'Ending the adjustment';
@@ -515,43 +607,50 @@ export class ComfortBandNowTab extends LitElement {
 
   /** Puts back what the last change made here replaced: the adjustment
    *  then in force with its own end, or none, with the manual band it had
-   *  (#25). An end that has passed meanwhile isn't put back. */
+   *  (#25). An end that has (nearly) passed meanwhile isn't put back: the
+   *  adjustment is ended, as that one would have ended. A refusal is HA's
+   *  to report; nothing else is tried. */
   private _onUndo = () => {
     const undo = this._undo;
     // No call can be on its way: each change clears Undo before it's sent.
     if (!undo?.shown || !this.hass || !this.zone) return;
+    const plan = undoPlan(undo.before, undo.shown);
+    if (plan === null) return;
     const hass = this.hass;
     const zone = this.zone;
     const { before } = undo;
-    this._undo = null;
-    this._focusSteps = true;
-    const ends = restoresEnd(before);
-    void this._run(this._undoDoing(before), async () => {
-      if (ends) {
-        try {
-          await startOverride(hass, {
+    const { doing } = this._undoWords(before, plan);
+    this._dropUndo();
+    void this._run(doing, () =>
+      plan === 'restore'
+        ? startOverride(hass, {
             zone,
             low: before.low,
             high: before.high,
             until: new Date(before.ends!).toISOString(),
-          });
-          return;
-        } catch {
-          // Its end passed after all: end it, as it would have ended.
-        }
-      }
-      await cancelOverride(hass, { zone, low: before.low, high: before.high });
-    });
+          })
+        : cancelOverride(hass, { zone, low: before.low, high: before.high }),
+    );
   };
 
-  /** What Undo puts back, in words: "Going back to 19–22° until 5 pm". */
-  private _undoDoing(before: Adjustment): string {
-    if (restoresEnd(before)) {
-      return `Going back to ${bandText(before)} until ${formatTime(before.ends!, this.hass)}`;
+  /** What Undo does, in words: "back to 19–22° until 5 pm", and the status
+   *  while it does it. With no schedule, a range has no end to name; where
+   *  it can't be told if a schedule sets the range, just "end the
+   *  adjustment". */
+  private _undoWords(
+    before: Adjustment,
+    plan: 'restore' | 'end',
+  ): { label: string; doing: string } {
+    const band = bandText(before);
+    const scheduled = this._schedule().scheduled;
+    if (scheduled === false) return { label: `back to ${band}`, doing: `Going back to ${band}` };
+    if (plan === 'restore') {
+      const until = `until ${formatTime(before.ends!, this.hass)}`;
+      return { label: `back to ${band} ${until}`, doing: `Going back to ${band} ${until}` };
     }
-    return this._schedule().scheduled === true
-      ? 'Going back to the schedule'
-      : `Going back to ${bandText(before)}`;
+    return scheduled === true
+      ? { label: 'back to the schedule', doing: 'Going back to the schedule' }
+      : { label: 'end the adjustment', doing: 'Ending the adjustment' };
   }
 
   private _onFeedbackTap = async (label: FeedbackLabel): Promise<void> => {
@@ -596,6 +695,8 @@ export class ComfortBandNowTab extends LitElement {
       now,
       formatTime: (ms) => formatTime(ms, this.hass),
     });
+    // Undo's place, kept while it's away, where it can be offered at all.
+    const undoable = overrideEndsSupported(this.hass);
 
     return html`
       <div class="temperature">
@@ -619,11 +720,14 @@ export class ComfortBandNowTab extends LitElement {
           .action=${controlling(reading) ? reading.action : 'unknown'}
         ></band-gauge>
       </div>
-      <div class="status ${status.kind}" role="status" aria-live="polite">
-        <ha-icon icon=${STATUS_ICONS[status.kind]} aria-hidden="true"></ha-icon>
-        <span>${status.text}</span>
+      <div class="status-row ${undoable ? 'with-undo' : ''}">
+        <div class="status ${status.kind}" role="status" aria-live="polite" tabindex="-1">
+          <ha-icon icon=${STATUS_ICONS[status.kind]} aria-hidden="true"></ha-icon>
+          <span>${status.text}</span>
+        </div>
+        ${undoable ? html`<div class="undo-slot">${this._renderUndo()}</div>` : nothing}
       </div>
-      ${notice ? html`<div class="notice">${notice}</div>` : nothing} ${this._renderUndo()}
+      ${notice ? html`<div class="notice">${notice}</div>` : nothing}
       ${this._renderAdjust(overrideActive, scheduled)} ${this._renderFeedbackSection()}
     `;
   }
@@ -631,16 +735,12 @@ export class ComfortBandNowTab extends LitElement {
   private _renderUndo() {
     const undo = this._undo;
     if (!undo?.shown) return nothing;
-    const doing = this._undoDoing(undo.before);
-    return html`<div class="undo-row">
-      <button
-        class="undo"
-        aria-label=${`Undo: ${doing.replace(/^Going back/, 'back')}`}
-        @click=${this._onUndo}
-      >
-        Undo
-      </button>
-    </div>`;
+    const plan = undoPlan(undo.before, undo.shown);
+    if (plan === null) return nothing;
+    const { label } = this._undoWords(undo.before, plan);
+    return html`<button class="undo" aria-label=${`Undo: ${label}`} @click=${this._onUndo}>
+      Undo
+    </button>`;
   }
 
   private _renderAdjust(overrideActive: boolean, scheduled: boolean | null) {
@@ -714,6 +814,8 @@ export class ComfortBandNowTab extends LitElement {
 
 /** Undo puts an earlier adjustment back only with at least this long to run. */
 const UNDO_MARGIN_MS = 5_000;
+/** How long Undo waits for HA to show the change it undoes. */
+const UNDO_WAIT_MS = 10_000;
 
 /** Whether HA shows what a change was to set: whether an adjustment runs,
  *  its band to the 0.1° shown, and its end to the second HA gives. */
@@ -745,6 +847,14 @@ function landed(undo: Omit<Undo, 'shown'>, shown: Adjustment): boolean {
  *  ends the adjustment, as that one would have ended. */
 function restoresEnd(before: Adjustment, now = Date.now()): boolean {
   return before.active && before.ends !== null && before.ends > now + UNDO_MARGIN_MS;
+}
+
+/** What Undo would do now, given what HA shows: put an earlier adjustment
+ *  back, or end the one running with the band it replaced; null where the
+ *  room is like that already, so it would change nothing. */
+function undoPlan(before: Adjustment, shown: Adjustment): 'restore' | 'end' | null {
+  if (restoresEnd(before)) return 'restore';
+  return !shown.active && shown.low === before.low && shown.high === before.high ? null : 'end';
 }
 
 declare global {
