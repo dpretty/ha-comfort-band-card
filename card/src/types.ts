@@ -77,6 +77,9 @@ export interface HomeAssistant {
   /** HA's own formatting of a state, with its display precision and unit
    *  (HA 2023.9+); optional in test fixtures and older frontends. */
   formatEntityState?: (stateObj: HassEntity, state?: string) => string;
+  /** The services HA describes, by domain, each with the fields it takes;
+   *  optional in test fixtures. */
+  services?: Record<string, Record<string, { fields?: Record<string, unknown> }>>;
   connection: HassConnection;
   callService(
     domain: string,

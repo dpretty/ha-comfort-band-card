@@ -48,19 +48,40 @@ export function removeTransition(
   return hass.callService(DOMAIN, 'remove_transition', { ...args });
 }
 
+/** `until` (integration v0.25.0+) is an ISO time, as an alternative to `hours`. */
 export function startOverride(
   hass: HomeAssistant,
-  args: { zone: string; low?: number; high?: number; hours?: number },
+  args: { zone: string; low?: number; high?: number; hours?: number; until?: string },
 ): Promise<unknown> {
   const data: Record<string, unknown> = { zone: args.zone };
   if (args.low !== undefined) data.low = args.low;
   if (args.high !== undefined) data.high = args.high;
   if (args.hours !== undefined) data.hours = args.hours;
+  if (args.until !== undefined) data.until = args.until;
   return hass.callService(DOMAIN, 'start_override', data);
 }
 
-export function cancelOverride(hass: HomeAssistant, args: { zone: string }): Promise<unknown> {
-  return hass.callService(DOMAIN, 'cancel_override', { ...args });
+/** `low` / `high` (integration v0.25.0+) set the manual band as it ends. */
+export function cancelOverride(
+  hass: HomeAssistant,
+  args: { zone: string; low?: number; high?: number },
+): Promise<unknown> {
+  const data: Record<string, unknown> = { zone: args.zone };
+  if (args.low !== undefined) data.low = args.low;
+  if (args.high !== undefined) data.high = args.high;
+  return hass.callService(DOMAIN, 'cancel_override', data);
+}
+
+/** Whether the integration ends an override at a given time and puts the
+ *  band back as one ends (v0.25.0+): from the fields HA says its services
+ *  take, since that release added no entity to tell it by. */
+export function overrideEndsSupported(hass: HomeAssistant): boolean {
+  const services = hass.services?.[DOMAIN];
+  return (
+    services?.start_override?.fields?.until !== undefined &&
+    services?.cancel_override?.fields?.low !== undefined &&
+    services?.cancel_override?.fields?.high !== undefined
+  );
 }
 
 export function setProfile(hass: HomeAssistant, args: { profile: string }): Promise<unknown> {
