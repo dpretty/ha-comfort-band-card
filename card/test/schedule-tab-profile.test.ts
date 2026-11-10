@@ -29,11 +29,13 @@ function select(state: string, attributes: Record<string, unknown> = OPTIONS): H
 
 /**
  * HA with home and away profiles. Each profile listed in `auto` answers its
- * subscription at once; the others wait for `answer`.
+ * subscription at once; the others wait for `answer`, and those in `failing`
+ * refuse it.
  */
 function setup(
   active: HassEntity = select('home'),
   auto: Record<string, Transition[]> = { home: HOME },
+  failing: string[] = [],
 ) {
   const subscribed: string[] = [];
   const listeners = new Map<string, (event: { schedule: ProfileSchedule | null }) => void>();
@@ -42,6 +44,8 @@ function setup(
     message: { profile: string },
   ): Promise<UnsubscribeFunc> => {
     subscribed.push(message.profile);
+    if (failing.includes(message.profile))
+      throw new Error(`Profile '${message.profile}' does not exist`);
     listeners.set(message.profile, callback);
     const list = auto[message.profile];
     if (list)
@@ -116,18 +120,18 @@ const rows = (el: ComfortBandScheduleTab) =>
 const notice = (el: ComfortBandScheduleTab) => text(root(el).querySelector('.profile-notice'));
 const dialog = (el: ComfortBandScheduleTab) => root(el).querySelector('transition-edit-dialog');
 const NOT_SAVED =
-  'The active profile changed to “away”, so your change to the “home” schedule wasn’t saved.';
+  'The active profile is “away”, so your change to the “home” schedule wasn’t saved.';
 
 async function editing(el: ComfortBandScheduleTab): Promise<void> {
   button(el, 'Edit schedule').click();
   await el.updateComplete;
 }
 
-async function save(el: ComfortBandScheduleTab, transition: Transition): Promise<void> {
+/** The form's Save, as the dialog sends it. */
+function save(el: ComfortBandScheduleTab, transition: Transition): void {
   dialog(el)!.dispatchEvent(
     new CustomEvent('dialog-save', { detail: { transition }, bubbles: true, composed: true }),
   );
-  await settle(el);
 }
 
 describe('comfort-band-schedule-tab across a change of active profile', () => {
@@ -160,29 +164,22 @@ describe('comfort-band-schedule-tab across a change of active profile', () => {
     expect(hass.callService).not.toHaveBeenCalled();
   });
 
-  // The old list stays on screen until the new one's arrives: nothing made
-  // from it is written to the new profile.
-  it('refuses a delete from the old list before the new one arrives', async () => {
+  // Nothing can be started on the old list once the profile has changed: it
+  // isn't on screen to start it on (#46 review).
+  it('shows the new profile’s list loading, not the old one’s', async () => {
     const { hass, answer } = setup();
     const el = await tab(hass);
     await editing(el);
     await switchTo(el, select('away'));
-    expect(rows(el)).toEqual(['06:00', '22:00']);
+    expect(rows(el)).toEqual([]);
+    expect(text(root(el).querySelector('.loading'))).toBe('Loading schedule…');
+    expect(root(el).querySelector('.header')).toBeNull();
     expect(notice(el)).toBeUndefined();
-    // The header names the list on screen, not the profile it's waiting for.
-    expect(text(root(el).querySelector('.header'))).toBe('Schedule: home');
-    row(el, '06:00').querySelector<HTMLButtonElement>('button.danger')!.click();
-    await el.updateComplete;
-    button(el, 'Delete').click();
-    await settle(el);
-    expect(hass.callService).not.toHaveBeenCalled();
-    expect(notice(el)).toBe(NOT_SAVED);
-    expect(root(el).activeElement).toBe(root(el).querySelector('.profile-notice'));
-    expect(rows(el)).toEqual(['06:00', '22:00']);
-    // Once away's list is on screen, its changes go to away.
     answer('away', AWAY);
     await settle(el);
+    expect(rows(el)).toEqual(['00:00']);
     expect(text(root(el).querySelector('.header'))).toBe('Schedule: away');
+    // Its changes go to away.
     row(el, '00:00').querySelector<HTMLButtonElement>('button.danger')!.click();
     await el.updateComplete;
     button(el, 'Delete').click();
@@ -194,39 +191,63 @@ describe('comfort-band-schedule-tab across a change of active profile', () => {
     });
   });
 
-  it('refuses a save from the old list before the new one arrives', async () => {
+  // The backstop, should a list ever be on screen for a profile that isn't
+  // the active one.
+  it('refuses to write a list to a profile it isn’t from', async () => {
     const { hass } = setup();
     const el = await tab(hass);
     await editing(el);
-    await switchTo(el, select('away'));
-    button(el, '+ Add a change').click();
+    (el as unknown as { _profile: string })._profile = 'away';
+    row(el, '06:00').querySelector<HTMLButtonElement>('button.danger')!.click();
     await el.updateComplete;
-    await save(el, { at: '13:00', low: 18, high: 24 });
+    button(el, 'Delete').click();
+    await settle(el);
     expect(hass.callService).not.toHaveBeenCalled();
-    expect(dialog(el)).toBeNull();
     expect(notice(el)).toBe(NOT_SAVED);
+    expect(root(el).activeElement).toBe(root(el).querySelector('.profile-notice'));
   });
 
-  // The form's change is to home's list: with home active again, it's good.
-  it('keeps a change being made when the profile changes back to the list’s', async () => {
-    const { hass } = setup();
+  // A failed save puts its list back only if nothing has replaced it: here
+  // away's list has, and putting home's back would show it as away's.
+  it('keeps the new profile’s list when a save from before the change fails', async () => {
+    const { hass, answer } = setup();
+    let fail: () => void = () => {};
+    hass.callService = vi.fn(
+      () => new Promise<undefined>((_, reject) => (fail = () => reject(new Error('Failed')))),
+    );
     const el = await tab(hass);
     await editing(el);
-    await switchTo(el, select('away'));
     row(el, '06:00').querySelector<HTMLButtonElement>('button.secondary')!.click();
     await el.updateComplete;
-    await switchTo(el, select('home'));
-    expect(dialog(el)).not.toBeNull();
-    expect(notice(el)).toBeUndefined();
-    await save(el, { at: '06:00', low: 20, high: 23 });
-    expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'set_schedule', {
-      zone: 'gym',
-      profile: 'home',
-      transitions: [
-        { at: '06:00', low: 20, high: 23 },
-        { at: '22:00', low: 17, high: 25 },
-      ],
-    });
+    save(el, { at: '06:00', low: 20, high: 23 });
+    await settle(el);
+    await switchTo(el, select('away'));
+    answer('away', AWAY);
+    await settle(el);
+    fail();
+    await settle(el);
+    expect(text(root(el).querySelector('.error'))).toBe('Failed');
+    // Shown again, before away's next answer: still away's list.
+    el.remove();
+    document.body.appendChild(el);
+    await settle(el);
+    expect(rows(el)).toEqual(['00:00']);
+    expect(text(root(el).querySelector('.header'))).toBe('Schedule: away');
+  });
+
+  it('puts a failed save’s list back where nothing has replaced it', async () => {
+    const { hass } = setup();
+    hass.callService = vi.fn().mockRejectedValue(new Error('Failed'));
+    const el = await tab(hass);
+    await editing(el);
+    row(el, '06:00').querySelector<HTMLButtonElement>('button.danger')!.click();
+    await el.updateComplete;
+    button(el, 'Delete').click();
+    await settle(el);
+    el.remove();
+    document.body.appendChild(el);
+    await settle(el);
+    expect(rows(el)).toEqual(['06:00', '22:00']);
   });
 
   // A save sent before the change of profile was to the profile active then.
@@ -238,13 +259,7 @@ describe('comfort-band-schedule-tab across a change of active profile', () => {
     await editing(el);
     row(el, '06:00').querySelector<HTMLButtonElement>('button.secondary')!.click();
     await el.updateComplete;
-    dialog(el)!.dispatchEvent(
-      new CustomEvent('dialog-save', {
-        detail: { transition: { at: '06:00', low: 20, high: 23 } },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    save(el, { at: '06:00', low: 20, high: 23 });
     await switchTo(el, select('away'));
     finish();
     await settle(el);
@@ -279,22 +294,6 @@ describe('comfort-band-schedule-tab across a change of active profile', () => {
     expect(notice(el)).toBeUndefined();
   });
 
-  // Two changes of profile before the first's list arrives: the change was
-  // to the list on screen, home's, not to the profile in between.
-  it('names the schedule the change was to', async () => {
-    const three = { options: ['home', 'away', 'guest'], default_profile: 'home' };
-    const { hass } = setup(select('home', three));
-    const el = await tab(hass);
-    await editing(el);
-    await switchTo(el, select('away', three));
-    row(el, '06:00').querySelector<HTMLButtonElement>('button.danger')!.click();
-    await el.updateComplete;
-    await switchTo(el, select('guest', three));
-    expect(notice(el)).toBe(
-      'The active profile changed to “guest”, so your change to the “home” schedule wasn’t saved.',
-    );
-  });
-
   it('says nothing when the profile changes with no change being made', async () => {
     const { hass } = setup(select('home'), { home: HOME, away: AWAY });
     const el = await tab(hass);
@@ -303,8 +302,11 @@ describe('comfort-band-schedule-tab across a change of active profile', () => {
     expect(notice(el)).toBeUndefined();
     expect(rows(el)).toEqual(['00:00']);
   });
+});
 
-  it('puts the notice away when the next change starts', async () => {
+describe('comfort-band-schedule-tab notice', () => {
+  /** A change dropped by a change of profile, with away's list on screen. */
+  async function dropped(): Promise<ComfortBandScheduleTab> {
     const { hass } = setup(select('home'), { home: HOME, away: AWAY });
     const el = await tab(hass);
     await editing(el);
@@ -312,11 +314,56 @@ describe('comfort-band-schedule-tab across a change of active profile', () => {
     await el.updateComplete;
     await switchTo(el, select('away'));
     expect(notice(el)).toBe(NOT_SAVED);
+    return el;
+  }
+
+  it('goes when a delete starts', async () => {
+    const el = await dropped();
     row(el, '00:00').querySelector<HTMLButtonElement>('button.danger')!.click();
     await el.updateComplete;
     button(el, 'Cancel').click();
     await el.updateComplete;
     expect(notice(el)).toBeUndefined();
+  });
+
+  it('goes when the form opens', async () => {
+    const el = await dropped();
+    button(el, '+ Add a change').click();
+    await el.updateComplete;
+    dialog(el)!.dispatchEvent(new CustomEvent('dialog-cancel', { bubbles: true, composed: true }));
+    await settle(el);
+    expect(dialog(el)).toBeNull();
+    expect(notice(el)).toBeUndefined();
+  });
+
+  // What it says is about the profile it names; with another, it's gone.
+  it('goes when the profile changes again', async () => {
+    const el = await dropped();
+    await switchTo(el, select('home'));
+    expect(notice(el)).toBeUndefined();
+  });
+
+  it('takes focus once, not again at each update from HA', async () => {
+    const el = await dropped();
+    const done = button(el, 'Done');
+    done.focus();
+    el.hass = { ...el.hass! };
+    await settle(el);
+    expect(root(el).activeElement).toBe(done);
+  });
+
+  // A profile's name can be long and unbroken.
+  it('wraps a long name rather than widening the dialog', () => {
+    const css = (
+      customElements.get('comfort-band-schedule-tab') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((s) => s.cssText)
+      .join('\n');
+    expect(css).toMatch(/\.profile-notice\s*\{[^}]*overflow-wrap:\s*anywhere/);
+    expect(css).toMatch(/\.profile-label\s*\{[^}]*overflow-wrap:\s*anywhere/);
   });
 });
 
@@ -330,15 +377,24 @@ describe('comfort-band-schedule-tab header', () => {
     await settle(el);
     expect(text(root(el).querySelector('.header'))).toBe('Schedule: home');
   });
+
+  it('names no profile over an error', async () => {
+    const { hass } = setup(select('home'), { home: HOME }, ['away']);
+    const el = await tab(hass);
+    await switchTo(el, select('away'));
+    expect(text(root(el).querySelector('.error'))).toBe("Profile 'away' does not exist");
+    expect(root(el).querySelector('.header')).toBeNull();
+  });
 });
 
 describe('comfort-band-schedule-tab with the profile select unreadable', () => {
-  it('doesn’t take “unavailable” or “unknown” as a profile', async () => {
+  // The select's own "unavailable" and "unknown" carry no attributes.
+  it('doesn’t take the select’s own “unavailable” or “unknown” as a profile', async () => {
     const { hass, subscribed } = setup(select('unavailable', {}), { home: HOME, away: AWAY });
     const el = await tab(hass);
     expect(subscribed).toEqual(['home']);
     expect(rows(el)).toEqual(['06:00', '22:00']);
-    await switchTo(el, select('unknown'));
+    await switchTo(el, select('unknown', {}));
     await switchTo(el, select('unavailable', {}));
     expect(subscribed).toEqual(['home']);
     expect(root(el).querySelector('.error')).toBeNull();
@@ -347,14 +403,14 @@ describe('comfort-band-schedule-tab with the profile select unreadable', () => {
     expect(rows(el)).toEqual(['00:00']);
   });
 
-  // HA reports a profile named "unavailable" with the select's attributes.
-  it('still takes a profile named “unavailable”', async () => {
+  // A live select carries `default_profile`: with it, they're profiles.
+  it.each(['unavailable', 'unknown'])('still takes a profile named “%s”', async (name) => {
     const { hass, subscribed } = setup(
-      select('unavailable', { options: ['home', 'unavailable'], default_profile: 'home' }),
-      { home: HOME, unavailable: AWAY },
+      select(name, { options: ['home', name], default_profile: 'home' }),
+      { home: HOME, [name]: AWAY },
     );
     const el = await tab(hass);
-    expect(subscribed).toEqual(['unavailable']);
+    expect(subscribed).toEqual([name]);
     expect(rows(el)).toEqual(['00:00']);
   });
 });
