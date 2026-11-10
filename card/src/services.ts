@@ -48,15 +48,24 @@ export function removeTransition(
   return hass.callService(DOMAIN, 'remove_transition', { ...args });
 }
 
+/** `until` (integration v0.25.0+) is an ISO time, as an alternative to `hours`. */
 export function startOverride(
   hass: HomeAssistant,
-  args: { zone: string; low?: number; high?: number; hours?: number },
+  args: { zone: string; low?: number; high?: number; hours?: number; until?: string },
 ): Promise<unknown> {
   const data: Record<string, unknown> = { zone: args.zone };
   if (args.low !== undefined) data.low = args.low;
   if (args.high !== undefined) data.high = args.high;
   if (args.hours !== undefined) data.hours = args.hours;
+  if (args.until !== undefined) data.until = args.until;
   return hass.callService(DOMAIN, 'start_override', data);
+}
+
+/** Whether the integration ends an override at a given time (v0.25.0+):
+ *  from the fields HA says `start_override` takes, since that release added
+ *  no entity to tell it by. */
+export function overrideUntilSupported(hass: HomeAssistant): boolean {
+  return hass.services?.[DOMAIN]?.start_override?.fields?.until !== undefined;
 }
 
 export function cancelOverride(hass: HomeAssistant, args: { zone: string }): Promise<unknown> {
