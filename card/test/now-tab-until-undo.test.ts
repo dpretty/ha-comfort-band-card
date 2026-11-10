@@ -154,6 +154,30 @@ async function undo(el: ComfortBandNowTab): Promise<void> {
   await flush(el);
 }
 
+/** Has the next call do `meanwhile` once HA has taken it, before its
+ *  answer. Gives a wait for that answer: a look for no Undo before it
+ *  passes whatever the tab does. */
+function answerAfter(
+  hass: HomeAssistant,
+  meanwhile: () => Promise<void>,
+): (el: ComfortBandNowTab) => Promise<void> {
+  const call = hass.callService as unknown as ReturnType<typeof vi.fn>;
+  const real = call.getMockImplementation()!;
+  let answered: Promise<void> | null = null;
+  call.mockImplementationOnce((...args: Parameters<typeof real>) => {
+    answered = (async () => {
+      await real(...args);
+      await meanwhile();
+    })();
+    return answered;
+  });
+  return async (el) => {
+    expect(answered).not.toBeNull();
+    await answered;
+    await flush(el);
+  };
+}
+
 describe('comfort-band-now-tab until the next change', () => {
   it('offers the schedule’s next change as a length, in HA’s clock', async () => {
     const { hass } = setup();
@@ -690,16 +714,13 @@ describe('comfort-band-now-tab Undo', () => {
   it('isn’t offered where another change shows by the call’s answer', async () => {
     const { hass, put, deliver } = setup();
     const el = await nowTab(hass);
-    const call = hass.callService as unknown as ReturnType<typeof vi.fn>;
-    const real = call.getMockImplementation()!;
-    call.mockImplementationOnce(async (...args: Parameters<typeof real>) => {
-      await real(...args);
+    const answered = answerAfter(hass, async () => {
       put('number.gym_manual_low', '18');
       put('number.gym_manual_high', '21');
       await deliver(el);
     });
     await tap(el, 'warmer');
-    await flush(el);
+    await answered(el);
     put('number.gym_manual_low', '20');
     put('number.gym_manual_high', '23');
     await deliver(el);
@@ -896,16 +917,9 @@ describe('comfort-band-now-tab Undo', () => {
         'number.gym_manual_high': { state: '24' },
       });
       const el = await nowTab(hass);
-      if (stateFirst) {
-        const call = hass.callService as unknown as ReturnType<typeof vi.fn>;
-        const real = call.getMockImplementation()!;
-        call.mockImplementationOnce(async (...args: Parameters<typeof real>) => {
-          await real(...args);
-          await deliver(el);
-        });
-      }
+      const answered = stateFirst ? answerAfter(hass, () => deliver(el)) : flush;
       await back(el);
-      await flush(el);
+      await answered(el);
       await deliver(el);
       expect(undoButton(el)).toBeNull();
     },
@@ -959,16 +973,13 @@ describe('comfort-band-now-tab Undo', () => {
   it('isn’t offered where the tab is for another room by the call’s answer', async () => {
     const { hass, deliver } = setup();
     const el = await nowTab(hass);
-    const call = hass.callService as unknown as ReturnType<typeof vi.fn>;
-    const real = call.getMockImplementation()!;
-    call.mockImplementationOnce(async (...args: Parameters<typeof real>) => {
-      await real(...args);
+    const answered = answerAfter(hass, async () => {
       await deliver(el);
       el.zone = 'kitchen';
       await flush(el);
     });
     await tap(el, 'warmer');
-    await flush(el);
+    await answered(el);
     expect(undoButton(el)).toBeNull();
   });
 
