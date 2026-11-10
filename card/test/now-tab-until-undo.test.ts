@@ -253,6 +253,8 @@ describe('comfort-band-now-tab Undo', () => {
       await deliver(el);
     });
     await tap(el, 'warmer');
+    // The call's own delivery takes a flush of its own.
+    await flush(el);
     expect(undoButton(el)).not.toBeNull();
   });
 
