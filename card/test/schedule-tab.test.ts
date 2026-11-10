@@ -621,10 +621,9 @@ describe('comfort-band-schedule-tab', () => {
     expect(msg).toMatchObject({ zone: 'gym', profile: 'away' });
   });
 
-  it('keeps the editor visible (no .loading flash) across a profile flip', async () => {
-    // Stale data is in place when the flip happens — we must NOT drop back
-    // to the "Loading schedule…" placeholder while the new subscription
-    // resolves; that would be a visible flash.
+  it('shows the new profile’s list loading across a profile flip, not the old one’s', async () => {
+    // The old profile's list leaves the screen, so no change can be started
+    // on it and written to the new profile (#46).
     const fake = makeHass({
       active: 'home',
       initialSchedule: {
@@ -635,17 +634,19 @@ describe('comfort-band-schedule-tab', () => {
     const el = await tab(fake.hass);
     expect(el.shadowRoot!.querySelector('.loading')).toBeNull();
 
+    // Away's list hasn't arrived yet.
+    fake.subscribeMessage.mockImplementationOnce(async () => () => {});
     fake.hass.states['select.comfort_band_profiles_active_profile'] = {
       ...fake.hass.states['select.comfort_band_profiles_active_profile'],
       state: 'away',
     };
     el.hass = { ...fake.hass };
+    await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
 
-    // Before any new initial event arrives we should still see the editor,
-    // not the loading placeholder.
-    expect(el.shadowRoot!.querySelector('.loading')).toBeNull();
-    expect(el.shadowRoot!.querySelector('comfort-band-schedule-chart')).not.toBeNull();
+    // Before the new profile's list arrives: loading, not the old list.
+    expect(el.shadowRoot!.querySelector('.loading')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('comfort-band-schedule-chart')).toBeNull();
   });
 
   it('unsubscribes when the element is removed from the DOM', async () => {
@@ -765,9 +766,7 @@ describe('comfort-band-schedule-tab', () => {
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
 
-    // Error overlay replaces the editor (existing render contract), but
-    // the underlying _transitions are preserved so the next successful
-    // subscribe can render them again without a wipe-and-refetch.
+    // Error overlay replaces the editor (existing render contract).
     const errorDiv = el.shadowRoot!.querySelector('.error');
     expect(errorDiv).not.toBeNull();
     expect(errorDiv!.textContent).toContain('network down');
@@ -1001,12 +1000,13 @@ describe('comfort-band-schedule-tab', () => {
       );
     });
 
+    // It names the list on screen: home's, the tab's fallback (#46).
     it.each(['unavailable', 'unknown'])(
-      'names no profile while the profile select is %s',
+      'names the profile whose list it shows while the profile select is %s',
       async (state) => {
         const { hass } = makeHass({ initialSchedule: schedule, active: state });
         const el = await tab(hass);
-        expect(el.shadowRoot!.querySelector('.header')).toBeNull();
+        expect(el.shadowRoot!.querySelector('.header')!.textContent!.trim()).toBe('Schedule: home');
       },
     );
 

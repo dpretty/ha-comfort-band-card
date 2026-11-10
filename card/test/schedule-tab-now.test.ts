@@ -250,8 +250,9 @@ describe('comfort-band-schedule-tab now', () => {
     expect(unavailable.shadowRoot!.querySelector('li.row.current')).toBeNull();
   });
 
-  // The old profile's list stays on screen until the new one's arrives.
-  it('marks nothing on the old profile’s list after a change of profile', async () => {
+  // Across a change of profile the old list goes, and the new one's loads
+  // (#46).
+  it('marks nothing across a change of profile, until the new list arrives', async () => {
     const AWAY: Transition[] = [{ at: '00:00', low: 18, high: 21 }];
     const profiles = (state: string) => ({
       'select.comfort_band_profiles_active_profile': {
@@ -277,9 +278,8 @@ describe('comfort-band-schedule-tab now', () => {
     await settle(el);
     const chart = () =>
       el.shadowRoot!.querySelector('comfort-band-schedule-chart') as ComfortBandScheduleChart;
-    expect(rows(el).map((r) => r.at)).toEqual(['06:00', '09:00', '17:30', '22:00']);
-    expect(el.shadowRoot!.querySelector('li.row.current')).toBeNull();
-    expect(chart().now).toBeNull();
+    expect(rows(el)).toEqual([]);
+    expect(chart()).toBeNull();
     answerAway!();
     await settle(el);
     expect(rows(el)).toEqual([{ at: '00:00', current: 'true', tags: ['Current'] }]);
@@ -317,7 +317,8 @@ describe('comfort-band-schedule-tab now', () => {
     await settle(el);
     answers[0](DAY);
     await settle(el);
-    expect(rows(el)).toEqual([{ at: '00:00', current: null, tags: [] }]);
+    expect(rows(el)).toEqual([]);
+    expect(el.shadowRoot!.querySelector('.header')).toBeNull();
   });
 
   // Without a profile manager, the room's schedule is home's.

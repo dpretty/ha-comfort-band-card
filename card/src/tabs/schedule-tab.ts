@@ -107,17 +107,24 @@ export class ComfortBandScheduleTab extends LitElement {
   private _focusAfterMode: 'add' | 'edit' | null = null;
 
   @state() private _profile = '';
-  /** The profile the list shown is for. Across a change of profile it's
-   *  the old one's, kept on screen until the new one's arrives. */
+  /** The profile the list shown is for: none ('') while a change of
+   *  profile loads the new one's list (#46). */
   @state() private _listProfile = '';
+  /** Why a change wasn't saved: the active profile changed while it was
+   *  being made (#46). Cleared when the next change starts, or the profile
+   *  changes again. */
+  @state() private _profileNotice: string | null = null;
+  /** Whether the notice takes focus once it's on screen. */
+  private _focusNotice = false;
   @state() private _transitions: Transition[] = [];
   @state() private _loading = false;
   @state() private _error: string | null = null;
   @state() private _mode: Mode = 'list';
   @state() private _editing: Transition | null = null;
   /** `at` of the row currently showing the inline delete-confirm UI. Cleared
-   *  by Cancel, by Confirm (before the write), by Done, or automatically in
-   *  `willUpdate` when a remote write echoes back without the targeted row. */
+   *  by Cancel, by Confirm (before the write), by Done, by a change of
+   *  profile (`_dropChange`), or automatically in `willUpdate` when a remote
+   *  write echoes back without the targeted row. */
   @state() private _confirmingDeleteAt: string | null = null;
   /** The Add form's starting values, built once when Add is pressed. The
    *  form starts over whenever it's given a new object, so one built on each
@@ -156,6 +163,7 @@ export class ComfortBandScheduleTab extends LitElement {
       .profile-label {
         font-size: 13px;
         color: var(--cb-text-secondary);
+        overflow-wrap: anywhere;
       }
       .loading,
       .error {
@@ -263,6 +271,17 @@ export class ComfortBandScheduleTab extends LitElement {
         font-size: 14px;
         color: var(--cb-text-primary);
       }
+      .profile-notice {
+        margin-bottom: var(--cb-gap-sm);
+        /* A profile's name can be long and unbroken. */
+        overflow-wrap: anywhere;
+        padding: var(--cb-gap-sm);
+        border-radius: 6px;
+        background: var(--cb-track-bg);
+        color: var(--cb-text-primary);
+        font-size: 13px;
+        line-height: 1.35;
+      }
       .shared-note {
         margin-top: 4px;
         font-size: 12px;
@@ -311,6 +330,14 @@ export class ComfortBandScheduleTab extends LitElement {
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has('hass')) this._now = Date.now();
+    // A new change starting puts the last one's notice away.
+    const m = changed as Map<PropertyKey, unknown>;
+    if (
+      (m.has('_mode') && this._mode !== 'list') ||
+      (m.has('_confirmingDeleteAt') && this._confirmingDeleteAt !== null)
+    ) {
+      this._profileNotice = null;
+    }
     if (changed.has('hass') && this.hass && this._profile === '') {
       this._profile = readActiveProfile(this.hass) ?? 'home';
       void this._subscribe();
@@ -337,8 +364,24 @@ export class ComfortBandScheduleTab extends LitElement {
     if (changed.has('hass') && this.hass) {
       const next = readActiveProfile(this.hass);
       if (next && next !== this._profile) {
+        // What the notice said was about the profile before.
+        this._profileNotice = null;
+        // A change being made is to the list on screen, the old profile's:
+        // saving it would write that list to this one (#46).
+        if (this._mode !== 'list' || this._confirmingDeleteAt !== null) this._dropChange(next);
         this._profile = next;
+        // Nor is the old list left on screen to start a change on: the tab
+        // shows the new one's loading instead (#46 review).
+        this._transitions = [];
+        this._listProfile = '';
         void this._resubscribe();
+      }
+    }
+    if (this._focusNotice) {
+      const notice = this.shadowRoot?.querySelector<HTMLElement>('.profile-notice');
+      if (notice) {
+        this._focusNotice = false;
+        notice.focus();
       }
     }
     // When the inline confirm appears, focus the Cancel button (safe
@@ -421,8 +464,8 @@ export class ComfortBandScheduleTab extends LitElement {
     const gen = ++this._subscribeGen;
     const profile = this._profile;
     // Only show the loading state when we have nothing to display. On a
-    // re-subscribe (profile flip, reconnect) keep the stale data visible
-    // so the tab doesn't flash empty.
+    // reconnect keep the data visible so the tab doesn't flash empty; a
+    // change of profile has emptied it already, so the new one loads (#46).
     if (this._transitions.length === 0) this._loading = true;
     this._error = null;
     try {
@@ -576,19 +619,33 @@ export class ComfortBandScheduleTab extends LitElement {
       next.push(incoming);
     }
     next.sort(compareTransitions);
-    await this._writeSchedule(next);
+    // Closed before the write, not after: a change of profile while it's
+    // on its way mustn't be told as one that wasn't saved.
     this._exitDialogMode();
+    await this._writeSchedule(next);
   };
 
   private _onDialogDelete = async (event: CustomEvent<{ at: string }>): Promise<void> => {
     const next = this._transitions.filter((t) => t.at !== event.detail.at);
-    await this._writeSchedule(next);
     this._exitDialogMode();
+    await this._writeSchedule(next);
   };
 
   private _onDialogCancel = () => {
     this._exitDialogMode();
   };
+
+  /** Closes the form or the delete confirm without writing, and says why:
+   *  the active profile changed to `next` while the change was being made. */
+  private _dropChange(next: string): void {
+    this._profileNotice = notSaved(this._listProfile, next);
+    this._mode = 'list';
+    this._editing = null;
+    this._adding = null;
+    this._confirmingDeleteAt = null;
+    this._focusTrigger = null;
+    this._focusNotice = true;
+  }
 
   private _exitDialogMode(): void {
     this._mode = 'list';
@@ -629,6 +686,15 @@ export class ComfortBandScheduleTab extends LitElement {
 
   private async _writeSchedule(transitions: Transition[]): Promise<void> {
     if (!this.hass) return;
+    // The list is written whole, so only to the profile it came from. A change
+    // of profile empties the list, so this shouldn't come about: it's the
+    // backstop (#46).
+    if (this._listProfile !== this._profile) {
+      this._profileNotice = notSaved(this._listProfile, this._profile);
+      this._focusTrigger = null;
+      this._focusNotice = true;
+      return;
+    }
     // Apply the optimistic update BEFORE the await so a rapidly-fired
     // second call reads the post-write state rather than the stale
     // pre-write snapshot. The subscription will echo the persisted (and
@@ -644,7 +710,9 @@ export class ComfortBandScheduleTab extends LitElement {
         transitions,
       });
     } catch (err) {
-      this._transitions = previous;
+      // Put back only if nothing has replaced it since: another profile's
+      // list, or HA's own answer, is the list to keep (#46 review).
+      if (this._transitions === transitions) this._transitions = previous;
       this._error = err instanceof Error ? err.message : 'Failed to save schedule.';
     }
   }
@@ -667,7 +735,11 @@ export class ComfortBandScheduleTab extends LitElement {
 
     const inForce = this._listInForce();
     return html`
-      ${this._renderHeader()} ${this._renderNow()}
+      ${this._renderHeader()}
+      ${this._profileNotice
+        ? html`<div class="profile-notice" role="status" tabindex="-1">${this._profileNotice}</div>`
+        : nothing}
+      ${this._renderNow()}
       ${this._loading
         ? html`<div class="loading">Loading schedule…</div>`
         : this._error
@@ -694,18 +766,17 @@ export class ComfortBandScheduleTab extends LitElement {
 
   /**
    * Which profile's schedule this is, named as typed, where profiles are set
-   * up. Not "the room follows it": with no schedule of its own in the active
+   * up: the profile the list on screen is for, so nothing while one loads
+   * (#46). Where the profile select can't be read when the tab opens, that's
+   * the profile the tab falls back to; if it can't be read later, it's the
+   * last one read.
+   * Not "the room follows it": with no schedule of its own in the active
    * profile, a room follows the default profile's.
    */
   private _renderHeader() {
-    const entity = this.hass ? findActiveProfileEntity(this.hass) : null;
-    const state = entity ? this.hass!.states[entity] : undefined;
-    // While the select can't be read, it has no name to give. A profile
-    // that's actually named "unavailable" still can be.
-    const profile = profileSelectReadable(state) ? state!.state : null;
-    if (!profile || profile === 'unknown') return nothing;
+    if (!this.hass || !this._listProfile || !profileManagerExists(this.hass)) return nothing;
     return html`<div class="header">
-      <span class="profile-label">Schedule: ${profile}</span>
+      <span class="profile-label">Schedule: ${this._listProfile}</span>
     </div>`;
   }
 
@@ -715,8 +786,8 @@ export class ComfortBandScheduleTab extends LitElement {
    * room follows the default profile's schedule, or its own range). Where
    * the profile select can't be read, the list shown may not be the active
    * profile's, so it's only taken as in force without a profile manager at
-   * all. Across a change of profile, the list shown is the old one's until
-   * the new one's arrives.
+   * all. While a change of profile loads the new list, there's none on
+   * screen.
    */
   private _listInForce(): boolean {
     if (!this.hass || !this.entities || this._transitions.length === 0) return false;
@@ -853,10 +924,23 @@ export class ComfortBandScheduleTab extends LitElement {
   }
 }
 
+/** The active profile's name, or null without a profile manager or while
+ *  its select can't be read: its own "unavailable" and "unknown" aren't
+ *  profiles to subscribe or write to (#46). A live select carries
+ *  `default_profile`, so with it they're profiles actually named that. */
 function readActiveProfile(hass: HomeAssistant): string | null {
   const entity = findActiveProfileEntity(hass);
   if (!entity) return null;
-  return hass.states[entity]?.state ?? null;
+  const state = hass.states[entity];
+  if (!state) return null;
+  const own = state.state === 'unavailable' || state.state === 'unknown';
+  if (own && state.attributes.default_profile === undefined) return null;
+  return state.state;
+}
+
+/** Why a change to `from`'s schedule wasn't saved. */
+function notSaved(from: string, to: string): string {
+  return `The active profile is “${to}”, so your change to the “${from}” schedule wasn’t saved.`;
 }
 
 function defaultLow(transitions: Transition[]): number {
