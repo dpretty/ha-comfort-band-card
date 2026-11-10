@@ -925,12 +925,12 @@ describe('comfort-band-now-tab Undo', () => {
     expect(undoButton(el)).toBeNull();
   });
 
-  it('isn’t offered where HA shows the end two minutes off', async () => {
+  it('isn’t offered where HA shows the end half a minute off', async () => {
     const { hass, put, deliver } = setup();
     const el = await nowTab(hass);
     await pick(el, 'next');
     await tap(el, 'warmer');
-    put('sensor.gym_override_ends', new Date(NEXT + 120_000).toISOString());
+    put('sensor.gym_override_ends', new Date(NEXT + 30_000).toISOString());
     await deliver(el);
     expect(undoButton(el)).toBeNull();
   });
