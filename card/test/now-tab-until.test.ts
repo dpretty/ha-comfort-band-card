@@ -42,9 +42,9 @@ type States = Record<string, { state: string; attributes?: Record<string, unknow
 
 /**
  * HA for a room whose schedule sets 19.5–22.5° now and next changes at
- * `next`, with the services of `services`. Its `start_override` and
- * `cancel_override` change its states as the integration does, held back
- * until `deliver` hands them to the card, as HA's frontend would.
+ * `next`, with the services of `services`. Its `start_override` changes its
+ * states as the integration does, held back until `deliver` hands them to
+ * the card, as HA's frontend would.
  */
 function setup(
   over: States = {},
@@ -88,11 +88,6 @@ function setup(
       put('sensor.gym_override_ends', new Date(ends).toISOString());
       put('sensor.gym_effective_low', String(data.low ?? states['number.gym_manual_low'].state));
       put('sensor.gym_effective_high', String(data.high ?? states['number.gym_manual_high'].state));
-    } else if (service === 'cancel_override') {
-      put('binary_sensor.gym_override_active', 'off');
-      put('sensor.gym_override_ends', 'unknown');
-      put('sensor.gym_effective_low', '19.5');
-      put('sensor.gym_effective_high', '22.5');
     }
   });
   const hass: HomeAssistant = {
@@ -305,7 +300,7 @@ describe('comfort-band-now-tab until the next change', () => {
 
   // Taps that cancel out, with "Until" picked meanwhile, and HA naming
   // another change before they're sent (a schedule edit): three hours, not
-  // the change HA names now (#25/#26 review round 4).
+  // the change HA names now.
   it('re-times for three hours where HA names another change within the taps', async () => {
     const { hass, put, deliver } = setup({
       'binary_sensor.gym_override_active': { state: 'on' },
@@ -329,6 +324,63 @@ describe('comfort-band-now-tab until the next change', () => {
     vi.advanceTimersByTime(1_500);
     await flush(el);
     expect(calls(hass)).toEqual([['start_override', { zone: 'gym', low: 20, high: 23, hours: 3 }]]);
+  });
+
+  // Picked within the taps, "Until" is the length they're sent for.
+  it('sends taps until the next change where it’s picked within them', async () => {
+    const { hass } = setup();
+    const el = await nowTab(hass);
+    root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
+    await el.updateComplete;
+    await pick(el, 'next');
+    expect(lengths(el).map((l) => l.checked)).toEqual([false, false, true]);
+    vi.advanceTimersByTime(1_500);
+    await flush(el);
+    expect(calls(hass)).toEqual([
+      ['start_override', { zone: 'gym', low: 20, high: 23, until: new Date(NEXT).toISOString() }],
+    ]);
+  });
+
+  // Picked again once HA names the following change, it's for that one.
+  it('is for the following change where picked again once HA names it', async () => {
+    const { hass, put, deliver } = setup();
+    const el = await nowTab(hass);
+    await pick(el, 'next');
+    const following = NEXT + 14 * HOUR;
+    vi.setSystemTime(NEXT + 1_000);
+    put('sensor.gym_next_band_change', new Date(following).toISOString(), {
+      scheduled: true,
+      low: 18,
+      high: 23,
+    });
+    await deliver(el);
+    await pick(el, 'next');
+    await tap(el, 'warmer');
+    expect(calls(hass)).toEqual([
+      [
+        'start_override',
+        { zone: 'gym', low: 20, high: 23, until: new Date(following).toISOString() },
+      ],
+    ]);
+  });
+
+  // HA naming another change, then the picked one again (a profile switched
+  // away and back): "Until" is that change's again, as shown.
+  it('is the picked change’s again where HA names it again', async () => {
+    const { hass, put, deliver } = setup();
+    const el = await nowTab(hass);
+    await pick(el, 'next');
+    const attributes = { scheduled: true, low: 18, high: 23 };
+    put('sensor.gym_next_band_change', new Date(NEXT + 9 * HOUR).toISOString(), attributes);
+    await deliver(el);
+    expect(lengths(el).map((l) => l.checked)).toEqual([false, true, false]);
+    put('sensor.gym_next_band_change', new Date(NEXT).toISOString(), attributes);
+    await deliver(el);
+    expect(lengths(el).map((l) => l.checked)).toEqual([false, false, true]);
+    await tap(el, 'warmer');
+    expect(calls(hass)).toEqual([
+      ['start_override', { zone: 'gym', low: 20, high: 23, until: new Date(NEXT).toISOString() }],
+    ]);
   });
 
   // Before HA names the following change, the passed one isn't offered.

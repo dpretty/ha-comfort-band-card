@@ -12,7 +12,8 @@
  *     Picking a length while an adjustment runs re-times it. The lengths are
  *     relative, or HA's own time of the next change (#26); the panel's clock
  *     decides only whether that change is still ahead. The end shown is HA's.
- *     A picked "Until" is for that change: once it's passed, three hours.
+ *     A picked "Until" is for that change: once it's passed, or while HA
+ *     names another, three hours.
  *   - "Back to schedule" while an adjustment runs.
  *   - While a call from this tab is going through, these controls ignore
  *     presses (marked aria-disabled, so they keep focus), so nothing is
@@ -303,8 +304,8 @@ export class ComfortBandNowTab extends LitElement {
   }
 
   /** The length in force: the one picked here, else three hours. A picked
-   *  "Until" is for the change it named: once that's passed, or HA names
-   *  another, three hours. */
+   *  "Until" is for the change it named: once that's passed, or while HA
+   *  names another, three hours. */
   private _hours(): Length {
     const length = this._length ?? DEFAULT_HOURS;
     if (length !== 'next') return length;

@@ -1218,8 +1218,8 @@ let Wt = class extends Ce {
     return t === !0 && n !== null && n > e ? n : null;
   }
   /** The length in force: the one picked here, else three hours. A picked
-   *  "Until" is for the change it named: once that's passed, or HA names
-   *  another, three hours. */
+   *  "Until" is for the change it named: once that's passed, or while HA
+   *  names another, three hours. */
   _hours() {
     const e = this._length ?? Ds;
     if (e !== "next") return e;
