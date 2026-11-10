@@ -203,8 +203,9 @@ describe('comfort-band-now-tab until the next change', () => {
     expect(lengths(el).map((l) => l.text)).toEqual(['1 h', '3 h']);
   });
 
+  // A change due now is past by the time it's sent: HA would refuse it.
   it('isn’t offered without a next change ahead', async () => {
-    for (const next of [null, NOW - HOUR]) {
+    for (const next of [null, NOW - HOUR, NOW]) {
       const el = await nowTab(setup({}, { next }).hass);
       expect(lengths(el).map((l) => l.text)).toEqual(['1 h', '3 h']);
       el.remove();
