@@ -935,18 +935,42 @@ describe('comfort-band-now-tab Undo', () => {
     expect(undoButton(el)).not.toBeNull();
   });
 
+  // Another entity, even one that shows the same: Undo was for this one.
   it.each(['manualLow', 'manualHigh', 'overrideActive', 'overrideEnds', 'nextBandChange'])(
-    'goes when the room’s %s entity is another',
+    'goes when the room’s %s entity is another, showing the same',
     async (field) => {
       const { hass, deliver } = setup();
       const el = await nowTab(hass);
       await tap(el, 'warmer');
       await deliver(el);
-      el.entities = { ...el.entities!, [field]: 'sensor.elsewhere' } as ZoneEntities;
+      const id = (el.entities as unknown as Record<string, string>)[field];
+      const other = `${id}_other`;
+      el.hass = {
+        ...el.hass!,
+        states: { ...el.hass!.states, [other]: { ...el.hass!.states[id], entity_id: other } },
+      };
+      el.entities = { ...el.entities!, [field]: other } as ZoneEntities;
       await flush(el);
       expect(undoButton(el)).toBeNull();
     },
   );
+
+  // The tab became another room's while the call was on its way.
+  it('isn’t offered where the tab is for another room by the call’s answer', async () => {
+    const { hass, deliver } = setup();
+    const el = await nowTab(hass);
+    const call = hass.callService as unknown as ReturnType<typeof vi.fn>;
+    const real = call.getMockImplementation()!;
+    call.mockImplementationOnce(async (...args: Parameters<typeof real>) => {
+      await real(...args);
+      await deliver(el);
+      el.zone = 'kitchen';
+      await flush(el);
+    });
+    await tap(el, 'warmer');
+    await flush(el);
+    expect(undoButton(el)).toBeNull();
+  });
 
   // Whether an adjustment runs can't be read: what's in force isn't known.
   it('isn’t offered where it can’t be read whether an adjustment runs', async () => {
