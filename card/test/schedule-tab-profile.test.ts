@@ -235,10 +235,13 @@ describe('comfort-band-schedule-tab across a change of active profile', () => {
     expect(text(root(el).querySelector('.header'))).toBe('Schedule: away');
   });
 
+  // Shown again before HA answers, the tab shows the list as it was.
   it('puts a failed save’s list back where nothing has replaced it', async () => {
-    const { hass } = setup();
+    const { hass, answer } = setup(select('home'), {});
     hass.callService = vi.fn().mockRejectedValue(new Error('Failed'));
     const el = await tab(hass);
+    answer('home', HOME);
+    await settle(el);
     await editing(el);
     row(el, '06:00').querySelector<HTMLButtonElement>('button.danger')!.click();
     await el.updateComplete;
