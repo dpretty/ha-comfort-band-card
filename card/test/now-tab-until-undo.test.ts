@@ -176,6 +176,24 @@ describe('comfort-band-now-tab until the next change', () => {
     expect(lengths(none).map((l) => l.text)).toEqual(['1 h', '3 h']);
   });
 
+  // Real browsers check the fit (320 px, "Until 10:30 pm" on at most two lines).
+  it('keeps the time on one line, in a wider button', async () => {
+    const { hass } = setup();
+    const el = await nowTab(hass);
+    const time = root(el).querySelector('.lengths button[data-length="next"] .time');
+    expect(time!.textContent).toBe(formatTime(NEXT, hass));
+    const css = (
+      customElements.get('comfort-band-now-tab') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((x) => x.cssText)
+      .join('\n');
+    expect(css).toMatch(/\.lengths \.time\s*\{[^}]*white-space:\s*nowrap/);
+    expect(css).toMatch(/\.lengths button\[data-length='next'\]\s*\{[^}]*flex:\s*1\.6/);
+  });
+
   // v0.25.0 brought both: without the band on cancel_override, Undo can't
   // put back a room's range, so neither is offered.
   it('isn’t offered without cancel_override’s band', async () => {
