@@ -2678,8 +2678,8 @@ let Ge = class extends Te {
    * room follows the default profile's schedule, or its own range). Where
    * the profile select can't be read, the list shown may not be the active
    * profile's, so it's only taken as in force without a profile manager at
-   * all. Across a change of profile, the list shown is the old one's until
-   * the new one's arrives.
+   * all. While a change of profile loads the new list, there's none on
+   * screen.
    */
   _listInForce() {
     if (!this.hass || !this.entities || this._transitions.length === 0 || Ys(this.hass, this.entities) !== !0) return !1;

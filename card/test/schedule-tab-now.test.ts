@@ -250,7 +250,6 @@ describe('comfort-band-schedule-tab now', () => {
     expect(unavailable.shadowRoot!.querySelector('li.row.current')).toBeNull();
   });
 
-  // The old profile's list stays on screen until the new one's arrives.
   // Across a change of profile the old list goes, and the new one's loads
   // (#46).
   it('marks nothing across a change of profile, until the new list arrives', async () => {

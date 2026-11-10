@@ -107,8 +107,8 @@ export class ComfortBandScheduleTab extends LitElement {
   private _focusAfterMode: 'add' | 'edit' | null = null;
 
   @state() private _profile = '';
-  /** The profile the list shown is for. Across a change of profile it's
-   *  the old one's, kept on screen until the new one's arrives. */
+  /** The profile the list shown is for: none ('') while a change of
+   *  profile loads the new one's list (#46). */
   @state() private _listProfile = '';
   /** Why a change wasn't saved: the active profile changed while it was
    *  being made (#46). Cleared when the next change starts, or the profile
@@ -464,8 +464,8 @@ export class ComfortBandScheduleTab extends LitElement {
     const gen = ++this._subscribeGen;
     const profile = this._profile;
     // Only show the loading state when we have nothing to display. On a
-    // re-subscribe (profile flip, reconnect) keep the stale data visible
-    // so the tab doesn't flash empty.
+    // reconnect keep the data visible so the tab doesn't flash empty; a
+    // change of profile has emptied it already, so the new one loads (#46).
     if (this._transitions.length === 0) this._loading = true;
     this._error = null;
     try {
@@ -686,9 +686,9 @@ export class ComfortBandScheduleTab extends LitElement {
 
   private async _writeSchedule(transitions: Transition[]): Promise<void> {
     if (!this.hass) return;
-    // The list is written whole, so only to the profile it came from: across
-    // a change of profile, the one on screen is the old one's until the new
-    // one's arrives (#46).
+    // The list is written whole, so only to the profile it came from. A change
+    // of profile empties the list, so this shouldn't come about: it's the
+    // backstop (#46).
     if (this._listProfile !== this._profile) {
       this._profileNotice = notSaved(this._listProfile, this._profile);
       this._focusTrigger = null;
@@ -786,8 +786,8 @@ export class ComfortBandScheduleTab extends LitElement {
    * room follows the default profile's schedule, or its own range). Where
    * the profile select can't be read, the list shown may not be the active
    * profile's, so it's only taken as in force without a profile manager at
-   * all. Across a change of profile, the list shown is the old one's until
-   * the new one's arrives.
+   * all. While a change of profile loads the new list, there's none on
+   * screen.
    */
   private _listInForce(): boolean {
     if (!this.hass || !this.entities || this._transitions.length === 0) return false;

@@ -339,6 +339,37 @@ describe('comfort-band-schedule-tab notice', () => {
     expect(notice(el)).toBeUndefined();
   });
 
+  it('goes when Edit opens the form', async () => {
+    const el = await dropped();
+    row(el, '00:00').querySelector<HTMLButtonElement>('button.secondary')!.click();
+    await el.updateComplete;
+    dialog(el)!.dispatchEvent(new CustomEvent('dialog-cancel', { bubbles: true, composed: true }));
+    await settle(el);
+    expect(dialog(el)).toBeNull();
+    expect(notice(el)).toBeUndefined();
+  });
+
+  // A delete confirmed before the change of profile restores focus when its
+  // write is done: by then it's the notice's, and stays so.
+  it('keeps focus on the notice when an earlier write finishes', async () => {
+    const { hass } = setup(select('home'), { home: HOME, away: AWAY });
+    let finish: () => void = () => {};
+    hass.callService = vi.fn(() => new Promise<undefined>((r) => (finish = () => r(undefined))));
+    const el = await tab(hass);
+    await editing(el);
+    row(el, '06:00').querySelector<HTMLButtonElement>('button.danger')!.click();
+    await el.updateComplete;
+    button(el, 'Delete').click();
+    await el.updateComplete;
+    row(el, '22:00').querySelector<HTMLButtonElement>('button.secondary')!.click();
+    await el.updateComplete;
+    await switchTo(el, select('away'));
+    expect(notice(el)).toBe(NOT_SAVED);
+    finish();
+    await settle(el);
+    expect(root(el).activeElement).toBe(root(el).querySelector('.profile-notice'));
+  });
+
   // What it says is about the profile it names; with another, it's gone.
   it('goes when the profile changes again', async () => {
     const el = await dropped();
@@ -391,7 +422,7 @@ describe('comfort-band-schedule-tab header', () => {
 });
 
 describe('comfort-band-schedule-tab with the profile select unreadable', () => {
-  // The select's own "unavailable" and "unknown" carry no attributes.
+  // The select's own "unavailable" and "unknown" carry no `default_profile`.
   it('doesn’t take the select’s own “unavailable” or “unknown” as a profile', async () => {
     const { hass, subscribed } = setup(select('unavailable', {}), { home: HOME, away: AWAY });
     const el = await tab(hass);
@@ -404,6 +435,15 @@ describe('comfort-band-schedule-tab with the profile select unreadable', () => {
     await switchTo(el, select('away'));
     expect(subscribed).toEqual(['home', 'away']);
     expect(rows(el)).toEqual(['00:00']);
+  });
+
+  // The profile manager's device and the select's entry, but no state yet.
+  it('goes by home while the select has no state', async () => {
+    const { hass, subscribed } = setup(select('home'), { home: HOME });
+    delete hass.states[SELECT];
+    const el = await tab(hass);
+    expect(subscribed).toEqual(['home']);
+    expect(rows(el)).toEqual(['06:00', '22:00']);
   });
 
   // A live select carries `default_profile`: with it, they're profiles.
