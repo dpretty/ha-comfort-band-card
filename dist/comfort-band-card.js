@@ -1183,7 +1183,7 @@ let Nt = class extends Ce {
       );
     }, this._onUndo = () => {
       const e = this._undo;
-      if (this._busy || !e?.shown || !this.hass || !this.zone) return;
+      if (!e?.shown || !this.hass || !this.zone) return;
       const t = this.hass, n = this.zone, { before: i } = e;
       this._undo = null, this._focusSteps = !0;
       const o = Aa(i);
@@ -1366,7 +1366,6 @@ let Nt = class extends Ce {
     return v`<div class="undo-row">
       <button
         class="undo"
-        aria-disabled=${this._busy !== null ? "true" : "false"}
         aria-label=${`Undo: ${t.replace(/^Going back/, "back")}`}
         @click=${this._onUndo}
       >
@@ -1554,10 +1553,7 @@ Nt.styles = [
         color: var(--cb-text-primary);
         cursor: pointer;
       }
-      .undo[aria-disabled='true'] {
-        opacity: 0.5;
-        cursor: default;
-      }
+
       button:focus-visible {
         outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
         outline-offset: 1px;

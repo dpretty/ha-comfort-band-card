@@ -176,6 +176,25 @@ describe('comfort-band-now-tab until the next change', () => {
     expect(lengths(none).map((l) => l.text)).toEqual(['1 h', '3 h']);
   });
 
+  // v0.25.0 brought both: without the band on cancel_override, Undo can't
+  // put back a room's range, so neither is offered.
+  it('isn’t offered without cancel_override’s band', async () => {
+    const services = {
+      comfort_band: { start_override: { fields: { until: {} } }, cancel_override: { fields: {} } },
+    };
+    const el = await nowTab(setup({}, { services }).hass);
+    expect(lengths(el).map((l) => l.text)).toEqual(['1 h', '3 h']);
+  });
+
+  it('isn’t offered where it can’t be told a schedule sets the range', async () => {
+    const el = await nowTab(
+      setup({
+        'sensor.gym_next_band_change': { state: new Date(NEXT).toISOString(), attributes: {} },
+      }).hass,
+    );
+    expect(lengths(el).map((l) => l.text)).toEqual(['1 h', '3 h']);
+  });
+
   it('isn’t offered without a next change ahead', async () => {
     for (const next of [null, NOW - HOUR]) {
       const el = await nowTab(setup({}, { next }).hass);
@@ -207,6 +226,20 @@ describe('comfort-band-now-tab until the next change', () => {
     expect(calls(hass)).toEqual([
       ['start_override', { zone: 'gym', low: 20, high: 23.5, until: new Date(NEXT).toISOString() }],
     ]);
+  });
+
+  // The button was there, and the change passed before it was pressed.
+  it('sends three hours for a next change that passed before the press', async () => {
+    const { hass } = setup({
+      'binary_sensor.gym_override_active': { state: 'on' },
+      'number.gym_manual_low': { state: '20' },
+      'number.gym_manual_high': { state: '23' },
+    });
+    const el = await nowTab(hass);
+    vi.setSystemTime(NEXT + 1);
+    root(el).querySelector<HTMLElement>('.lengths button[data-length="next"]')!.click();
+    await flush(el);
+    expect(calls(hass)).toEqual([['start_override', { zone: 'gym', low: 20, high: 23, hours: 3 }]]);
   });
 
   // Picked, then the change passes: three hours, as shown.
@@ -454,6 +487,65 @@ describe('comfort-band-now-tab Undo', () => {
     expect(status(el)).toBe('Going back to the schedule');
     finish();
     await flush(el);
+  });
+
+  // What HA shows isn't what was sent: someone else's change came first.
+  it.each([
+    ['band', { low: '21', high: '24' }],
+    ['low', { low: '21', high: '23' }],
+    ['high', { low: '20', high: '24' }],
+  ])('isn’t offered where HA shows another %s than the one sent', async (_what, band) => {
+    const { hass, put, deliver } = setup();
+    const el = await nowTab(hass);
+    await tap(el, 'warmer');
+    put('number.gym_manual_low', band.low);
+    put('number.gym_manual_high', band.high);
+    await deliver(el);
+    expect(undoButton(el)).toBeNull();
+  });
+
+  it('isn’t offered where HA shows another end than the one sent', async () => {
+    const { hass, put, deliver } = setup();
+    const el = await nowTab(hass);
+    await pick(el, 'next');
+    await tap(el, 'warmer');
+    put('sensor.gym_override_ends', new Date(NEXT + HOUR).toISOString());
+    await deliver(el);
+    expect(undoButton(el)).toBeNull();
+  });
+
+  it('isn’t offered where the adjustment Back to schedule ended still runs', async () => {
+    const { hass, put, deliver } = setup({
+      'binary_sensor.gym_override_active': { state: 'on' },
+      'sensor.gym_override_ends': { state: new Date(NOW + 2 * HOUR).toISOString() },
+    });
+    const el = await nowTab(hass);
+    await back(el);
+    // Re-timed from elsewhere instead.
+    put('binary_sensor.gym_override_active', 'on');
+    put('sensor.gym_override_ends', new Date(NOW + 3 * HOUR).toISOString());
+    await deliver(el);
+    expect(undoButton(el)).toBeNull();
+  });
+
+  // The call answered after the tab had gone: shown again, nothing to undo.
+  it('isn’t offered for a change whose answer came after the tab closed', async () => {
+    const { hass, deliver } = setup();
+    const el = await nowTab(hass);
+    const call = hass.callService as unknown as ReturnType<typeof vi.fn>;
+    const real = call.getMockImplementation()!;
+    let answer: () => void = () => {};
+    call.mockImplementationOnce(
+      (...args: Parameters<typeof real>) =>
+        new Promise<void>((r) => (answer = () => void real(...args).then(() => r()))),
+    );
+    await tap(el, 'warmer');
+    el.remove();
+    answer();
+    await flush(el);
+    document.body.appendChild(el);
+    await deliver(el);
+    expect(undoButton(el)).toBeNull();
   });
 
   it('isn’t offered by an integration before v0.25.0', async () => {

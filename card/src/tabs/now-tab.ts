@@ -257,10 +257,7 @@ export class ComfortBandNowTab extends LitElement {
         color: var(--cb-text-primary);
         cursor: pointer;
       }
-      .undo[aria-disabled='true'] {
-        opacity: 0.5;
-        cursor: default;
-      }
+
       button:focus-visible {
         outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
         outline-offset: 1px;
@@ -514,7 +511,8 @@ export class ComfortBandNowTab extends LitElement {
    *  (#25). An end that has passed meanwhile isn't put back. */
   private _onUndo = () => {
     const undo = this._undo;
-    if (this._busy || !undo?.shown || !this.hass || !this.zone) return;
+    // No call can be on its way: each change clears Undo before it's sent.
+    if (!undo?.shown || !this.hass || !this.zone) return;
     const hass = this.hass;
     const zone = this.zone;
     const { before } = undo;
@@ -630,7 +628,6 @@ export class ComfortBandNowTab extends LitElement {
     return html`<div class="undo-row">
       <button
         class="undo"
-        aria-disabled=${this._busy !== null ? 'true' : 'false'}
         aria-label=${`Undo: ${doing.replace(/^Going back/, 'back')}`}
         @click=${this._onUndo}
       >
