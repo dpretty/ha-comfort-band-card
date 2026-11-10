@@ -300,6 +300,29 @@ describe('comfort-band-now-tab until the next change', () => {
     expect(calls(hass)).toEqual([['start_override', { zone: 'gym', low: 19, high: 22, hours: 3 }]]);
   });
 
+  // Taps that cancel out, with "Until" picked meanwhile, re-time for the
+  // length then in force: three hours once its change has passed.
+  it('re-times for three hours where the change passes within the taps', async () => {
+    const { hass } = setup({
+      'binary_sensor.gym_override_active': { state: 'on' },
+      'sensor.gym_override_ends': { state: new Date(NOW + HOUR).toISOString() },
+      'number.gym_manual_low': { state: '20' },
+      'number.gym_manual_high': { state: '23' },
+    });
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(NEXT - 1_000);
+    const el = await mount('comfort-band-now-tab', { hass, entities: ENTITIES, zone: 'gym' });
+    root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
+    await el.updateComplete;
+    root(el).querySelector<HTMLElement>('.lengths button[data-length="next"]')!.click();
+    await el.updateComplete;
+    root(el).querySelector<HTMLElement>('.steps .cooler')!.click();
+    await el.updateComplete;
+    vi.advanceTimersByTime(1_500);
+    await flush(el);
+    expect(calls(hass)).toEqual([['start_override', { zone: 'gym', low: 20, high: 23, hours: 3 }]]);
+  });
+
   // Before HA names the following change, the passed one isn't offered.
   it('goes back to three hours while the change it named is past', async () => {
     const { hass } = setup();
@@ -628,7 +651,10 @@ describe('comfort-band-now-tab Undo', () => {
       .flat()
       .map((x) => x.cssText)
       .join('\n');
-    expect(css).toMatch(/\.status-row\.with-undo\s*\{[^}]*min-height:\s*44px/);
+    expect(css).toMatch(
+      /\.status-row\.with-undo\s*\{[^}]*min-height:\s*max\(44px,\s*calc\(2em \+ 2px\)\)/,
+    );
+    expect(css).toMatch(/\.undo\s*\{[^}]*line-height:\s*1\.2/);
     // In em, as the button's text and padding are, so a larger text size
     // doesn't grow the slot when Undo comes.
     expect(css).toMatch(/\.undo-slot\s*\{[^}]*min-width:\s*5em/);
@@ -897,13 +923,56 @@ describe('comfort-band-now-tab Undo', () => {
     expect(undoButton(el)).toBeNull();
   });
 
-  it('goes when the room’s entities change', async () => {
+  // The card hands on a new entities object with each update from HA, the
+  // same ids in it: Undo stays (#25 review round 3).
+  it('stays when the room’s entities come again, the same ids in them', async () => {
     const { hass, deliver } = setup();
     const el = await nowTab(hass);
     await tap(el, 'warmer');
     await deliver(el);
     el.entities = { ...el.entities! };
     await flush(el);
+    expect(undoButton(el)).not.toBeNull();
+  });
+
+  it.each(['manualLow', 'manualHigh', 'overrideActive', 'overrideEnds', 'nextBandChange'])(
+    'goes when the room’s %s entity is another',
+    async (field) => {
+      const { hass, deliver } = setup();
+      const el = await nowTab(hass);
+      await tap(el, 'warmer');
+      await deliver(el);
+      el.entities = { ...el.entities!, [field]: 'sensor.elsewhere' } as ZoneEntities;
+      await flush(el);
+      expect(undoButton(el)).toBeNull();
+    },
+  );
+
+  // Whether an adjustment runs can't be read: what's in force isn't known.
+  it('isn’t offered where it can’t be read whether an adjustment runs', async () => {
+    const { hass, deliver } = setup({
+      'binary_sensor.gym_override_active': { state: 'unavailable' },
+    });
+    const el = await nowTab(hass);
+    await tap(el, 'warmer');
+    await deliver(el);
+    expect(undoButton(el)).toBeNull();
+  });
+
+  // Back to schedule keeps the band: another panel's cancel with a band,
+  // landing first, isn't it.
+  it('isn’t offered where Back to schedule lands with another band', async () => {
+    const { hass, put, deliver } = setup({
+      'binary_sensor.gym_override_active': { state: 'on' },
+      'sensor.gym_override_ends': { state: new Date(NOW + 2 * HOUR).toISOString() },
+      'number.gym_manual_low': { state: '21' },
+      'number.gym_manual_high': { state: '24' },
+    });
+    const el = await nowTab(hass);
+    await back(el);
+    put('number.gym_manual_low', '18');
+    put('number.gym_manual_high', '21');
+    await deliver(el);
     expect(undoButton(el)).toBeNull();
   });
 

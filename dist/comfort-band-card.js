@@ -1179,7 +1179,12 @@ let Nt = class extends Te {
       this._run(
         i,
         () => Aa(e, { zone: t }),
-        n ? { before: n, expect: { active: !1 } } : void 0
+        // It ends the adjustment and keeps the band.
+        n ? {
+          before: n,
+          key: this._undoKey(),
+          expect: { active: !1, low: n.low, high: n.high }
+        } : void 0
       );
     }, this._onUndo = () => {
       const e = this._undo;
@@ -1211,7 +1216,7 @@ let Nt = class extends Te {
     super.disconnectedCallback(), this._feedbackTimer !== null && (clearTimeout(this._feedbackTimer), this._feedbackTimer = null), this._feedbackConfirmed = null, this._commitBurst(), this._dropUndo();
   }
   willUpdate(e) {
-    (e.has("zone") || e.has("entities")) && this._dropUndo(), e.has("hass") && this._checkUndo();
+    (e.has("hass") || e.has("zone") || e.has("entities")) && this._checkUndo();
   }
   updated() {
     !this._focusStatus || this._undo || (this._focusStatus = !1, this.shadowRoot?.querySelector(".status")?.focus());
@@ -1222,7 +1227,7 @@ let Nt = class extends Te {
     const e = this._undo;
     if (!e) return;
     const t = this._adjustment();
-    t ? e.shown === null ? Ta(e, t) ? this._armUndo({ ...e, shown: t }) : Oo(e.before, t) || this._dropUndo() : (!Oo(e.shown, t) || Co(e.before, t) === null) && this._dropUndo() : this._dropUndo();
+    e.key !== this._undoKey() || !t ? this._dropUndo() : e.shown === null ? Ta(e, t) ? this._armUndo({ ...e, shown: t }) : Oo(e.before, t) || this._dropUndo() : (!Oo(e.shown, t) || Co(e.before, t) === null) && this._dropUndo();
   }
   /** Offers Undo for a change HA shows, and looks again when an earlier end
    *  it would put back gets too near to. None where it would change nothing
@@ -1282,13 +1287,15 @@ let Nt = class extends Te {
     const t = this._nextChange();
     return t !== null && t === this._pickedNext ? "next" : Ns;
   }
-  /** The room's adjustment as HA shows it, or null where its manual band
-   *  can't be read. */
+  /** The room's adjustment as HA shows it, or null where its manual band,
+   *  or whether one runs, can't be read. */
   _adjustment() {
     const e = this._numericState(this.entities?.manualLow ?? null), t = this._numericState(this.entities?.manualHigh ?? null);
     if (!Number.isFinite(e) || !Number.isFinite(t)) return null;
-    const n = this._stateOf(this.entities?.overrideActive ?? null)?.state === "on", i = Date.parse(this._stateOf(this.entities?.overrideEnds ?? null)?.state ?? "");
-    return { active: n, ends: n && Number.isFinite(i) ? i : null, low: e, high: t };
+    const n = this._stateOf(this.entities?.overrideActive ?? null)?.state;
+    if (n !== "on" && n !== "off") return null;
+    const i = n === "on", o = Date.parse(this._stateOf(this.entities?.overrideEnds ?? null)?.state ?? "");
+    return { active: i, ends: i && Number.isFinite(o) ? o : null, low: e, high: t };
   }
   /** Runs a call, saying what it's doing meanwhile. A failed call is
    *  reported by HA's own toast. `undo`, where given, is what Undo will put
@@ -1296,7 +1303,7 @@ let Nt = class extends Te {
   async _run(e, t, n) {
     this._busy = e;
     try {
-      if (await t(), n && this.isConnected) {
+      if (await t(), n && this.isConnected && n.key === this._undoKey()) {
         const i = this._adjustment();
         i && Ta(n, i) ? this._armUndo({ ...n, shown: i }) : i && Oo(n.before, i) && (this._undo = { ...n, shown: null }, this._undoWait = setTimeout(() => {
           this._undoWait = null, this._undo?.shown === null && (this._undo = null);
@@ -1306,6 +1313,18 @@ let Nt = class extends Te {
     } finally {
       this._busy = null;
     }
+  }
+  /** The room and the entity ids Undo reads, which it's for alone. */
+  _undoKey() {
+    const e = this.entities;
+    return [
+      this.zone,
+      e?.manualLow,
+      e?.manualHigh,
+      e?.overrideActive,
+      e?.overrideEnds,
+      e?.nextBandChange
+    ].join("|");
   }
   /** What Undo would need to put back the adjustment in force, where the
    *  integration can (v0.25.0+). Not one whose end can't be read: it
@@ -1323,6 +1342,7 @@ let Nt = class extends Te {
       () => Js(n, { zone: i, low: e.low, high: e.high, hours: a, until: s }),
       u ? {
         before: u,
+        key: this._undoKey(),
         expect: {
           active: !0,
           low: e.low,
@@ -1593,8 +1613,9 @@ Nt.styles = [
         flex: 1;
         min-width: 0;
       }
+      /* Undo's own height: 44 px, or its text and padding at a larger size. */
       .status-row.with-undo {
-        min-height: 44px;
+        min-height: max(44px, calc(2em + 2px));
       }
       /* In em, as Undo's text is: at a larger text size the button grows,
          and a slot in px would grow with it when it comes (#25 review). */
@@ -1606,6 +1627,7 @@ Nt.styles = [
       }
       .undo {
         font: inherit;
+        line-height: 1.2;
         min-height: 44px;
         padding: 0.4em 1.1em;
         border-radius: var(--cb-radius-pill);
@@ -1684,7 +1706,7 @@ function Bl(e, t = Date.now()) {
   return e.active && e.ends !== null && e.ends > t + jl;
 }
 function Co(e, t) {
-  return Bl(e) ? "restore" : !t.active && t.low === e.low && t.high === e.high ? null : "end";
+  return Bl(e) ? "restore" : t.active ? "end" : null;
 }
 var dh = Object.defineProperty, fh = Object.getOwnPropertyDescriptor, vr = (e, t, n, i) => {
   for (var o = i > 1 ? void 0 : i ? fh(t, n) : t, s = e.length - 1, a; s >= 0; s--)

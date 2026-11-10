@@ -92,6 +92,8 @@ interface Undo {
   before: Adjustment;
   expect: { active: boolean; low?: number; high?: number; ends?: number };
   shown: Adjustment | null;
+  /** The room and the entities it was read from: Undo is for those alone. */
+  key: string;
 }
 
 /** Warmer / Cooler taps not yet sent: the range they started from, and how
@@ -272,8 +274,9 @@ export class ComfortBandNowTab extends LitElement {
         flex: 1;
         min-width: 0;
       }
+      /* Undo's own height: 44 px, or its text and padding at a larger size. */
       .status-row.with-undo {
-        min-height: 44px;
+        min-height: max(44px, calc(2em + 2px));
       }
       /* In em, as Undo's text is: at a larger text size the button grows,
          and a slot in px would grow with it when it comes (#25 review). */
@@ -285,6 +288,7 @@ export class ComfortBandNowTab extends LitElement {
       }
       .undo {
         font: inherit;
+        line-height: 1.2;
         min-height: 44px;
         padding: 0.4em 1.1em;
         border-radius: var(--cb-radius-pill);
@@ -340,9 +344,9 @@ export class ComfortBandNowTab extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
-    // Another room's: Undo would put this one's band there.
-    if (changed.has('zone') || changed.has('entities')) this._dropUndo();
-    if (changed.has('hass')) this._checkUndo();
+    // The card hands on a new `entities` with each update from HA, the same
+    // ids in it: `_checkUndo` goes by the ids (#25 review).
+    if (changed.has('hass') || changed.has('zone') || changed.has('entities')) this._checkUndo();
   }
 
   protected override updated(): void {
@@ -357,7 +361,8 @@ export class ComfortBandNowTab extends LitElement {
     const undo = this._undo;
     if (!undo) return;
     const shown = this._adjustment();
-    if (!shown) {
+    // Another room, or other entities: Undo would put this one's band there.
+    if (undo.key !== this._undoKey() || !shown) {
       this._dropUndo();
     } else if (undo.shown === null) {
       if (landed(undo, shown)) this._armUndo({ ...undo, shown });
@@ -449,13 +454,15 @@ export class ComfortBandNowTab extends LitElement {
     return next !== null && next === this._pickedNext ? 'next' : DEFAULT_HOURS;
   }
 
-  /** The room's adjustment as HA shows it, or null where its manual band
-   *  can't be read. */
+  /** The room's adjustment as HA shows it, or null where its manual band,
+   *  or whether one runs, can't be read. */
   private _adjustment(): Adjustment | null {
     const low = this._numericState(this.entities?.manualLow ?? null);
     const high = this._numericState(this.entities?.manualHigh ?? null);
     if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
-    const active = this._stateOf(this.entities?.overrideActive ?? null)?.state === 'on';
+    const running = this._stateOf(this.entities?.overrideActive ?? null)?.state;
+    if (running !== 'on' && running !== 'off') return null;
+    const active = running === 'on';
     const ends = Date.parse(this._stateOf(this.entities?.overrideEnds ?? null)?.state ?? '');
     return { active, ends: active && Number.isFinite(ends) ? ends : null, low, high };
   }
@@ -471,7 +478,7 @@ export class ComfortBandNowTab extends LitElement {
     this._busy = doing;
     try {
       await call();
-      if (undo && this.isConnected) {
+      if (undo && this.isConnected && undo.key === this._undoKey()) {
         // HA may already show the change: its state can arrive first.
         const shown = this._adjustment();
         if (shown && landed(undo, shown)) {
@@ -492,6 +499,19 @@ export class ComfortBandNowTab extends LitElement {
     } finally {
       this._busy = null;
     }
+  }
+
+  /** The room and the entity ids Undo reads, which it's for alone. */
+  private _undoKey(): string {
+    const e = this.entities;
+    return [
+      this.zone,
+      e?.manualLow,
+      e?.manualHigh,
+      e?.overrideActive,
+      e?.overrideEnds,
+      e?.nextBandChange,
+    ].join('|');
   }
 
   /** What Undo would need to put back the adjustment in force, where the
@@ -517,6 +537,7 @@ export class ComfortBandNowTab extends LitElement {
       before
         ? {
             before,
+            key: this._undoKey(),
             expect: {
               active: true,
               low: band.low,
@@ -604,7 +625,14 @@ export class ComfortBandNowTab extends LitElement {
     void this._run(
       doing,
       () => cancelOverride(hass, { zone }),
-      before ? { before, expect: { active: false } } : undefined,
+      // It ends the adjustment and keeps the band.
+      before
+        ? {
+            before,
+            key: this._undoKey(),
+            expect: { active: false, low: before.low, high: before.high },
+          }
+        : undefined,
     );
   };
 
@@ -851,11 +879,12 @@ function restoresEnd(before: Adjustment, now = Date.now()): boolean {
 }
 
 /** What Undo would do now, given what HA shows: put an earlier adjustment
- *  back, or end the one running with the band it replaced; null where the
- *  room is like that already, so it would change nothing. */
+ *  back, or end the one running with the band it replaced; null where none
+ *  runs, so it would change nothing. (What HA shows has the band it's to:
+ *  the one sent, or, after Back to schedule, the one kept.) */
 function undoPlan(before: Adjustment, shown: Adjustment): 'restore' | 'end' | null {
   if (restoresEnd(before)) return 'restore';
-  return !shown.active && shown.low === before.low && shown.high === before.high ? null : 'end';
+  return shown.active ? 'end' : null;
 }
 
 declare global {
