@@ -651,6 +651,27 @@ describe('comfort-band-now-tab Undo', () => {
     expect(undoButton(el)).toBeNull();
   });
 
+  // At the call's answer HA already shows another change: not ours, even if
+  // the same change shows a moment later.
+  it('isn’t offered where another change shows by the call’s answer', async () => {
+    const { hass, put, deliver } = setup();
+    const el = await nowTab(hass);
+    const call = hass.callService as unknown as ReturnType<typeof vi.fn>;
+    const real = call.getMockImplementation()!;
+    call.mockImplementationOnce(async (...args: Parameters<typeof real>) => {
+      await real(...args);
+      put('number.gym_manual_low', '18');
+      put('number.gym_manual_high', '21');
+      await deliver(el);
+    });
+    await tap(el, 'warmer');
+    await flush(el);
+    put('number.gym_manual_low', '20');
+    put('number.gym_manual_high', '23');
+    await deliver(el);
+    expect(undoButton(el)).toBeNull();
+  });
+
   it('lapses if HA doesn’t show the change soon', async () => {
     const { hass, deliver } = setup();
     const el = await nowTab(hass);

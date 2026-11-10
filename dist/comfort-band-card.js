@@ -1184,9 +1184,7 @@ let Nt = class extends Te {
     }, this._onUndo = () => {
       const e = this._undo;
       if (!e?.shown || !this.hass || !this.zone) return;
-      const t = Ns(e.before, e.shown);
-      if (t === null) return;
-      const n = this.hass, i = this.zone, { before: o } = e, { doing: s } = this._undoWords(o, t);
+      const t = Ns(e.before, e.shown) ?? "end", n = this.hass, i = this.zone, { before: o } = e, { doing: s } = this._undoWords(o, t);
       this._dropUndo(), this._run(
         s,
         () => t === "restore" ? Js(n, {
@@ -1213,7 +1211,7 @@ let Nt = class extends Te {
     super.disconnectedCallback(), this._feedbackTimer !== null && (clearTimeout(this._feedbackTimer), this._feedbackTimer = null), this._feedbackConfirmed = null, this._commitBurst(), this._dropUndo();
   }
   willUpdate(e) {
-    e.has("hass") && (this._length === "next" && this._nextChange() !== this._pickedNext && (this._length = null, this._pickedNext = null), this._checkUndo());
+    e.has("hass") && this._checkUndo();
   }
   updated() {
     !this._focusStatus || this._undo || (this._focusStatus = !1, this.shadowRoot?.querySelector(".status")?.focus());
@@ -1401,10 +1399,8 @@ let Nt = class extends Te {
   _renderUndo() {
     const e = this._undo;
     if (!e?.shown) return S;
-    const t = Ns(e.before, e.shown);
-    if (t === null) return S;
-    const { label: n } = this._undoWords(e.before, t);
-    return v`<button class="undo" aria-label=${`Undo: ${n}`} @click=${this._onUndo}>
+    const { label: t } = this._undoWords(e.before, Ns(e.before, e.shown) ?? "end");
+    return v`<button class="undo" aria-label=${`Undo: ${t}`} @click=${this._onUndo}>
       Undo
     </button>`;
   }

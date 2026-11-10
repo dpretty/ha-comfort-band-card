@@ -338,13 +338,7 @@ export class ComfortBandNowTab extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
-    if (!changed.has('hass')) return;
-    // A picked "Until" was for that change: once it's passed, three hours.
-    if (this._length === 'next' && this._nextChange() !== this._pickedNext) {
-      this._length = null;
-      this._pickedNext = null;
-    }
-    this._checkUndo();
+    if (changed.has('hass')) this._checkUndo();
   }
 
   protected override updated(): void {
@@ -613,9 +607,9 @@ export class ComfortBandNowTab extends LitElement {
   private _onUndo = () => {
     const undo = this._undo;
     // No call can be on its way: each change clears Undo before it's sent.
+    // And it would change something: `_checkUndo` drops it once it wouldn't.
     if (!undo?.shown || !this.hass || !this.zone) return;
-    const plan = undoPlan(undo.before, undo.shown);
-    if (plan === null) return;
+    const plan = undoPlan(undo.before, undo.shown) ?? 'end';
     const hass = this.hass;
     const zone = this.zone;
     const { before } = undo;
@@ -735,9 +729,7 @@ export class ComfortBandNowTab extends LitElement {
   private _renderUndo() {
     const undo = this._undo;
     if (!undo?.shown) return nothing;
-    const plan = undoPlan(undo.before, undo.shown);
-    if (plan === null) return nothing;
-    const { label } = this._undoWords(undo.before, plan);
+    const { label } = this._undoWords(undo.before, undoPlan(undo.before, undo.shown) ?? 'end');
     return html`<button class="undo" aria-label=${`Undo: ${label}`} @click=${this._onUndo}>
       Undo
     </button>`;
