@@ -1001,12 +1001,13 @@ describe('comfort-band-schedule-tab', () => {
       );
     });
 
+    // It names the list on screen: home's, the tab's fallback (#46).
     it.each(['unavailable', 'unknown'])(
-      'names no profile while the profile select is %s',
+      'names the profile whose list it shows while the profile select is %s',
       async (state) => {
         const { hass } = makeHass({ initialSchedule: schedule, active: state });
         const el = await tab(hass);
-        expect(el.shadowRoot!.querySelector('.header')).toBeNull();
+        expect(el.shadowRoot!.querySelector('.header')!.textContent!.trim()).toBe('Schedule: home');
       },
     );
 

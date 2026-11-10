@@ -169,6 +169,8 @@ describe('comfort-band-schedule-tab across a change of active profile', () => {
     await switchTo(el, select('away'));
     expect(rows(el)).toEqual(['06:00', '22:00']);
     expect(notice(el)).toBeUndefined();
+    // The header names the list on screen, not the profile it's waiting for.
+    expect(text(root(el).querySelector('.header'))).toBe('Schedule: home');
     row(el, '06:00').querySelector<HTMLButtonElement>('button.danger')!.click();
     await el.updateComplete;
     button(el, 'Delete').click();
@@ -180,6 +182,7 @@ describe('comfort-band-schedule-tab across a change of active profile', () => {
     // Once away's list is on screen, its changes go to away.
     answer('away', AWAY);
     await settle(el);
+    expect(text(root(el).querySelector('.header'))).toBe('Schedule: away');
     row(el, '00:00').querySelector<HTMLButtonElement>('button.danger')!.click();
     await el.updateComplete;
     button(el, 'Delete').click();

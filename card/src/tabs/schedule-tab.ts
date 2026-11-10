@@ -754,18 +754,16 @@ export class ComfortBandScheduleTab extends LitElement {
 
   /**
    * Which profile's schedule this is, named as typed, where profiles are set
-   * up. Not "the room follows it": with no schedule of its own in the active
+   * up: the profile the list on screen is for. Across a change of profile
+   * that's the old one until the new one's list arrives, and while the
+   * profile select can't be read it's the one the tab falls back to (#46).
+   * Not "the room follows it": with no schedule of its own in the active
    * profile, a room follows the default profile's.
    */
   private _renderHeader() {
-    const entity = this.hass ? findActiveProfileEntity(this.hass) : null;
-    const state = entity ? this.hass!.states[entity] : undefined;
-    // While the select can't be read, it has no name to give. A profile
-    // that's actually named "unavailable" still can be.
-    const profile = profileSelectReadable(state) ? state!.state : null;
-    if (!profile || profile === 'unknown') return nothing;
+    if (!this.hass || !this._listProfile || !profileManagerExists(this.hass)) return nothing;
     return html`<div class="header">
-      <span class="profile-label">Schedule: ${profile}</span>
+      <span class="profile-label">Schedule: ${this._listProfile}</span>
     </div>`;
   }
 
