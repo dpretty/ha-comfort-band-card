@@ -20,6 +20,11 @@
  *     built on a state the tab has just changed.
  *   - "How does it feel?" feedback pills (`comfort_band.record_feedback`).
  *
+ * When HA refuses a change (#27), HA's own toast says so, and a length
+ * picked for it (to re-time an adjustment, or during its taps) goes back to
+ * the one before; one picked before the taps began stays. A refused feedback
+ * tap shows "Not sent" on its pill, with HA's toast.
+ *
  * When the room sensor is offline, a sentence under the status says what that
  * means for the room and what to do.
  *
@@ -58,7 +63,7 @@ const FEEDBACK_PILLS: ReadonlyArray<{ label: FeedbackLabel; text: string }> = [
   { label: 'too_hot', text: 'Too warm' },
 ];
 
-/** How long the tapped pill stays highlighted after a successful record. */
+/** How long the tapped pill says "Thanks!" or "Not sent". */
 const FEEDBACK_CONFIRM_MS = 1500;
 
 /** Taps on Warmer / Cooler made within this long of each other are one change. */
@@ -69,6 +74,14 @@ const DEFAULT_HOURS = 3;
 /** How long an adjustment lasts: hours, or until the schedule's next change. */
 type Length = 1 | 3 | 'next';
 
+/** The length picked, as it was before a pick: put back if the change
+ *  the pick was sent with (its re-time, or the taps it was picked during)
+ *  is refused (#27). */
+interface PickedLength {
+  length: Length | null;
+  pickedNext: number | null;
+}
+
 /** Warmer / Cooler taps not yet sent: the range they started from, and how
  *  many steps from it (warmer positive). They're sent for the length picked. */
 interface Burst {
@@ -76,6 +89,8 @@ interface Burst {
   steps: number;
   /** A length was picked during the burst: send it even if the taps cancel out. */
   picked: boolean;
+  /** The length before the burst's first pick, if any. */
+  before?: PickedLength;
 }
 
 @customElement('comfort-band-now-tab')
@@ -86,8 +101,11 @@ export class ComfortBandNowTab extends LitElement {
 
   /** The pill briefly highlighted after a successful `record_feedback`. */
   @state() private _feedbackConfirmed: FeedbackLabel | null = null;
-  /** Timer that clears `_feedbackConfirmed`; cancelled on disconnect so it
-   *  never fires `setState` on an unmounted element. */
+  /** The pill briefly marked "Not sent" after a refused `record_feedback`. */
+  @state() private _feedbackFailed: FeedbackLabel | null = null;
+  /** Timer that clears `_feedbackConfirmed` and `_feedbackFailed`;
+   *  cancelled on disconnect. (A feedback call that settles after then
+   *  starts another, harmlessly, as on main.) */
   private _feedbackTimer: ReturnType<typeof setTimeout> | null = null;
   /** Monotonic tap counter. Service calls are concurrent and may resolve
    *  out of order, so each tap captures its seq and only claims the
@@ -252,6 +270,11 @@ export class ComfortBandNowTab extends LitElement {
         color: #ffffff;
         border-color: transparent;
       }
+      /* Two pixels of the error colour, inset, so the pill keeps its size. */
+      .feedback-pill.failed {
+        border-color: var(--error-color, #db4437);
+        box-shadow: inset 0 0 0 1px var(--error-color, #db4437);
+      }
     `,
   ];
 
@@ -259,12 +282,14 @@ export class ComfortBandNowTab extends LitElement {
     super.disconnectedCallback();
     // Don't let a pending confirmation reset fire on an unmounted element,
     // and drop the confirmed state so a detach/reattach (DOM move, tab
-    // switch) can't resurface a stale "Thanks!" with no timer to clear it.
+    // switch) can't resurface a stale "Thanks!" or "Not sent" with no timer
+    // to clear it.
     if (this._feedbackTimer !== null) {
       clearTimeout(this._feedbackTimer);
       this._feedbackTimer = null;
     }
     this._feedbackConfirmed = null;
+    this._feedbackFailed = null;
     // Closing the dialog mid-burst still makes the change the taps asked for.
     this._commitBurst();
   }
@@ -314,27 +339,39 @@ export class ComfortBandNowTab extends LitElement {
   }
 
   /** Runs a call, saying what it's doing meanwhile. A failed call is
-   *  reported by HA's own toast. */
-  private async _run(doing: string, call: () => Promise<unknown>): Promise<void> {
+   *  reported by HA's own toast; the status falls back to what is actually
+   *  in force, and a length picked for it goes back to `before` (#27). */
+  private async _run(
+    doing: string,
+    call: () => Promise<unknown>,
+    before?: PickedLength,
+  ): Promise<void> {
     this._busy = doing;
     try {
       await call();
     } catch {
-      // The status falls back to what is actually in force.
+      // Even if the tab has gone meanwhile: a tab moved in the page comes
+      // back with it, and a closed one is discarded.
+      if (before) {
+        this._length = before.length;
+        this._pickedNext = before.pickedNext;
+      }
     } finally {
       this._busy = null;
     }
   }
 
-  private _sendBand(band: Band, length: Length): void {
+  private _sendBand(band: Band, length: Length, before?: PickedLength): void {
     if (!this.hass || !this.zone) return;
     const hass = this.hass;
     const zone = this.zone;
     const next = length === 'next' ? this._nextChange() : null;
     const until = next !== null ? new Date(next).toISOString() : undefined;
     const hours = next !== null ? undefined : length === 'next' ? DEFAULT_HOURS : length;
-    void this._run(`Adjusting to ${bandText(band)}`, () =>
-      startOverride(hass, { zone, low: band.low, high: band.high, hours, until }),
+    void this._run(
+      `Adjusting to ${bandText(band)}`,
+      () => startOverride(hass, { zone, low: band.low, high: band.high, hours, until }),
+      before,
     );
   }
 
@@ -364,9 +401,9 @@ export class ComfortBandNowTab extends LitElement {
     this._burst = null;
     if (!burst) return;
     if (burst.steps !== 0) {
-      this._sendBand(shiftBand(burst.base, burst.steps), this._hours());
+      this._sendBand(shiftBand(burst.base, burst.steps), this._hours(), burst.before);
     } else if (burst.picked) {
-      this._retime(this._hours());
+      this._retime(this._hours(), burst.before);
     }
   }
 
@@ -378,24 +415,25 @@ export class ComfortBandNowTab extends LitElement {
 
   private _onPickLength = (length: Length) => {
     if (this._busy) return;
+    const before: PickedLength = { length: this._length, pickedNext: this._pickedNext };
     this._length = length;
     this._pickedNext = length === 'next' ? this._nextChange() : null;
     // Taps still being made take the length when they're sent.
     if (this._burst) {
-      this._burst = { ...this._burst, picked: true };
+      this._burst = { ...this._burst, picked: true, before: this._burst.before ?? before };
       return;
     }
-    this._retime(length);
+    this._retime(length, before);
   };
 
   /** Gives a running adjustment a new length, keeping its band: the
    *  integration keeps an adjustment's band in the manual values. */
-  private _retime(length: Length): void {
+  private _retime(length: Length, before?: PickedLength): void {
     if (this._stateOf(this.entities?.overrideActive ?? null)?.state !== 'on') return;
     const low = this._numericState(this.entities?.manualLow ?? null);
     const high = this._numericState(this.entities?.manualHigh ?? null);
     if (!Number.isFinite(low) || !Number.isFinite(high)) return;
-    this._sendBand({ low, high }, length);
+    this._sendBand({ low, high }, length, before);
   }
 
   private _onBackToSchedule = () => {
@@ -411,20 +449,23 @@ export class ComfortBandNowTab extends LitElement {
   private _onFeedbackTap = async (label: FeedbackLabel): Promise<void> => {
     if (!this.hass || !this.zone) return;
     const seq = ++this._feedbackSeq;
+    let ok = true;
     try {
       await recordFeedback(this.hass, { zone: this.zone, label });
     } catch {
-      // Service rejected (e.g. integration older than v0.11.0). Skip the
-      // confirmation rather than show success for a write that didn't land.
-      return;
+      // Service rejected (e.g. integration older than v0.11.0): HA's toast
+      // says so, and the pill says "Not sent" rather than "Thanks!".
+      ok = false;
     }
     // A newer tap superseded this one while the service was in flight — let
-    // it own the highlight so the green flash can't land on the wrong pill.
+    // it own the pill so the flash can't land on the wrong one.
     if (seq !== this._feedbackSeq) return;
-    this._feedbackConfirmed = label;
+    this._feedbackConfirmed = ok ? label : null;
+    this._feedbackFailed = ok ? null : label;
     if (this._feedbackTimer !== null) clearTimeout(this._feedbackTimer);
     this._feedbackTimer = setTimeout(() => {
       this._feedbackConfirmed = null;
+      this._feedbackFailed = null;
       this._feedbackTimer = null;
     }, FEEDBACK_CONFIRM_MS);
   };
@@ -536,12 +577,20 @@ export class ComfortBandNowTab extends LitElement {
           ${FEEDBACK_PILLS.map(
             (pill) => html`
               <button
-                class="feedback-pill ${this._feedbackConfirmed === pill.label ? 'confirmed' : ''}"
+                class="feedback-pill ${this._feedbackConfirmed === pill.label
+                  ? 'confirmed'
+                  : this._feedbackFailed === pill.label
+                    ? 'failed'
+                    : ''}"
                 data-feedback=${pill.label}
                 aria-label="Feedback: ${pill.text}"
                 @click=${() => void this._onFeedbackTap(pill.label)}
               >
-                ${this._feedbackConfirmed === pill.label ? 'Thanks!' : pill.text}
+                ${this._feedbackConfirmed === pill.label
+                  ? 'Thanks!'
+                  : this._feedbackFailed === pill.label
+                    ? 'Not sent'
+                    : pill.text}
               </button>
             `,
           )}
