@@ -228,9 +228,14 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     refuse();
     await pick(el, '1');
     expect(lengths(el).map((l) => l.checked)).toEqual([false, true, false]);
+    // HA names the picked change again: "Until" is in force once more, as
+    // if the refused pick had never been made.
+    el.hass = { ...hass, states: { ...hass.states } };
+    await flush(el);
+    expect(lengths(el).map((l) => l.checked)).toEqual([false, false, true]);
   });
 
-  it('keeps a length picked before later taps in a burst, to put back', async () => {
+  it('keeps the burst’s first pick to put back through later taps', async () => {
     const { hass, refuse } = setup({ adjusted: true });
     const el = await nowTab(hass);
     root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
@@ -254,6 +259,19 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     const el = await nowTab(hass);
     await pick(el, '1');
     expect(callService).not.toHaveBeenCalled();
+    expect(lengths(el)[0]).toEqual({ text: '1 h', checked: true });
+  });
+
+  // Back drops the burst, pick and all: the refused call is Back's, which
+  // carried no pick.
+  it('leaves a pick made in a burst that Back dropped where Back is refused', async () => {
+    const { hass, callService, refuse } = setup({ adjusted: true });
+    const el = await nowTab(hass);
+    root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
+    await pick(el, '1');
+    refuse();
+    await back(el);
+    expect(callService.mock.calls.map((c) => c[1])).toEqual(['cancel_override']);
     expect(lengths(el)[0]).toEqual({ text: '1 h', checked: true });
   });
 
@@ -422,6 +440,23 @@ describe('comfort-band-now-tab when HA refuses feedback', () => {
     expect(text(pill(el, 'too_cold'))).toBe('Too cool');
   });
 
+  it('thanks a later tap for the full time after an earlier “Not sent”', async () => {
+    const { hass, refuse } = setup();
+    const el = await nowTab(hass);
+    refuse();
+    pill(el, 'too_cold').click();
+    await flush(el);
+    vi.advanceTimersByTime(1_000);
+    pill(el, 'too_hot').click();
+    await flush(el);
+    vi.advanceTimersByTime(1_499);
+    await flush(el);
+    expect(text(pill(el, 'too_hot'))).toBe('Thanks!');
+    vi.advanceTimersByTime(1);
+    await flush(el);
+    expect(text(pill(el, 'too_hot'))).toBe('Too warm');
+  });
+
   it('thanks only the last tap, where an earlier one goes through after it', async () => {
     const { hass, hold } = setup();
     const el = await nowTab(hass);
@@ -472,7 +507,7 @@ describe('comfort-band-now-tab when HA refuses feedback', () => {
     expect(rule).not.toMatch(/padding|width|height/);
   });
 
-  it('stops saying “Not sent” when the tab closes', async () => {
+  it('stops saying “Not sent” when the tab is taken off the page', async () => {
     const { hass, refuse } = setup();
     const el = await nowTab(hass);
     refuse();

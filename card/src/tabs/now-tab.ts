@@ -21,8 +21,9 @@
  *   - "How does it feel?" feedback pills (`comfort_band.record_feedback`).
  *
  * When HA refuses a change (#27), HA's own toast says so, and a length
- * picked for it goes back to the one before. A refused feedback tap shows
- * "Not sent" on its pill, with HA's toast.
+ * picked for it (to re-time an adjustment, or during its taps) goes back to
+ * the one before; one picked before the taps began stays. A refused feedback
+ * tap shows "Not sent" on its pill, with HA's toast.
  *
  * When the room sensor is offline, a sentence under the status says what that
  * means for the room and what to do.
@@ -73,8 +74,9 @@ const DEFAULT_HOURS = 3;
 /** How long an adjustment lasts: hours, or until the schedule's next change. */
 type Length = 1 | 3 | 'next';
 
-/** The length picked, as it was before a pick: put back if the change the
- *  pick was sent with is refused (#27). */
+/** The length picked, as it was before a pick: put back if the change
+ *  the pick was sent with (its re-time, or the taps it was picked during)
+ *  is refused (#27). */
 interface PickedLength {
   length: Length | null;
   pickedNext: number | null;
@@ -280,7 +282,8 @@ export class ComfortBandNowTab extends LitElement {
     super.disconnectedCallback();
     // Don't let a pending confirmation reset fire on an unmounted element,
     // and drop the confirmed state so a detach/reattach (DOM move, tab
-    // switch) can't resurface a stale "Thanks!" with no timer to clear it.
+    // switch) can't resurface a stale "Thanks!" or "Not sent" with no timer
+    // to clear it.
     if (this._feedbackTimer !== null) {
       clearTimeout(this._feedbackTimer);
       this._feedbackTimer = null;
