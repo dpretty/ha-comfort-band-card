@@ -261,10 +261,14 @@ describe('comfort-band-now-tab', () => {
     warm.click();
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
-    expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'record_feedback', {
-      zone: 'gym',
-      label: 'too_hot',
-    });
+    // The pill tells a refusal, so HA's own toast isn't asked for (#27).
+    expect(hass.callService).toHaveBeenCalledWith(
+      'comfort_band',
+      'record_feedback',
+      { zone: 'gym', label: 'too_hot' },
+      undefined,
+      false,
+    );
   });
 
   it('highlights the tapped pill, then clears it after the confirm window', async () => {

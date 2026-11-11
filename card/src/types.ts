@@ -81,10 +81,14 @@ export interface HomeAssistant {
    *  optional in test fixtures. */
   services?: Record<string, Record<string, { fields?: Record<string, unknown> }>>;
   connection: HassConnection;
+  /** HA's own wrapper: a failed call shows HA's toast unless
+   *  `notifyOnError` is false. */
   callService(
     domain: string,
     service: string,
     serviceData?: Record<string, unknown>,
+    target?: Record<string, unknown>,
+    notifyOnError?: boolean,
   ): Promise<unknown>;
   callWS<T = unknown>(msg: { type: string } & Record<string, unknown>): Promise<T>;
 }
