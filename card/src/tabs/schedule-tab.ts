@@ -27,6 +27,11 @@
  *      replacement — atomic and simpler than per-transition mutations).
  *      The subscription delivers the echo, so two cards on different
  *      dashboards stay in sync without polling.
+ *
+ * The list is one room's and one profile's. A change of the active profile
+ * (#46), or of the tab's `zone` (#49, the card's config edited while it's
+ * open), puts it away and loads the other's; a change being made to it is
+ * dropped, and said so.
  */
 
 import { LitElement, html, css, nothing } from 'lit';
@@ -110,9 +115,12 @@ export class ComfortBandScheduleTab extends LitElement {
   /** The profile the list shown is for: none ('') while a change of
    *  profile loads the new one's list (#46). */
   @state() private _listProfile = '';
-  /** Why a change wasn't saved: the active profile changed while it was
-   *  being made (#46). Cleared when the next change starts, or the profile
-   *  changes again. */
+  /** The room the list shown is for: none ('') while a change of room loads
+   *  the new one's list (#49). */
+  @state() private _listZone = '';
+  /** Why a change wasn't saved: the active profile (#46), or the tab's room
+   *  (#49), changed while it was being made. Cleared when the next change
+   *  starts, or the profile or room changes again. */
   @state() private _profileNotice: string | null = null;
   /** Whether the notice takes focus once it's on screen. */
   private _focusNotice = false;
@@ -361,21 +369,25 @@ export class ComfortBandScheduleTab extends LitElement {
   }
 
   protected override updated(changed: PropertyValues<this>): void {
-    if (changed.has('hass') && this.hass) {
-      const next = readActiveProfile(this.hass);
-      if (next && next !== this._profile) {
-        // What the notice said was about the profile before.
-        this._profileNotice = null;
-        // A change being made is to the list on screen, the old profile's:
-        // saving it would write that list to this one (#46).
-        if (this._mode !== 'list' || this._confirmingDeleteAt !== null) this._dropChange(next);
-        this._profile = next;
-        // Nor is the old list left on screen to start a change on: the tab
-        // shows the new one's loading instead (#46 review).
-        this._transitions = [];
-        this._listProfile = '';
-        void this._resubscribe();
+    const next = changed.has('hass') && this.hass ? readActiveProfile(this.hass) : null;
+    const newProfile = next && next !== this._profile ? next : null;
+    // The tab's first room isn't a change of room (#49).
+    const newRoom = changed.has('zone') && changed.get('zone') !== undefined;
+    if (newProfile || newRoom) {
+      // What the notice said was about the list before.
+      this._profileNotice = null;
+      // A change being made is to the list on screen, the old profile's or
+      // room's: saving it would write that list to this one (#46, #49).
+      if (this._mode !== 'list' || this._confirmingDeleteAt !== null) {
+        this._dropChange(newRoom ? ROOM_CHANGED : notSaved(this._listProfile, newProfile!));
       }
+      if (newProfile) this._profile = newProfile;
+      // Nor is the old list left on screen to start a change on: the tab
+      // shows the new one's loading instead (#46 review).
+      this._transitions = [];
+      this._listProfile = '';
+      this._listZone = '';
+      void this._resubscribe();
     }
     if (this._focusNotice) {
       const notice = this.shadowRoot?.querySelector<HTMLElement>('.profile-notice');
@@ -462,6 +474,7 @@ export class ComfortBandScheduleTab extends LitElement {
       return;
     }
     const gen = ++this._subscribeGen;
+    const zone = this.zone;
     const profile = this._profile;
     // Only show the loading state when we have nothing to display. On a
     // reconnect keep the data visible so the tab doesn't flash empty; a
@@ -469,8 +482,9 @@ export class ComfortBandScheduleTab extends LitElement {
     if (this._transitions.length === 0) this._loading = true;
     this._error = null;
     try {
-      const unsub = await subscribeSchedule(this.hass, { zone: this.zone, profile }, (schedule) => {
+      const unsub = await subscribeSchedule(this.hass, { zone, profile }, (schedule) => {
         if (gen !== this._subscribeGen) return;
+        this._listZone = zone;
         this._listProfile = profile;
         // Sort defensively — the backend normalises and sorts on every
         // write, but the WS payload type is `Transition[]` with no order
@@ -635,10 +649,11 @@ export class ComfortBandScheduleTab extends LitElement {
     this._exitDialogMode();
   };
 
-  /** Closes the form or the delete confirm without writing, and says why:
-   *  the active profile changed to `next` while the change was being made. */
-  private _dropChange(next: string): void {
-    this._profileNotice = notSaved(this._listProfile, next);
+  /** Closes the form or the delete confirm without writing, and says why
+   *  with `notice`: the active profile, or the room, changed while the
+   *  change was being made. */
+  private _dropChange(notice: string): void {
+    this._profileNotice = notice;
     this._mode = 'list';
     this._editing = null;
     this._adding = null;
@@ -686,11 +701,12 @@ export class ComfortBandScheduleTab extends LitElement {
 
   private async _writeSchedule(transitions: Transition[]): Promise<void> {
     if (!this.hass) return;
-    // The list is written whole, so only to the profile it came from. A change
-    // of profile empties the list, so this shouldn't come about: it's the
-    // backstop (#46).
-    if (this._listProfile !== this._profile) {
-      this._profileNotice = notSaved(this._listProfile, this._profile);
+    // The list is written whole, so only to the room and profile it came
+    // from. A change of either empties the list, so this shouldn't come
+    // about: it's the backstop (#46, #49).
+    if (this._listZone !== this.zone || this._listProfile !== this._profile) {
+      this._profileNotice =
+        this._listZone !== this.zone ? ROOM_CHANGED : notSaved(this._listProfile, this._profile);
       this._focusTrigger = null;
       this._focusNotice = true;
       return;
@@ -942,6 +958,9 @@ function readActiveProfile(hass: HomeAssistant): string | null {
 function notSaved(from: string, to: string): string {
   return `The active profile is “${to}”, so your change to the “${from}” schedule wasn’t saved.`;
 }
+
+/** Why a change wasn't saved: the card is now for another room (#49). */
+const ROOM_CHANGED = 'This card now shows a different room, so your change wasn’t saved.';
 
 function defaultLow(transitions: Transition[]): number {
   if (transitions.length === 0) return 19;
