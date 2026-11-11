@@ -22,11 +22,12 @@
  *
  * When HA refuses a change (#27), a line under the status says so in plain
  * words ("Couldn’t adjust the room. Try again."), in place of HA's own toast
- * (with HA's failure vibration in the companion app), and a length picked
- * for it goes back to the one before. At the next press the line empties,
- * but its place is kept until the tab closes: the controls move when it
- * first appears, not again between taps. A refused feedback tap shows
- * "Not sent" on its pill. Taps sent as the tab closes leave it to HA.
+ * (and with HA's failure vibration), and a length picked for it goes back
+ * to the one before. At the next press the line empties, but its place is
+ * kept until the tab closes: the controls move when it first appears, and
+ * when a later refusal's words take more or fewer lines, but not when it
+ * empties. Taps sent as the tab closes leave it to HA. A refused feedback
+ * tap shows "Not sent" on its pill, and HA's own toast says it too.
  *
  * When the room sensor is offline, a sentence under the status says what that
  * means for the room and what to do.
@@ -38,7 +39,6 @@
 
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { keyed } from 'lit/directives/keyed.js';
 import '../band-gauge.js';
 import type { ZoneEntities } from '../helpers.js';
 import type { HomeAssistant } from '../types.js';
@@ -80,7 +80,7 @@ type Length = 1 | 3 | 'next';
 
 /** The length picked, as it was before a pick: put back if the change the
  *  pick was sent with is refused (#27). */
-interface Pick {
+interface PickedLength {
   length: Length | null;
   pickedNext: number | null;
 }
@@ -93,7 +93,7 @@ interface Burst {
   /** A length was picked during the burst: send it even if the taps cancel out. */
   picked: boolean;
   /** The length before the burst's first pick, if any. */
-  before?: Pick;
+  before?: PickedLength;
 }
 
 /** What the tab says when HA refuses a change (#27). */
@@ -123,8 +123,6 @@ export class ComfortBandNowTab extends LitElement {
    *  highlight if it's still the latest — the last-tapped pill always wins,
    *  regardless of which round-trip finishes first. */
   private _feedbackSeq = 0;
-  /** Refused feedback taps so far: each is said to screen readers afresh. */
-  private _feedbackRefusals = 0;
 
   /** The length picked under "Adjust for" in this tab, if any. */
   @state() private _length: Length | null = null;
@@ -312,15 +310,6 @@ export class ComfortBandNowTab extends LitElement {
         border-color: var(--error-color, #db4437);
         box-shadow: inset 0 0 0 1px var(--error-color, #db4437);
       }
-      /* Read by screen readers, not shown. */
-      .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
     `,
   ];
 
@@ -392,7 +381,7 @@ export class ComfortBandNowTab extends LitElement {
     doing: string,
     call: () => Promise<unknown>,
     failed: string,
-    before?: Pick,
+    before?: PickedLength,
   ): Promise<void> {
     this._busy = doing;
     let ok = true;
@@ -434,7 +423,7 @@ export class ComfortBandNowTab extends LitElement {
     );
   }
 
-  private _sendBand(band: Band, length: Length, failed: string, before?: Pick): void {
+  private _sendBand(band: Band, length: Length, failed: string, before?: PickedLength): void {
     if (!this.hass || !this.zone) return;
     const hass = this.hass;
     const zone = this.zone;
@@ -497,7 +486,7 @@ export class ComfortBandNowTab extends LitElement {
   private _onPickLength = (length: Length) => {
     this._pressed();
     if (this._busy) return;
-    const before: Pick = { length: this._length, pickedNext: this._pickedNext };
+    const before: PickedLength = { length: this._length, pickedNext: this._pickedNext };
     this._length = length;
     this._pickedNext = length === 'next' ? this._nextChange() : null;
     // Taps still being made take the length when they're sent.
@@ -510,7 +499,7 @@ export class ComfortBandNowTab extends LitElement {
 
   /** Gives a running adjustment a new length, keeping its band: the
    *  integration keeps an adjustment's band in the manual values. */
-  private _retime(length: Length, before?: Pick): void {
+  private _retime(length: Length, before?: PickedLength): void {
     if (this._stateOf(this.entities?.overrideActive ?? null)?.state !== 'on') return;
     const low = this._numericState(this.entities?.manualLow ?? null);
     const high = this._numericState(this.entities?.manualHigh ?? null);
@@ -539,18 +528,17 @@ export class ComfortBandNowTab extends LitElement {
     const seq = ++this._feedbackSeq;
     let ok = true;
     try {
-      // The pill tells a refusal (e.g. an integration older than v0.11.0).
-      await recordFeedback(this.hass, { zone: this.zone, label }, { quiet: true });
+      // A refusal (e.g. an integration older than v0.11.0) is HA's own toast
+      // to tell, which screen readers hear, and the pill marks it.
+      await recordFeedback(this.hass, { zone: this.zone, label });
     } catch {
       ok = false;
-      this._refused();
     }
     // A newer tap superseded this one while the service was in flight — let
     // it own the pill so the flash can't land on the wrong one.
     if (seq !== this._feedbackSeq) return;
     this._feedbackConfirmed = ok ? label : null;
     this._feedbackFailed = ok ? null : label;
-    if (!ok) this._feedbackRefusals++;
     if (this._feedbackTimer !== null) clearTimeout(this._feedbackTimer);
     this._feedbackTimer = setTimeout(() => {
       this._feedbackConfirmed = null;
@@ -695,11 +683,6 @@ export class ComfortBandNowTab extends LitElement {
             `,
           )}
         </div>
-        <span class="sr-only" role="status"
-          >${this._feedbackFailed
-            ? keyed(this._feedbackRefusals, html`<span>Your feedback wasn’t sent.</span>`)
-            : nothing}</span
-        >
       </section>
     `;
   }

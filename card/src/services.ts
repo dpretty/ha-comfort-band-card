@@ -51,7 +51,7 @@ export function removeTransition(
 /** For a call whose failure the card tells itself (#27). */
 export interface CallOptions {
   /** HA shows no toast of its own if the call fails, nor gives its failure
-   *  vibration in the companion app: the caller does both its own way. */
+   *  vibration: the caller tells it its own way. */
   quiet?: boolean;
 }
 
