@@ -160,14 +160,14 @@ async function back(el: ComfortBandNowTab): Promise<void> {
 }
 
 describe('comfort-band-now-tab when HA refuses a change', () => {
-  it('says a refused Warmer or Cooler change in plain words, under the status', async () => {
+  it('says a refused Warmer or Cooler change in plain words, under the controls', async () => {
     const { hass, refuse } = setup();
     const el = await nowTab(hass);
     refuse();
     await tap(el, 'warmer');
     expect(text(failed(el))).toBe(ADJUST);
     expect(failed(el)!.getAttribute('role')).toBe('alert');
-    expect(failed(el)!.previousElementSibling!.classList.contains('status')).toBe(true);
+    expect(failed(el)!.previousElementSibling!.classList.contains('steps')).toBe(true);
     // The status is what's in force again.
     expect(status(el)).toBe('Comfortable · 19.5–22.5°');
   });
@@ -307,13 +307,65 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     expect(text(failed(el))).toBe('Couldn’t end the adjustment. Try again.');
   });
 
-  it('says it under the status, above what the status needs explaining', async () => {
-    const { hass, refuse } = setup({ sensorOffline: true });
+  // Below every control that changes the room, so its coming moves none of
+  // them: a quick retry lands where it's aimed.
+  it('says it below Back to schedule, above the feedback', async () => {
+    const { hass, refuse } = setup({ adjusted: true, sensorOffline: true });
+    const el = await nowTab(hass);
+    refuse();
+    await back(el);
+    const line = failed(el)!;
+    expect(line.previousElementSibling!.classList.contains('back')).toBe(true);
+    expect(line.nextElementSibling).toBeNull();
+    expect(line.parentElement!.classList.contains('adjust')).toBe(true);
+    expect(line.parentElement!.nextElementSibling!.querySelector('.feedback-row')).not.toBeNull();
+    // Nor above it, by the status: the sensor notice stays under the status.
+    expect(
+      root(el).querySelector('.status')!.nextElementSibling!.classList.contains('notice'),
+    ).toBe(true);
+  });
+
+  it('keeps a length picked before later taps in a burst, to put back', async () => {
+    const { hass, refuse } = setup({ adjusted: true });
+    const el = await nowTab(hass);
+    root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
+    await pick(el, '1');
+    root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
+    refuse();
+    vi.advanceTimersByTime(1_500);
+    await flush(el);
+    expect(text(failed(el))).toBe(ADJUST);
+    expect(lengths(el)[1]).toEqual({ text: '3 h', checked: true });
+  });
+
+  it('asks HA for no toast after a refusal, too', async () => {
+    const { hass, callService, refuse } = setup();
     const el = await nowTab(hass);
     refuse();
     await tap(el, 'warmer');
-    expect(failed(el)!.previousElementSibling!.classList.contains('status')).toBe(true);
-    expect(failed(el)!.nextElementSibling!.classList.contains('notice')).toBe(true);
+    refuse();
+    await tap(el, 'warmer');
+    expect(callService.mock.calls.map((c) => c.slice(3))).toEqual([
+      [undefined, false],
+      [undefined, false],
+    ]);
+  });
+
+  it('keeps saying a refusal that comes while feedback is on its way', async () => {
+    const { hass, hold } = setup();
+    const el = await nowTab(hass);
+    const change = hold();
+    await tap(el, 'warmer');
+    const feedback = hold();
+    pill(el, 'just_right').click();
+    await flush(el);
+    change.reject();
+    await flush(el);
+    expect(failed(el)!.getAttribute('role')).toBe('alert');
+    feedback.resolve();
+    await flush(el);
+    expect(failed(el)!.getAttribute('role')).toBe('alert');
+    expect(text(failed(el))).toBe(ADJUST);
   });
 
   it('keeps saying it through HA’s updates and the time passing', async () => {
@@ -497,7 +549,8 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
 });
 
 describe('comfort-band-now-tab when HA refuses feedback', () => {
-  // HA's own toast says it too, which screen readers hear at each refusal.
+  // HA's own toast says it too, to the eye: screen readers don't hear a
+  // toast outside the open dialog, here as on main.
   it('marks the pill “Not sent”, leaving HA’s toast to say it as well, then puts it back', async () => {
     const seen = haptics();
     const { hass, callService, refuse } = setup();

@@ -1334,7 +1334,7 @@ let pt = class extends Ce {
         <ha-icon icon=${mn[T.kind]} aria-hidden="true"></ha-icon>
         <span>${T.text}</span>
       </div>
-      ${this._renderFailed()} ${m ? v`<div class="notice">${m}</div>` : S}
+      ${m ? v`<div class="notice">${m}</div>` : S}
       ${this._renderAdjust(a, u)} ${this._renderFeedbackSection()}
     `;
   }
@@ -1374,6 +1374,7 @@ let pt = class extends Ce {
         ${e && t !== !1 ? v`<button class="back" aria-disabled=${n} @click=${this._onBackToSchedule}>
               ${t === !0 ? "Back to schedule" : "End adjustment"}
             </button>` : S}
+        ${this._renderFailed()}
       </section>
     `;
   }
@@ -1458,7 +1459,7 @@ pt.styles = [
         display: flex;
         align-items: center;
         gap: var(--cb-gap-sm);
-        margin-top: 4px;
+        margin-top: var(--cb-gap-sm);
         font-size: 13px;
         color: var(--cb-text-primary);
       }

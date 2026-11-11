@@ -20,14 +20,16 @@
  *     built on a state the tab has just changed.
  *   - "How does it feel?" feedback pills (`comfort_band.record_feedback`).
  *
- * When HA refuses a change (#27), a line under the status says so in plain
- * words ("Couldn’t adjust the room. Try again."), in place of HA's own toast
- * (and with HA's failure vibration), and a length picked for it goes back
- * to the one before. At the next press the line empties, but its place is
- * kept until the tab closes: the controls move when it first appears, and
- * when a later refusal's words take more or fewer lines, but not when it
- * empties. Taps sent as the tab closes leave it to HA. A refused feedback
- * tap shows "Not sent" on its pill, and HA's own toast says it too.
+ * When HA refuses a change (#27), a line under the controls (above the
+ * feedback pills) says so in plain words ("Couldn’t adjust the room. Try
+ * again."), in place of HA's own toast (and with HA's failure vibration),
+ * and a length picked for it goes back to the one before. Below them, it
+ * moves none of the controls that change the room: a retry lands where it's
+ * aimed. At the next press it empties, but its place is kept until the tab
+ * closes, so the pills below don't move then either. Taps sent as the tab
+ * closes leave it to HA. A refused feedback tap shows "Not sent" on its
+ * pill, and HA's own toast says it too, visibly (screen readers don't hear
+ * a toast outside the open dialog).
  *
  * When the room sensor is offline, a sentence under the status says what that
  * means for the room and what to do.
@@ -201,7 +203,7 @@ export class ComfortBandNowTab extends LitElement {
         display: flex;
         align-items: center;
         gap: var(--cb-gap-sm);
-        margin-top: 4px;
+        margin-top: var(--cb-gap-sm);
         font-size: 13px;
         color: var(--cb-text-primary);
       }
@@ -529,7 +531,7 @@ export class ComfortBandNowTab extends LitElement {
     let ok = true;
     try {
       // A refusal (e.g. an integration older than v0.11.0) is HA's own toast
-      // to tell, which screen readers hear, and the pill marks it.
+      // to tell, and the pill marks it.
       await recordFeedback(this.hass, { zone: this.zone, label });
     } catch {
       ok = false;
@@ -595,7 +597,7 @@ export class ComfortBandNowTab extends LitElement {
         <ha-icon icon=${STATUS_ICONS[status.kind]} aria-hidden="true"></ha-icon>
         <span>${status.text}</span>
       </div>
-      ${this._renderFailed()} ${notice ? html`<div class="notice">${notice}</div>` : nothing}
+      ${notice ? html`<div class="notice">${notice}</div>` : nothing}
       ${this._renderAdjust(overrideActive, scheduled)} ${this._renderFeedbackSection()}
     `;
   }
@@ -653,6 +655,7 @@ export class ComfortBandNowTab extends LitElement {
               ${scheduled === true ? 'Back to schedule' : 'End adjustment'}
             </button>`
           : nothing}
+        ${this._renderFailed()}
       </section>
     `;
   }
