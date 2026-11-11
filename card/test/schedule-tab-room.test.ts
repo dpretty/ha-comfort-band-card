@@ -164,6 +164,27 @@ describe('comfort-band-schedule-tab across a change of room', () => {
     expect(rows(el)).toEqual(['06:00', '22:00']);
   });
 
+  // Not through the card, which gives the tab its room with HA; but a tab
+  // given HA first loads the room it's then given.
+  it('loads the room it’s given after HA', async () => {
+    const { hass, subscribed } = setup({ 'study/home': STUDY });
+    const el = await mount('comfort-band-schedule-tab', { hass });
+    await settle(el);
+    expect(subscribed).toEqual([]);
+    await moveTo(el, 'study');
+    expect(subscribed).toEqual(['study/home']);
+    expect(rows(el)).toEqual(['07:30']);
+    await editing(el);
+    await editRow(el, '07:30');
+    save(el, { at: '07:30', low: 19, high: 23 });
+    await settle(el);
+    expect(hass.callService).toHaveBeenCalledWith('comfort_band', 'set_schedule', {
+      zone: 'study',
+      profile: 'home',
+      transitions: [{ at: '07:30', low: 19, high: 23 }],
+    });
+  });
+
   it('shows the new room’s list loading, not the old one’s, then the new one', async () => {
     const { hass, subscribed, answer } = setup();
     const el = await tab(hass);
@@ -299,7 +320,8 @@ describe('comfort-band-schedule-tab across a change of room', () => {
     await settle(el);
     expect(dialog(el)).toBeNull();
     expect(notice(el)).toBe(NOT_SAVED);
-    expect(subscribed.at(-1)).toBe('study/away');
+    // Once, for the new room and profile together.
+    expect(subscribed).toEqual(['gym/home', 'study/away']);
     expect(rows(el)).toEqual(['00:00']);
     expect(text(root(el).querySelector('.header'))).toBe('Schedule: away');
   });

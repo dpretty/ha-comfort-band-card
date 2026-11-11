@@ -2699,8 +2699,8 @@ let Ie = class extends Ce {
    * room follows the default profile's schedule, or its own range). Where
    * the profile select can't be read, the list shown may not be the active
    * profile's, so it's only taken as in force without a profile manager at
-   * all. While a change of profile loads the new list, there's none on
-   * screen.
+   * all. While a change of profile or room loads the new list, there's
+   * none on screen.
    */
   _listInForce() {
     if (!this.hass || !this.entities || this._transitions.length === 0 || qs(this.hass, this.entities) !== !0) return !1;

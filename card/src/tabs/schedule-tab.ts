@@ -113,7 +113,7 @@ export class ComfortBandScheduleTab extends LitElement {
 
   @state() private _profile = '';
   /** The profile the list shown is for: none ('') while a change of
-   *  profile loads the new one's list (#46). */
+   *  profile (#46) or room (#49) loads the new list. */
   @state() private _listProfile = '';
   /** The room the list shown is for: none ('') while a change of room loads
    *  the new one's list (#49). */
@@ -131,7 +131,7 @@ export class ComfortBandScheduleTab extends LitElement {
   @state() private _editing: Transition | null = null;
   /** `at` of the row currently showing the inline delete-confirm UI. Cleared
    *  by Cancel, by Confirm (before the write), by Done, by a change of
-   *  profile (`_dropChange`), or automatically in `willUpdate` when a remote
+   *  profile or room (`_dropChange`), or automatically in `willUpdate` when a remote
    *  write echoes back without the targeted row. */
   @state() private _confirmingDeleteAt: string | null = null;
   /** The Add form's starting values, built once when Add is pressed. The
@@ -478,7 +478,8 @@ export class ComfortBandScheduleTab extends LitElement {
     const profile = this._profile;
     // Only show the loading state when we have nothing to display. On a
     // reconnect keep the data visible so the tab doesn't flash empty; a
-    // change of profile has emptied it already, so the new one loads (#46).
+    // change of profile or room has emptied it already, so the new one
+    // loads (#46, #49).
     if (this._transitions.length === 0) this._loading = true;
     this._error = null;
     try {
@@ -633,8 +634,8 @@ export class ComfortBandScheduleTab extends LitElement {
       next.push(incoming);
     }
     next.sort(compareTransitions);
-    // Closed before the write, not after: a change of profile while it's
-    // on its way mustn't be told as one that wasn't saved.
+    // Closed before the write, not after: a change of profile or room while
+    // it's on its way mustn't be told as one that wasn't saved.
     this._exitDialogMode();
     await this._writeSchedule(next);
   };
@@ -727,7 +728,7 @@ export class ComfortBandScheduleTab extends LitElement {
       });
     } catch (err) {
       // Put back only if nothing has replaced it since: another profile's
-      // list, or HA's own answer, is the list to keep (#46 review).
+      // or room's list, or HA's own answer, is the list to keep (#46 review).
       if (this._transitions === transitions) this._transitions = previous;
       this._error = err instanceof Error ? err.message : 'Failed to save schedule.';
     }
@@ -802,8 +803,8 @@ export class ComfortBandScheduleTab extends LitElement {
    * room follows the default profile's schedule, or its own range). Where
    * the profile select can't be read, the list shown may not be the active
    * profile's, so it's only taken as in force without a profile manager at
-   * all. While a change of profile loads the new list, there's none on
-   * screen.
+   * all. While a change of profile or room loads the new list, there's
+   * none on screen.
    */
   private _listInForce(): boolean {
     if (!this.hass || !this.entities || this._transitions.length === 0) return false;
