@@ -379,6 +379,22 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     expect(seen).toEqual(['failure']);
   });
 
+  // In HA the tab is inside the card's and the modal's shadow roots.
+  it('sends the vibration out of the shadow roots it’s in', async () => {
+    const seen = haptics();
+    const { hass, refuse } = setup();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const el = document.createElement('comfort-band-now-tab');
+    Object.assign(el, { hass, entities: ENTITIES, zone: 'gym' });
+    host.attachShadow({ mode: 'open' }).appendChild(el);
+    await el.updateComplete;
+    refuse();
+    await tap(el, 'warmer');
+    expect(seen).toEqual(['failure']);
+  });
+
   it('leaves the vibration to HA for taps sent as the tab closes', async () => {
     const seen = haptics();
     const { hass, refuse } = setup();
