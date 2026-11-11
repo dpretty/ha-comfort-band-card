@@ -20,17 +20,9 @@
  *     built on a state the tab has just changed.
  *   - "How does it feel?" feedback pills (`comfort_band.record_feedback`).
  *
- * When HA refuses a change (#27), a line under the controls (above the
- * feedback pills) says so in plain words ("Couldn’t adjust the room. Try
- * again."), and a length picked for it goes back to the one before. HA's own
- * toast says it too: from HA 2026.9 it shows above the dialog, so it's on
- * screen where the line may be below the fold on a short screen. Screen
- * readers don't hear a toast outside the open dialog, and do hear the line.
- * Below the controls, the line moves none of those that change the room, so
- * a retry lands where it's aimed: at the next press it empties, but its
- * place is kept, and it never gets shorter (a later refusal in fewer lines
- * would otherwise pull a panel scrolled to its end), until the tab closes.
- * A refused feedback tap shows "Not sent" on its pill, with HA's toast.
+ * When HA refuses a change (#27), HA's own toast says so, and a length
+ * picked for it goes back to the one before. A refused feedback tap shows
+ * "Not sent" on its pill, with HA's toast.
  *
  * When the room sensor is offline, a sentence under the status says what that
  * means for the room and what to do.
@@ -99,14 +91,6 @@ interface Burst {
   before?: PickedLength;
 }
 
-/** What the tab says when HA refuses a change (#27). */
-const FAILED = {
-  adjust: 'Couldn’t adjust the room. Try again.',
-  retime: 'Couldn’t change how long the adjustment lasts. Try again.',
-  back: 'Couldn’t go back to the schedule. Try again.',
-  end: 'Couldn’t end the adjustment. Try again.',
-} as const;
-
 @customElement('comfort-band-now-tab')
 export class ComfortBandNowTab extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
@@ -138,17 +122,6 @@ export class ComfortBandNowTab extends LitElement {
    *  no other such call starts (the feedback buttons aside, which don't
    *  change the range). */
   @state() private _busy: string | null = null;
-  /** What a refused change was, in plain words, while its line is on
-   *  screen (#27). */
-  @state() private _failed: string | null = null;
-  /** Its line is kept, empty, after the next press, until the tab closes
-   *  or HA refuses another: so the controls under it don't move again. */
-  @state() private _failedHeld = false;
-  /** The line's tallest height so far (px), kept as its least until the
-   *  tab closes, so it never gets shorter. */
-  private _refusalHeight = 0;
-  /** Whether the line's height is to be read at the next frame. */
-  private _measuring = false;
 
   public static override styles = [
     tokens,
@@ -204,24 +177,6 @@ export class ComfortBandNowTab extends LitElement {
       }
       .status.sensor ha-icon {
         color: var(--warning-color, #ffa600);
-      }
-      .refusal {
-        display: flex;
-        align-items: center;
-        gap: var(--cb-gap-sm);
-        margin-top: var(--cb-gap-sm);
-        font-size: 13px;
-        color: var(--cb-text-primary);
-      }
-      .refusal ha-icon {
-        flex: none;
-        --mdc-icon-size: 18px;
-        --icon-primary-color: currentColor;
-        color: var(--error-color, #db4437);
-      }
-      /* Kept, empty, so the controls under it don't move. */
-      .refusal.held {
-        visibility: hidden;
       }
       .notice {
         margin-top: 4px;
@@ -332,9 +287,6 @@ export class ComfortBandNowTab extends LitElement {
     }
     this._feedbackConfirmed = null;
     this._feedbackFailed = null;
-    this._failed = null;
-    this._failedHeld = false;
-    this._refusalHeight = 0;
     // Closing the dialog mid-burst still makes the change the taps asked for.
     this._commitBurst();
   }
@@ -383,41 +335,29 @@ export class ComfortBandNowTab extends LitElement {
     return next !== null && next === this._pickedNext ? 'next' : DEFAULT_HOURS;
   }
 
-  /** Runs a call, saying what it's doing meanwhile. If HA refuses it, the
-   *  tab says `failed` (#27), and a length picked for it is put back to
-   *  `before`; the status falls back to what is actually in force. */
+  /** Runs a call, saying what it's doing meanwhile. A failed call is
+   *  reported by HA's own toast; the status falls back to what is actually
+   *  in force, and a length picked for it goes back to `before` (#27). */
   private async _run(
     doing: string,
     call: () => Promise<unknown>,
-    failed: string,
     before?: PickedLength,
   ): Promise<void> {
     this._busy = doing;
-    let ok = true;
     try {
       await call();
     } catch {
-      ok = false;
+      // Gone, the tab's picks go with it.
+      if (before && this.isConnected) {
+        this._length = before.length;
+        this._pickedNext = before.pickedNext;
+      }
     } finally {
       this._busy = null;
     }
-    // Gone, the tab has no line to say it on. A change that went through
-    // leaves a held line held: its place stays.
-    if (!this.isConnected || ok) return;
-    this._failed = failed;
-    this._failedHeld = false;
-    if (before) {
-      this._length = before.length;
-      this._pickedNext = before.pickedNext;
-    }
   }
 
-  /** A press puts the last refused change's line away, keeping its place. */
-  private _pressed(): void {
-    if (this._failed !== null) this._failedHeld = true;
-  }
-
-  private _sendBand(band: Band, length: Length, failed: string, before?: PickedLength): void {
+  private _sendBand(band: Band, length: Length, before?: PickedLength): void {
     if (!this.hass || !this.zone) return;
     const hass = this.hass;
     const zone = this.zone;
@@ -427,13 +367,11 @@ export class ComfortBandNowTab extends LitElement {
     void this._run(
       `Adjusting to ${bandText(band)}`,
       () => startOverride(hass, { zone, low: band.low, high: band.high, hours, until }),
-      failed,
       before,
     );
   }
 
   private _onStep = (direction: 1 | -1) => {
-    this._pressed();
     if (this._busy) return;
     let burst = this._burst;
     if (!burst) {
@@ -459,12 +397,7 @@ export class ComfortBandNowTab extends LitElement {
     this._burst = null;
     if (!burst) return;
     if (burst.steps !== 0) {
-      this._sendBand(
-        shiftBand(burst.base, burst.steps),
-        this._hours(),
-        FAILED.adjust,
-        burst.before,
-      );
+      this._sendBand(shiftBand(burst.base, burst.steps), this._hours(), burst.before);
     } else if (burst.picked) {
       this._retime(this._hours(), burst.before);
     }
@@ -477,7 +410,6 @@ export class ComfortBandNowTab extends LitElement {
   }
 
   private _onPickLength = (length: Length) => {
-    this._pressed();
     if (this._busy) return;
     const before: PickedLength = { length: this._length, pickedNext: this._pickedNext };
     this._length = length;
@@ -497,33 +429,28 @@ export class ComfortBandNowTab extends LitElement {
     const low = this._numericState(this.entities?.manualLow ?? null);
     const high = this._numericState(this.entities?.manualHigh ?? null);
     if (!Number.isFinite(low) || !Number.isFinite(high)) return;
-    this._sendBand({ low, high }, length, FAILED.retime, before);
+    this._sendBand({ low, high }, length, before);
   }
 
   private _onBackToSchedule = () => {
-    this._pressed();
     if (this._busy || !this.hass || !this.zone) return;
     const hass = this.hass;
     const zone = this.zone;
     this._dropBurst();
-    const back = this._schedule().scheduled === true;
-    void this._run(
-      back ? 'Going back to the schedule' : 'Ending the adjustment',
-      () => cancelOverride(hass, { zone }),
-      back ? FAILED.back : FAILED.end,
-    );
+    const doing =
+      this._schedule().scheduled === true ? 'Going back to the schedule' : 'Ending the adjustment';
+    void this._run(doing, () => cancelOverride(hass, { zone }));
   };
 
   private _onFeedbackTap = async (label: FeedbackLabel): Promise<void> => {
-    this._pressed();
     if (!this.hass || !this.zone) return;
     const seq = ++this._feedbackSeq;
     let ok = true;
     try {
-      // A refusal (e.g. an integration older than v0.11.0) is HA's own toast
-      // to tell, and the pill marks it.
       await recordFeedback(this.hass, { zone: this.zone, label });
     } catch {
+      // Service rejected (e.g. integration older than v0.11.0): HA's toast
+      // says so, and the pill says "Not sent" rather than "Thanks!".
       ok = false;
     }
     // A newer tap superseded this one while the service was in flight — let
@@ -592,39 +519,6 @@ export class ComfortBandNowTab extends LitElement {
     `;
   }
 
-  /** A refused change, said; or, after the next press, its place kept. Two
-   *  templates, so each refusal is a new alert; each starts at the line's
-   *  tallest height so far. */
-  private _renderFailed() {
-    if (this._failed === null) return nothing;
-    const line = html`<ha-icon icon="mdi:alert-circle-outline" aria-hidden="true"></ha-icon>
-      <span>${this._failed}</span>`;
-    const least = `min-height: ${this._refusalHeight}px`;
-    return this._failedHeld
-      ? html`<div class="refusal held" aria-hidden="true" style=${least}>${line}</div>`
-      : html`<div class="refusal" role="alert" style=${least}>${line}</div>`;
-  }
-
-  /** Keeps the line's tallest height so far as its least, so words in
-   *  fewer lines don't shorten it. It's read at the next frame, not here:
-   *  reading it here would lay out a passing state, such as the status
-   *  while a refused call is answered, and a panel scrolled to its end
-   *  would keep the scroll that state pulled it to (WebKit has no scroll
-   *  anchoring). */
-  protected override updated(): void {
-    if (this._failed === null || this._measuring) return;
-    this._measuring = true;
-    requestAnimationFrame(() => {
-      this._measuring = false;
-      const refusal = this.shadowRoot?.querySelector<HTMLElement>('.refusal');
-      if (!this.isConnected || !refusal) return;
-      const height = refusal.getBoundingClientRect().height;
-      if (height <= this._refusalHeight) return;
-      this._refusalHeight = height;
-      refusal.style.minHeight = `${height}px`;
-    });
-  }
-
   private _renderAdjust(overrideActive: boolean, scheduled: boolean | null) {
     // aria-disabled rather than disabled: a disabled button loses focus,
     // and a keyboard user would be thrown out of the dialog's flow.
@@ -667,7 +561,6 @@ export class ComfortBandNowTab extends LitElement {
               ${scheduled === true ? 'Back to schedule' : 'End adjustment'}
             </button>`
           : nothing}
-        ${this._renderFailed()}
       </section>
     `;
   }
