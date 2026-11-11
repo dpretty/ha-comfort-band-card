@@ -21,11 +21,12 @@
  *   - "How does it feel?" feedback pills (`comfort_band.record_feedback`).
  *
  * When HA refuses a change (#27), a line under the status says so in plain
- * words ("Couldn’t adjust the room. Try again."), in place of HA's own toast,
- * and a length picked for it goes back to the one before. At the next press
- * the line empties but keeps its place until that press's change has gone
- * through, so nothing moves under a finger; a refused feedback tap shows
- * "Not sent" on its pill. Taps sent as the tab closes leave it to HA's toast.
+ * words ("Couldn’t adjust the room. Try again."), in place of HA's own toast
+ * (with HA's failure vibration in the companion app), and a length picked
+ * for it goes back to the one before. At the next press the line empties,
+ * but its place is kept until the tab closes: the controls move when it
+ * first appears, not again between taps. A refused feedback tap shows
+ * "Not sent" on its pill. Taps sent as the tab closes leave it to HA.
  *
  * When the room sensor is offline, a sentence under the status says what that
  * means for the room and what to do.
@@ -37,6 +38,7 @@
 
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { keyed } from 'lit/directives/keyed.js';
 import '../band-gauge.js';
 import type { ZoneEntities } from '../helpers.js';
 import type { HomeAssistant } from '../types.js';
@@ -65,7 +67,7 @@ const FEEDBACK_PILLS: ReadonlyArray<{ label: FeedbackLabel; text: string }> = [
   { label: 'too_hot', text: 'Too warm' },
 ];
 
-/** How long the tapped pill stays highlighted after a successful record. */
+/** How long the tapped pill says "Thanks!" or "Not sent". */
 const FEEDBACK_CONFIRM_MS = 1500;
 
 /** Taps on Warmer / Cooler made within this long of each other are one change. */
@@ -112,14 +114,17 @@ export class ComfortBandNowTab extends LitElement {
   @state() private _feedbackConfirmed: FeedbackLabel | null = null;
   /** The pill briefly marked "Not sent" after a refused `record_feedback`. */
   @state() private _feedbackFailed: FeedbackLabel | null = null;
-  /** Timer that clears `_feedbackConfirmed`; cancelled on disconnect so it
-   *  never fires `setState` on an unmounted element. */
+  /** Timer that clears `_feedbackConfirmed` and `_feedbackFailed`;
+   *  cancelled on disconnect so it never fires `setState` on an unmounted
+   *  element. */
   private _feedbackTimer: ReturnType<typeof setTimeout> | null = null;
   /** Monotonic tap counter. Service calls are concurrent and may resolve
    *  out of order, so each tap captures its seq and only claims the
    *  highlight if it's still the latest — the last-tapped pill always wins,
    *  regardless of which round-trip finishes first. */
   private _feedbackSeq = 0;
+  /** Refused feedback taps so far: each is said to screen readers afresh. */
+  private _feedbackRefusals = 0;
 
   /** The length picked under "Adjust for" in this tab, if any. */
   @state() private _length: Length | null = null;
@@ -135,8 +140,8 @@ export class ComfortBandNowTab extends LitElement {
   /** What a refused change was, in plain words, while its line is on
    *  screen (#27). */
   @state() private _failed: string | null = null;
-  /** Its line is kept, empty, after the next press: until that press's
-   *  change has gone through, or the tab closes. */
+  /** Its line is kept, empty, after the next press, until the tab closes
+   *  or HA refuses another: so the controls under it don't move again. */
   @state() private _failedHeld = false;
 
   public static override styles = [
@@ -398,14 +403,12 @@ export class ComfortBandNowTab extends LitElement {
     } finally {
       this._busy = null;
     }
-    // Gone, the tab has no line to say it on.
-    if (!this.isConnected) return;
-    this._failedHeld = false;
-    if (ok) {
-      this._failed = null;
-      return;
-    }
+    // Gone, the tab has no line to say it on. A change that went through
+    // leaves a held line held: its place stays.
+    if (!this.isConnected || ok) return;
     this._failed = failed;
+    this._failedHeld = false;
+    this._refused();
     if (before) {
       this._length = before.length;
       this._pickedNext = before.pickedNext;
@@ -421,6 +424,14 @@ export class ComfortBandNowTab extends LitElement {
   /** A press puts the last refused change's line away, keeping its place. */
   private _pressed(): void {
     if (this._failed !== null) this._failedHeld = true;
+  }
+
+  /** HA's failure vibration in the companion app, which HA leaves out with
+   *  its toast. */
+  private _refused(): void {
+    this.dispatchEvent(
+      new CustomEvent('haptic', { detail: 'failure', bubbles: true, composed: true }),
+    );
   }
 
   private _sendBand(band: Band, length: Length, failed: string, before?: Pick): void {
@@ -532,12 +543,14 @@ export class ComfortBandNowTab extends LitElement {
       await recordFeedback(this.hass, { zone: this.zone, label }, { quiet: true });
     } catch {
       ok = false;
+      this._refused();
     }
     // A newer tap superseded this one while the service was in flight — let
     // it own the pill so the flash can't land on the wrong one.
     if (seq !== this._feedbackSeq) return;
     this._feedbackConfirmed = ok ? label : null;
     this._feedbackFailed = ok ? null : label;
+    if (!ok) this._feedbackRefusals++;
     if (this._feedbackTimer !== null) clearTimeout(this._feedbackTimer);
     this._feedbackTimer = setTimeout(() => {
       this._feedbackConfirmed = null;
@@ -683,7 +696,9 @@ export class ComfortBandNowTab extends LitElement {
           )}
         </div>
         <span class="sr-only" role="status"
-          >${this._feedbackFailed ? 'Your feedback wasn’t sent.' : ''}</span
+          >${this._feedbackFailed
+            ? keyed(this._feedbackRefusals, html`<span>Your feedback wasn’t sent.</span>`)
+            : nothing}</span
         >
       </section>
     `;

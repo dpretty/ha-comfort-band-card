@@ -45,10 +45,11 @@ function setup({
   scheduled = true as boolean | null,
   next = null as number | null,
   sensorOffline = false,
+  band = ['19.5', '22.5'],
 } = {}) {
   const raw: Record<string, [string, Record<string, unknown>?]> = {
-    'sensor.gym_effective_low': ['19.5'],
-    'sensor.gym_effective_high': ['22.5'],
+    'sensor.gym_effective_low': [band[0]],
+    'sensor.gym_effective_high': [band[1]],
     'sensor.gym_room_temperature': ['21.0'],
     'sensor.gym_current_action': ['idle'],
     'sensor.gym_override_ends': ['unknown'],
@@ -120,6 +121,26 @@ const lengths = (el: ComfortBandNowTab) =>
 const pill = (el: ComfortBandNowTab, label: string) =>
   root(el).querySelector<HTMLButtonElement>(`[data-feedback="${label}"]`)!;
 const said = (el: ComfortBandNowTab) => text(root(el).querySelector('.sr-only[role="status"]'));
+const css = () =>
+  (
+    customElements.get('comfort-band-now-tab') as unknown as {
+      styles: Array<{ cssText: string }>;
+    }
+  ).styles
+    .flat()
+    .map((st) => st.cssText)
+    .join('\n');
+
+/** The haptic events the tab sends HA's frontend, by type. */
+function haptics(): string[] {
+  const seen: string[] = [];
+  const on = (e: Event) => seen.push(String((e as CustomEvent).detail));
+  window.addEventListener('haptic', on);
+  afterEachCleanup.push(() => window.removeEventListener('haptic', on));
+  return seen;
+}
+const afterEachCleanup: Array<() => void> = [];
+afterEach(() => afterEachCleanup.splice(0).forEach((f) => f()));
 
 /** Taps, then waits out the burst so the change is sent. */
 async function tap(el: ComfortBandNowTab, which: 'warmer' | 'cooler', times = 1): Promise<void> {
@@ -308,7 +329,7 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     expect(failed(el)!.getAttribute('role')).toBe('alert');
   });
 
-  it('puts it away at the next press, keeping its place until that change has gone through', async () => {
+  it('puts it away at the next press, keeping its place after, so nothing moves again', async () => {
     const { hass, refuse, hold } = setup();
     const el = await nowTab(hass);
     refuse();
@@ -323,11 +344,51 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     const held = hold();
     vi.advanceTimersByTime(1_500);
     await flush(el);
-    // And while the change goes through.
+    // And while the change goes through, and after.
     expect(failed(el)!.classList.contains('held')).toBe(true);
     held.resolve();
     await flush(el);
-    expect(failed(el)).toBeNull();
+    expect(failed(el)!.classList.contains('held')).toBe(true);
+    expect(text(failed(el))).toBe(ADJUST);
+  });
+
+  it('keeps its place at a tap past a limit, which sends nothing', async () => {
+    const { hass, callService, refuse } = setup({ band: ['30', '35'] });
+    const el = await nowTab(hass);
+    refuse();
+    await tap(el, 'cooler');
+    expect(text(failed(el))).toBe(ADJUST);
+    await tap(el, 'warmer');
+    expect(callService).toHaveBeenCalledTimes(1);
+    expect(failed(el)!.classList.contains('held')).toBe(true);
+  });
+
+  it('shows its line laid out, the icon beside the words', () => {
+    expect(css()).toMatch(/\.refusal\s*\{[^}]*display:\s*flex/);
+    expect(css()).not.toMatch(/\.refusal\s*\{[^}]*display:\s*none/);
+  });
+
+  it('gives HA’s failure vibration for a refused change, and only then', async () => {
+    const seen = haptics();
+    const { hass, refuse } = setup();
+    const el = await nowTab(hass);
+    await tap(el, 'warmer');
+    expect(seen).toEqual([]);
+    refuse();
+    await tap(el, 'cooler');
+    expect(seen).toEqual(['failure']);
+  });
+
+  it('leaves the vibration to HA for taps sent as the tab closes', async () => {
+    const seen = haptics();
+    const { hass, refuse } = setup();
+    const el = await nowTab(hass);
+    refuse();
+    root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
+    await el.updateComplete;
+    el.remove();
+    await flush(el);
+    expect(seen).toEqual([]);
   });
 
   it('says a second refusal afresh, as a new alert', async () => {
@@ -429,6 +490,64 @@ describe('comfort-band-now-tab when HA refuses feedback', () => {
     expect(text(pill(el, 'too_cold'))).toBe('Too cool');
     expect(pill(el, 'too_cold').classList.contains('failed')).toBe(false);
     expect(said(el)).toBe('');
+  });
+
+  it('says each refusal to screen readers afresh, though the words are the same', async () => {
+    const { hass, refuse } = setup();
+    const el = await nowTab(hass);
+    const region = root(el).querySelector('.sr-only[role="status"]')!;
+    refuse();
+    pill(el, 'too_cold').click();
+    await flush(el);
+    const first = region.firstElementChild;
+    expect(text(first)).toBe('Your feedback wasn’t sent.');
+    refuse();
+    pill(el, 'too_hot').click();
+    await flush(el);
+    // The same region, its words new: a live region says what's added to it.
+    expect(root(el).querySelector('.sr-only[role="status"]')).toBe(region);
+    expect(region.firstElementChild).not.toBe(first);
+    expect(said(el)).toBe('Your feedback wasn’t sent.');
+  });
+
+  it('gives HA’s failure vibration for a refused feedback tap', async () => {
+    const seen = haptics();
+    const { hass, refuse } = setup();
+    const el = await nowTab(hass);
+    pill(el, 'too_hot').click();
+    await flush(el);
+    refuse();
+    pill(el, 'too_cold').click();
+    await flush(el);
+    expect(seen).toEqual(['failure']);
+  });
+
+  it('stops thanking another pill when a later tap is refused', async () => {
+    const { hass, refuse } = setup();
+    const el = await nowTab(hass);
+    pill(el, 'too_hot').click();
+    await flush(el);
+    expect(text(pill(el, 'too_hot'))).toBe('Thanks!');
+    refuse();
+    pill(el, 'too_cold').click();
+    await flush(el);
+    expect(text(pill(el, 'too_hot'))).toBe('Too warm');
+    expect(text(pill(el, 'too_cold'))).toBe('Not sent');
+  });
+
+  it('marks a refused pill without changing its size', () => {
+    const rule = css().match(/\.feedback-pill\.failed\s*\{([^}]*)\}/)![1];
+    expect(rule).toMatch(/box-shadow:\s*inset 0 0 0 1px/);
+    expect(rule).not.toMatch(/border(-width)?:\s*\d/);
+    expect(rule).not.toMatch(/padding|width|height/);
+  });
+
+  it('keeps its words for screen readers off the screen', () => {
+    const rule = css().match(/\.sr-only\s*\{([^}]*)\}/)![1];
+    expect(rule).toMatch(/position:\s*absolute/);
+    expect(rule).toMatch(/clip-path:\s*inset\(50%\)/);
+    expect(rule).toMatch(/width:\s*1px/);
+    expect(rule).toMatch(/height:\s*1px/);
   });
 
   it('stops saying “Not sent” when the tab closes', async () => {
