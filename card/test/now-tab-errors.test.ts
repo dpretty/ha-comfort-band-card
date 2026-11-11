@@ -39,7 +39,11 @@ interface Held {
  * adjusted (with `adjusted`). Calls go through unless `refuse` or `hold`
  * says otherwise for the next one.
  */
-function setup({ adjusted = false, scheduled = true as boolean | null } = {}) {
+function setup({
+  adjusted = false,
+  scheduled = true as boolean | null,
+  next = null as number | null,
+} = {}) {
   const raw: Record<string, [string, Record<string, unknown>?]> = {
     'sensor.gym_effective_low': ['19.5'],
     'sensor.gym_effective_high': ['22.5'],
@@ -51,7 +55,10 @@ function setup({ adjusted = false, scheduled = true as boolean | null } = {}) {
     'number.gym_manual_high': ['22'],
   };
   if (scheduled !== null) {
-    raw['sensor.gym_next_band_change'] = ['unknown', { scheduled, low: 18, high: 23 }];
+    raw['sensor.gym_next_band_change'] = [
+      next === null ? 'unknown' : new Date(next).toISOString(),
+      { scheduled, low: 18, high: 23 },
+    ];
   }
   const states: Record<string, HassEntity> = {};
   for (const [id, [state, attributes = {}]] of Object.entries(raw)) {
@@ -66,6 +73,12 @@ function setup({ adjusted = false, scheduled = true as boolean | null } = {}) {
     callService: callService as unknown as HomeAssistant['callService'],
     callWS: vi.fn().mockResolvedValue(undefined),
     locale: { language: 'en-GB', time_format: '24' },
+    // v0.25.0's, for "Until".
+    services: {
+      comfort_band: {
+        start_override: { fields: { zone: {}, low: {}, high: {}, hours: {}, until: {} } },
+      },
+    },
   };
   const refuse = () => callService.mockRejectedValueOnce(new Error('Entity not available'));
   const hold = (): Held => {
@@ -113,7 +126,7 @@ async function tap(el: ComfortBandNowTab, which: 'warmer' | 'cooler', times = 1)
   await flush(el);
 }
 
-async function pick(el: ComfortBandNowTab, length: '1' | '3'): Promise<void> {
+async function pick(el: ComfortBandNowTab, length: '1' | '3' | 'next'): Promise<void> {
   root(el).querySelector<HTMLElement>(`.lengths button[data-length="${length}"]`)!.click();
   await flush(el);
 }
@@ -200,18 +213,19 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     ]);
   });
 
+  // What's put back is the length from before the burst's first pick.
   it('shows the length from before a burst again where the burst is refused', async () => {
-    const { hass, refuse } = setup({ adjusted: true });
+    const { hass, refuse } = setup({ adjusted: true, next: Date.now() + 5 * 3_600_000 });
     const el = await nowTab(hass);
+    await pick(el, '1');
     root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
-    await pick(el, '1');
+    await pick(el, 'next');
     await pick(el, '3');
-    await pick(el, '1');
     refuse();
     vi.advanceTimersByTime(1_500);
     await flush(el);
     expect(text(failed(el))).toBe(ADJUST);
-    expect(lengths(el)[1]).toEqual({ text: '3 h', checked: true });
+    expect(lengths(el).map((l) => l.checked)).toEqual([true, false, false]);
   });
 
   it('shows the length from before a re-time in a burst again where it’s refused', async () => {
@@ -318,6 +332,27 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     expect(failed(el)!.classList.contains('held')).toBe(true);
   });
 
+  it('is put away by a length picked with nothing adjusted, keeping its place', async () => {
+    const { hass, refuse } = setup();
+    const el = await nowTab(hass);
+    refuse();
+    await tap(el, 'warmer');
+    await pick(el, '1');
+    expect(failed(el)!.classList.contains('held')).toBe(true);
+  });
+
+  it('keeps its place hidden, at the size it had', () => {
+    const css = (
+      customElements.get('comfort-band-now-tab') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((st) => st.cssText)
+      .join('\n');
+    expect(css).toMatch(/\.refusal\.held\s*\{[^}]*visibility:\s*hidden/);
+  });
+
   it('is put away by a feedback tap too, keeping its place', async () => {
     const { hass, refuse } = setup();
     const el = await nowTab(hass);
@@ -340,6 +375,7 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     const el = await nowTab(hass);
     refuse();
     await tap(el, 'warmer');
+    expect(text(failed(el))).toBe(ADJUST);
     el.remove();
     document.body.appendChild(el);
     await flush(el);
