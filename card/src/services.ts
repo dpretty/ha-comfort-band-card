@@ -48,36 +48,17 @@ export function removeTransition(
   return hass.callService(DOMAIN, 'remove_transition', { ...args });
 }
 
-/** For a call whose failure the card tells itself (#27). */
-export interface CallOptions {
-  /** HA shows no toast of its own if the call fails, nor gives its failure
-   *  vibration: the caller tells it its own way. */
-  quiet?: boolean;
-}
-
-function callDomain(
-  hass: HomeAssistant,
-  service: string,
-  data: Record<string, unknown>,
-  options?: CallOptions,
-): Promise<unknown> {
-  return options?.quiet
-    ? hass.callService(DOMAIN, service, data, undefined, false)
-    : hass.callService(DOMAIN, service, data);
-}
-
 /** `until` (integration v0.25.0+) is an ISO time, as an alternative to `hours`. */
 export function startOverride(
   hass: HomeAssistant,
   args: { zone: string; low?: number; high?: number; hours?: number; until?: string },
-  options?: CallOptions,
 ): Promise<unknown> {
   const data: Record<string, unknown> = { zone: args.zone };
   if (args.low !== undefined) data.low = args.low;
   if (args.high !== undefined) data.high = args.high;
   if (args.hours !== undefined) data.hours = args.hours;
   if (args.until !== undefined) data.until = args.until;
-  return callDomain(hass, 'start_override', data, options);
+  return hass.callService(DOMAIN, 'start_override', data);
 }
 
 /** Whether the integration ends an override at a given time (v0.25.0+):
@@ -87,12 +68,8 @@ export function overrideUntilSupported(hass: HomeAssistant): boolean {
   return hass.services?.[DOMAIN]?.start_override?.fields?.until !== undefined;
 }
 
-export function cancelOverride(
-  hass: HomeAssistant,
-  args: { zone: string },
-  options?: CallOptions,
-): Promise<unknown> {
-  return callDomain(hass, 'cancel_override', { ...args }, options);
+export function cancelOverride(hass: HomeAssistant, args: { zone: string }): Promise<unknown> {
+  return hass.callService(DOMAIN, 'cancel_override', { ...args });
 }
 
 export function setProfile(hass: HomeAssistant, args: { profile: string }): Promise<unknown> {
@@ -134,7 +111,6 @@ export type FeedbackLabel = 'too_hot' | 'just_right' | 'too_cold';
 export function recordFeedback(
   hass: HomeAssistant,
   args: { zone: string; label: FeedbackLabel },
-  options?: CallOptions,
 ): Promise<unknown> {
-  return callDomain(hass, 'record_feedback', { zone: args.zone, label: args.label }, options);
+  return hass.callService(DOMAIN, 'record_feedback', { zone: args.zone, label: args.label });
 }

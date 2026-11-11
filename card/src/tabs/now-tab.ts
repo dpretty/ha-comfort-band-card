@@ -22,14 +22,14 @@
  *
  * When HA refuses a change (#27), a line under the controls (above the
  * feedback pills) says so in plain words ("Couldn’t adjust the room. Try
- * again."), in place of HA's own toast (and with HA's failure vibration),
- * and a length picked for it goes back to the one before. Below them, it
- * moves none of the controls that change the room: a retry lands where it's
- * aimed. At the next press it empties, but its place is kept until the tab
- * closes, so the pills below don't move then either. Taps sent as the tab
- * closes leave it to HA. A refused feedback tap shows "Not sent" on its
- * pill, and HA's own toast says it too, visibly (screen readers don't hear
- * a toast outside the open dialog).
+ * again."), and a length picked for it goes back to the one before. HA's own
+ * toast says it too: always on screen, where the line may be below the fold
+ * on a short screen, though screen readers don't hear a toast outside the
+ * open dialog, and do hear the line. Below the controls, the line moves none
+ * of those that change the room: a retry lands where it's aimed. At the
+ * next press it empties, but its place is kept until the tab closes, so the
+ * pills below don't move then either. A refused feedback tap shows
+ * "Not sent" on its pill, with HA's toast.
  *
  * When the room sensor is offline, a sentence under the status says what that
  * means for the room and what to do.
@@ -399,17 +399,10 @@ export class ComfortBandNowTab extends LitElement {
     if (!this.isConnected || ok) return;
     this._failed = failed;
     this._failedHeld = false;
-    this._refused();
     if (before) {
       this._length = before.length;
       this._pickedNext = before.pickedNext;
     }
-  }
-
-  /** Whether HA should keep its own toast to itself: the tab tells a
-   *  refused change, while it's on screen to tell it. */
-  private _quiet(): boolean {
-    return this.isConnected;
   }
 
   /** A press puts the last refused change's line away, keeping its place. */
@@ -417,25 +410,16 @@ export class ComfortBandNowTab extends LitElement {
     if (this._failed !== null) this._failedHeld = true;
   }
 
-  /** HA's failure vibration in the companion app, which HA leaves out with
-   *  its toast. */
-  private _refused(): void {
-    this.dispatchEvent(
-      new CustomEvent('haptic', { detail: 'failure', bubbles: true, composed: true }),
-    );
-  }
-
   private _sendBand(band: Band, length: Length, failed: string, before?: PickedLength): void {
     if (!this.hass || !this.zone) return;
     const hass = this.hass;
     const zone = this.zone;
-    const quiet = this._quiet();
     const next = length === 'next' ? this._nextChange() : null;
     const until = next !== null ? new Date(next).toISOString() : undefined;
     const hours = next !== null ? undefined : length === 'next' ? DEFAULT_HOURS : length;
     void this._run(
       `Adjusting to ${bandText(band)}`,
-      () => startOverride(hass, { zone, low: band.low, high: band.high, hours, until }, { quiet }),
+      () => startOverride(hass, { zone, low: band.low, high: band.high, hours, until }),
       failed,
       before,
     );
@@ -514,12 +498,11 @@ export class ComfortBandNowTab extends LitElement {
     if (this._busy || !this.hass || !this.zone) return;
     const hass = this.hass;
     const zone = this.zone;
-    const quiet = this._quiet();
     this._dropBurst();
     const back = this._schedule().scheduled === true;
     void this._run(
       back ? 'Going back to the schedule' : 'Ending the adjustment',
-      () => cancelOverride(hass, { zone }, { quiet }),
+      () => cancelOverride(hass, { zone }),
       back ? FAILED.back : FAILED.end,
     );
   };

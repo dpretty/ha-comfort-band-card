@@ -172,34 +172,26 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     expect(status(el)).toBe('Comfortable · 19.5–22.5°');
   });
 
-  it('asks HA for no toast of its own', async () => {
+  // HA's toast is always on screen, where the line may be below the fold.
+  it('keeps HA’s own toast for these calls, as on main', async () => {
     const { hass, callService } = setup({ adjusted: true });
     const el = await nowTab(hass);
     await tap(el, 'cooler');
     await back(el);
     expect(callService.mock.calls).toEqual([
-      [
-        'comfort_band',
-        'start_override',
-        { zone: 'gym', low: 19, high: 22, hours: 3 },
-        undefined,
-        false,
-      ],
-      ['comfort_band', 'cancel_override', { zone: 'gym' }, undefined, false],
+      ['comfort_band', 'start_override', { zone: 'gym', low: 19, high: 22, hours: 3 }],
+      ['comfort_band', 'cancel_override', { zone: 'gym' }],
     ]);
   });
 
-  it('leaves taps sent as the tab closes to HA’s toast, and says nothing', async () => {
-    const { hass, callService, refuse } = setup();
+  it('says nothing of taps sent as the tab closes, refused', async () => {
+    const { hass, refuse } = setup();
     const el = await nowTab(hass);
     refuse();
     root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
     await el.updateComplete;
     el.remove();
     await flush(el);
-    expect(callService.mock.calls).toEqual([
-      ['comfort_band', 'start_override', { zone: 'gym', low: 20, high: 23, hours: 3 }],
-    ]);
     document.body.appendChild(el);
     await flush(el);
     expect(failed(el)).toBeNull();
@@ -338,19 +330,6 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     expect(lengths(el)[1]).toEqual({ text: '3 h', checked: true });
   });
 
-  it('asks HA for no toast after a refusal, too', async () => {
-    const { hass, callService, refuse } = setup();
-    const el = await nowTab(hass);
-    refuse();
-    await tap(el, 'warmer');
-    refuse();
-    await tap(el, 'warmer');
-    expect(callService.mock.calls.map((c) => c.slice(3))).toEqual([
-      [undefined, false],
-      [undefined, false],
-    ]);
-  });
-
   it('keeps saying a refusal that comes while feedback is on its way', async () => {
     const { hass, hold } = setup();
     const el = await nowTab(hass);
@@ -419,45 +398,39 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     expect(css()).not.toMatch(/\.refusal\s*\{[^}]*display:\s*none/);
   });
 
-  it('gives HA’s failure vibration for a refused change, and only then', async () => {
+  // HA's own toast gives it.
+  it('leaves the failure vibration to HA', async () => {
     const seen = haptics();
     const { hass, refuse } = setup();
     const el = await nowTab(hass);
-    await tap(el, 'warmer');
-    expect(seen).toEqual([]);
     refuse();
     await tap(el, 'cooler');
-    expect(seen).toEqual(['failure']);
+    expect(text(failed(el))).toBe(ADJUST);
+    expect(seen).toEqual([]);
+  });
+
+  it('keeps its icon out of what screen readers read', async () => {
+    const { hass, refuse } = setup();
+    const el = await nowTab(hass);
+    refuse();
+    await tap(el, 'cooler');
+    expect(failed(el)!.querySelector('ha-icon')!.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('leaves the length alone where a refused change had no pick in it', async () => {
+    const { hass, refuse } = setup({ adjusted: true });
+    const el = await nowTab(hass);
+    await pick(el, '1');
+    refuse();
+    await tap(el, 'warmer');
+    expect(text(failed(el))).toBe(ADJUST);
+    expect(lengths(el)[0]).toEqual({ text: '1 h', checked: true });
+    refuse();
+    await back(el);
+    expect(lengths(el)[0]).toEqual({ text: '1 h', checked: true });
   });
 
   // In HA the tab is inside the card's and the modal's shadow roots.
-  it('sends the vibration out of the shadow roots it’s in', async () => {
-    const seen = haptics();
-    const { hass, refuse } = setup();
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const el = document.createElement('comfort-band-now-tab');
-    Object.assign(el, { hass, entities: ENTITIES, zone: 'gym' });
-    host.attachShadow({ mode: 'open' }).appendChild(el);
-    await el.updateComplete;
-    refuse();
-    await tap(el, 'warmer');
-    expect(seen).toEqual(['failure']);
-  });
-
-  it('leaves the vibration to HA for taps sent as the tab closes', async () => {
-    const seen = haptics();
-    const { hass, refuse } = setup();
-    const el = await nowTab(hass);
-    refuse();
-    root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
-    await el.updateComplete;
-    el.remove();
-    await flush(el);
-    expect(seen).toEqual([]);
-  });
-
   it('says a second refusal afresh, as a new alert', async () => {
     const { hass, refuse } = setup({ adjusted: true });
     const el = await nowTab(hass);
@@ -565,7 +538,7 @@ describe('comfort-band-now-tab when HA refuses feedback', () => {
     ]);
     // HA's toast gives the vibration, not the tab.
     expect(seen).toEqual([]);
-    // Not in the line under the status: feedback isn't a change to the room.
+    // Not in the line: feedback isn't a change to the room.
     expect(failed(el)).toBeNull();
     vi.advanceTimersByTime(1_500);
     await flush(el);
