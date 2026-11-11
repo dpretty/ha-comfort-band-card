@@ -1235,7 +1235,7 @@ let Nt = class extends Ce {
     try {
       await t();
     } catch {
-      n && this.isConnected && (this._length = n.length, this._pickedNext = n.pickedNext);
+      n && (this._length = n.length, this._pickedNext = n.pickedNext);
     } finally {
       this._busy = null;
     }

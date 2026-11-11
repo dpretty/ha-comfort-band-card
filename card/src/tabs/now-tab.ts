@@ -102,8 +102,8 @@ export class ComfortBandNowTab extends LitElement {
   /** The pill briefly marked "Not sent" after a refused `record_feedback`. */
   @state() private _feedbackFailed: FeedbackLabel | null = null;
   /** Timer that clears `_feedbackConfirmed` and `_feedbackFailed`;
-   *  cancelled on disconnect so it never fires `setState` on an unmounted
-   *  element. */
+   *  cancelled on disconnect. (A feedback call that settles after then
+   *  starts another, harmlessly, as on main.) */
   private _feedbackTimer: ReturnType<typeof setTimeout> | null = null;
   /** Monotonic tap counter. Service calls are concurrent and may resolve
    *  out of order, so each tap captures its seq and only claims the
@@ -347,8 +347,9 @@ export class ComfortBandNowTab extends LitElement {
     try {
       await call();
     } catch {
-      // Gone, the tab's picks go with it.
-      if (before && this.isConnected) {
+      // Even if the tab has gone meanwhile: a tab moved in the page comes
+      // back with it, and a closed one is discarded.
+      if (before) {
         this._length = before.length;
         this._pickedNext = before.pickedNext;
       }

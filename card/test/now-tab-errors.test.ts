@@ -23,7 +23,6 @@ const ENTITIES = {
   overrideActive: 'binary_sensor.gym_override_active',
   manualLow: 'number.gym_manual_low',
   manualHigh: 'number.gym_manual_high',
-  roomSensorUnavailable: 'binary_sensor.gym_room_sensor_unavailable',
 } as unknown as ZoneEntities;
 
 /** Each call's answer: given, or settled later through its handle. */
@@ -41,19 +40,16 @@ function setup({
   adjusted = false,
   scheduled = true as boolean | null,
   next = null as number | null,
-  sensorOffline = false,
-  band = ['19.5', '22.5'],
 } = {}) {
   const raw: Record<string, [string, Record<string, unknown>?]> = {
-    'sensor.gym_effective_low': [band[0]],
-    'sensor.gym_effective_high': [band[1]],
+    'sensor.gym_effective_low': ['19.5'],
+    'sensor.gym_effective_high': ['22.5'],
     'sensor.gym_room_temperature': ['21.0'],
     'sensor.gym_current_action': ['idle'],
     'sensor.gym_override_ends': ['unknown'],
     'binary_sensor.gym_override_active': [adjusted ? 'on' : 'off'],
     'number.gym_manual_low': ['19'],
     'number.gym_manual_high': ['22'],
-    'binary_sensor.gym_room_sensor_unavailable': [sensorOffline ? 'on' : 'off'],
   };
   if (scheduled !== null) {
     raw['sensor.gym_next_band_change'] = [
@@ -273,7 +269,8 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     expect(lengths(el)[0]).toEqual({ text: '1 h', checked: true });
   });
 
-  it('puts no length back for a change refused after the tab has closed', async () => {
+  // Moved in the page while the call was out, the tab comes back with it.
+  it('puts the length back for a change refused while the tab was away', async () => {
     const { hass, hold } = setup({ adjusted: true });
     const el = await nowTab(hass);
     const held = hold();
@@ -283,7 +280,71 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     await flush(el);
     document.body.appendChild(el);
     await flush(el);
-    expect(lengths(el)[0]).toEqual({ text: '1 h', checked: true });
+    expect(lengths(el)).toEqual([
+      { text: '1 h', checked: false },
+      { text: '3 h', checked: true },
+    ]);
+  });
+
+  it('shows the length from before a refused re-time to “Until” as picked again', async () => {
+    const { hass, callService, refuse } = setup({
+      adjusted: true,
+      next: Date.now() + 5 * 3_600_000,
+    });
+    const el = await nowTab(hass);
+    refuse();
+    await pick(el, 'next');
+    expect(callService.mock.calls[0][2]).toHaveProperty('until');
+    expect(lengths(el).map((l) => l.checked)).toEqual([false, true, false]);
+  });
+
+  it('shows the length from before a burst sent “Until” as picked again where it’s refused', async () => {
+    const { hass, callService, refuse } = setup({
+      adjusted: true,
+      next: Date.now() + 5 * 3_600_000,
+    });
+    const el = await nowTab(hass);
+    root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
+    await pick(el, 'next');
+    refuse();
+    vi.advanceTimersByTime(1_500);
+    await flush(el);
+    expect(callService.mock.calls[0][2]).toHaveProperty('until');
+    expect(lengths(el).map((l) => l.checked)).toEqual([false, true, false]);
+  });
+
+  it('shows the length from before a burst re-time “Until” as picked again where it’s refused', async () => {
+    const { hass, callService, refuse } = setup({
+      adjusted: true,
+      next: Date.now() + 5 * 3_600_000,
+    });
+    const el = await nowTab(hass);
+    root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
+    root(el).querySelector<HTMLElement>('.steps .cooler')!.click();
+    await pick(el, 'next');
+    refuse();
+    vi.advanceTimersByTime(1_500);
+    await flush(el);
+    expect(callService.mock.calls[0][2]).toEqual(expect.objectContaining({ low: 19, high: 22 }));
+    expect(callService.mock.calls[0][2]).toHaveProperty('until');
+    expect(lengths(el).map((l) => l.checked)).toEqual([false, true, false]);
+  });
+
+  // A refused "Until" for the change HA names now goes back to what was
+  // shown: three hours, the earlier "Until" being for another change.
+  it('shows three hours again where “Until” for a newly named change is refused', async () => {
+    const at = Date.now() + 5 * 3_600_000;
+    const { hass, refuse } = setup({ adjusted: true, next: at });
+    const el = await nowTab(hass);
+    await pick(el, 'next');
+    const later = new Date(at + 3_600_000).toISOString();
+    const id = 'sensor.gym_next_band_change';
+    el.hass = { ...hass, states: { ...hass.states, [id]: { ...hass.states[id], state: later } } };
+    await flush(el);
+    expect(lengths(el).map((l) => l.checked)).toEqual([false, true, false]);
+    refuse();
+    await pick(el, 'next');
+    expect(lengths(el).map((l) => l.checked)).toEqual([false, true, false]);
   });
 
   // HA's toast is the message; the status goes back to what's in force.
@@ -329,6 +390,49 @@ describe('comfort-band-now-tab when HA refuses feedback', () => {
     await flush(el);
     expect(text(pill(el, 'too_cold'))).toBe('Too cool');
     expect(pill(el, 'too_cold').classList.contains('failed')).toBe(false);
+  });
+
+  it('says “Not sent” for as long as “Thanks!” is shown', async () => {
+    const { hass, refuse } = setup();
+    const el = await nowTab(hass);
+    refuse();
+    pill(el, 'too_cold').click();
+    await flush(el);
+    vi.advanceTimersByTime(1_499);
+    await flush(el);
+    expect(text(pill(el, 'too_cold'))).toBe('Not sent');
+    vi.advanceTimersByTime(1);
+    await flush(el);
+    expect(text(pill(el, 'too_cold'))).toBe('Too cool');
+  });
+
+  it('keeps saying “Not sent” while a later tap is on its way', async () => {
+    const { hass, refuse, hold } = setup();
+    const el = await nowTab(hass);
+    refuse();
+    pill(el, 'too_cold').click();
+    await flush(el);
+    const held = hold();
+    pill(el, 'too_hot').click();
+    await flush(el);
+    expect(text(pill(el, 'too_cold'))).toBe('Not sent');
+    held.resolve();
+    await flush(el);
+    expect(text(pill(el, 'too_hot'))).toBe('Thanks!');
+    expect(text(pill(el, 'too_cold'))).toBe('Too cool');
+  });
+
+  it('thanks only the last tap, where an earlier one goes through after it', async () => {
+    const { hass, hold } = setup();
+    const el = await nowTab(hass);
+    const held = hold();
+    pill(el, 'too_cold').click();
+    pill(el, 'too_hot').click();
+    await flush(el);
+    held.resolve();
+    await flush(el);
+    expect(text(pill(el, 'too_hot'))).toBe('Thanks!');
+    expect(text(pill(el, 'too_cold'))).toBe('Too cool');
   });
 
   it('marks the same pill refused again “Not sent” for the full time again', async () => {
