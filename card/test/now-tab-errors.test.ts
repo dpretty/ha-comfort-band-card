@@ -23,6 +23,7 @@ const ENTITIES = {
   overrideActive: 'binary_sensor.gym_override_active',
   manualLow: 'number.gym_manual_low',
   manualHigh: 'number.gym_manual_high',
+  roomSensorUnavailable: 'binary_sensor.gym_room_sensor_unavailable',
 } as unknown as ZoneEntities;
 
 const ADJUST = 'Couldn’t adjust the room. Try again.';
@@ -43,6 +44,7 @@ function setup({
   adjusted = false,
   scheduled = true as boolean | null,
   next = null as number | null,
+  sensorOffline = false,
 } = {}) {
   const raw: Record<string, [string, Record<string, unknown>?]> = {
     'sensor.gym_effective_low': ['19.5'],
@@ -53,6 +55,7 @@ function setup({
     'binary_sensor.gym_override_active': [adjusted ? 'on' : 'off'],
     'number.gym_manual_low': ['19'],
     'number.gym_manual_high': ['22'],
+    'binary_sensor.gym_room_sensor_unavailable': [sensorOffline ? 'on' : 'off'],
   };
   if (scheduled !== null) {
     raw['sensor.gym_next_band_change'] = [
@@ -241,6 +244,16 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     expect(lengths(el)[1]).toEqual({ text: '3 h', checked: true });
   });
 
+  it('shows “Until” picked again where a re-time from it is refused', async () => {
+    const { hass, refuse } = setup({ adjusted: true, next: Date.now() + 5 * 3_600_000 });
+    const el = await nowTab(hass);
+    await pick(el, 'next');
+    refuse();
+    await pick(el, '1');
+    expect(text(failed(el))).toBe(RETIME);
+    expect(lengths(el).map((l) => l.checked)).toEqual([false, false, true]);
+  });
+
   it('keeps the length picked where the change goes through', async () => {
     const { hass } = setup({ adjusted: true });
     const el = await nowTab(hass);
@@ -272,6 +285,15 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     refuse();
     await back(el);
     expect(text(failed(el))).toBe('Couldn’t end the adjustment. Try again.');
+  });
+
+  it('says it under the status, above what the status needs explaining', async () => {
+    const { hass, refuse } = setup({ sensorOffline: true });
+    const el = await nowTab(hass);
+    refuse();
+    await tap(el, 'warmer');
+    expect(failed(el)!.previousElementSibling!.classList.contains('status')).toBe(true);
+    expect(failed(el)!.nextElementSibling!.classList.contains('notice')).toBe(true);
   });
 
   it('keeps saying it through HA’s updates and the time passing', async () => {
@@ -406,6 +428,19 @@ describe('comfort-band-now-tab when HA refuses feedback', () => {
     await flush(el);
     expect(text(pill(el, 'too_cold'))).toBe('Too cool');
     expect(pill(el, 'too_cold').classList.contains('failed')).toBe(false);
+    expect(said(el)).toBe('');
+  });
+
+  it('stops saying “Not sent” when the tab closes', async () => {
+    const { hass, refuse } = setup();
+    const el = await nowTab(hass);
+    refuse();
+    pill(el, 'too_cold').click();
+    await flush(el);
+    el.remove();
+    document.body.appendChild(el);
+    await flush(el);
+    expect(text(pill(el, 'too_cold'))).toBe('Too cool');
     expect(said(el)).toBe('');
   });
 
