@@ -1156,7 +1156,7 @@ const oh = [
 };
 let pt = class extends Ce {
   constructor() {
-    super(...arguments), this.zone = "", this._feedbackConfirmed = null, this._feedbackFailed = null, this._feedbackTimer = null, this._feedbackSeq = 0, this._length = null, this._pickedNext = null, this._burst = null, this._burstTimer = null, this._busy = null, this._failed = null, this._failedHeld = !1, this._refusalHeight = 0, this._onStep = (e) => {
+    super(...arguments), this.zone = "", this._feedbackConfirmed = null, this._feedbackFailed = null, this._feedbackTimer = null, this._feedbackSeq = 0, this._length = null, this._pickedNext = null, this._burst = null, this._burstTimer = null, this._busy = null, this._failed = null, this._failedHeld = !1, this._refusalHeight = 0, this._measuring = !1, this._onStep = (e) => {
       if (this._pressed(), this._busy) return;
       let t = this._burst;
       if (!t) {
@@ -1332,13 +1332,20 @@ let pt = class extends Ce {
       <span>${this._failed}</span>`, t = `min-height: ${this._refusalHeight}px`;
     return this._failedHeld ? v`<div class="refusal held" aria-hidden="true" style=${t}>${e}</div>` : v`<div class="refusal" role="alert" style=${t}>${e}</div>`;
   }
-  /** Keeps the line's tallest height so far as its least, before it's
-   *  painted: so words in fewer lines don't shorten it. */
+  /** Keeps the line's tallest height so far as its least, so words in
+   *  fewer lines don't shorten it. It's read at the next frame, not here:
+   *  reading it here would lay out a passing state, such as the status
+   *  while a refused call is answered, and a panel scrolled to its end
+   *  would keep the scroll that state pulled it to (WebKit has no scroll
+   *  anchoring). */
   updated() {
-    const e = this.shadowRoot?.querySelector(".refusal");
-    if (!e) return;
-    const t = e.getBoundingClientRect().height;
-    t <= this._refusalHeight || (this._refusalHeight = t, e.style.minHeight = `${t}px`);
+    this._failed === null || this._measuring || (this._measuring = !0, requestAnimationFrame(() => {
+      this._measuring = !1;
+      const e = this.shadowRoot?.querySelector(".refusal");
+      if (!this.isConnected || !e) return;
+      const t = e.getBoundingClientRect().height;
+      t <= this._refusalHeight || (this._refusalHeight = t, e.style.minHeight = `${t}px`);
+    }));
   }
   _renderAdjust(e, t) {
     const n = this._busy !== null ? "true" : "false", i = this._hours(), o = this._nextChange();

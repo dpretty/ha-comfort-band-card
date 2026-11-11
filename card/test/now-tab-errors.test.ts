@@ -545,12 +545,14 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
 
   // A later refusal in fewer lines would otherwise shorten the panel, and a
   // panel scrolled to its end would pull every control above down.
-  it('never gets shorter until the tab closes', async () => {
+  it('never gets shorter until the tab closes, read at the frame', async () => {
     const real = Element.prototype.getBoundingClientRect;
+    let reads = 0;
     const spy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
       this: Element,
     ) {
       if (!this.classList.contains('refusal')) return real.call(this);
+      reads++;
       // Two lines for the re-time's words, one for the others.
       const height = (this.textContent ?? '').includes('how long') ? 30 : 18;
       return {
@@ -565,20 +567,34 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
         toJSON() {},
       } as DOMRect;
     });
-    afterEachCleanup.push(() => spy.mockRestore());
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb));
+    afterEachCleanup.push(() => {
+      spy.mockRestore();
+      vi.unstubAllGlobals();
+    });
+    const frame = () => frames.splice(0).forEach((cb) => cb(0));
     const { hass, refuse } = setup({ adjusted: true });
     const el = await nowTab(hass);
     refuse();
     await pick(el, '1');
     expect(text(failed(el))).toBe(RETIME);
+    // Not read as the tab updates: only at the frame.
+    expect(reads).toBe(0);
+    frame();
+    expect(reads).toBe(1);
     expect(failed(el)!.style.minHeight).toBe('30px');
     refuse();
     await tap(el, 'warmer');
+    // Shorter words start at the tallest height, before any frame.
     expect(text(failed(el))).toBe(ADJUST);
+    expect(failed(el)!.style.minHeight).toBe('30px');
+    frame();
     expect(failed(el)!.style.minHeight).toBe('30px');
     // Held, still.
     root(el).querySelector<HTMLElement>('.steps .cooler')!.click();
     await el.updateComplete;
+    frame();
     expect(failed(el)!.classList.contains('held')).toBe(true);
     expect(failed(el)!.style.minHeight).toBe('30px');
     // A new tab starts afresh.
@@ -589,6 +605,7 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     await flush(el);
     refuse();
     await tap(el, 'warmer');
+    frame();
     expect(failed(el)!.style.minHeight).toBe('18px');
   });
 

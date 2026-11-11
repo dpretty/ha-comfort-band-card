@@ -147,6 +147,8 @@ export class ComfortBandNowTab extends LitElement {
   /** The line's tallest height so far (px), kept as its least until the
    *  tab closes, so it never gets shorter. */
   private _refusalHeight = 0;
+  /** Whether the line's height is to be read at the next frame. */
+  private _measuring = false;
 
   public static override styles = [
     tokens,
@@ -603,15 +605,24 @@ export class ComfortBandNowTab extends LitElement {
       : html`<div class="refusal" role="alert" style=${least}>${line}</div>`;
   }
 
-  /** Keeps the line's tallest height so far as its least, before it's
-   *  painted: so words in fewer lines don't shorten it. */
+  /** Keeps the line's tallest height so far as its least, so words in
+   *  fewer lines don't shorten it. It's read at the next frame, not here:
+   *  reading it here would lay out a passing state, such as the status
+   *  while a refused call is answered, and a panel scrolled to its end
+   *  would keep the scroll that state pulled it to (WebKit has no scroll
+   *  anchoring). */
   protected override updated(): void {
-    const refusal = this.shadowRoot?.querySelector<HTMLElement>('.refusal');
-    if (!refusal) return;
-    const height = refusal.getBoundingClientRect().height;
-    if (height <= this._refusalHeight) return;
-    this._refusalHeight = height;
-    refusal.style.minHeight = `${height}px`;
+    if (this._failed === null || this._measuring) return;
+    this._measuring = true;
+    requestAnimationFrame(() => {
+      this._measuring = false;
+      const refusal = this.shadowRoot?.querySelector<HTMLElement>('.refusal');
+      if (!this.isConnected || !refusal) return;
+      const height = refusal.getBoundingClientRect().height;
+      if (height <= this._refusalHeight) return;
+      this._refusalHeight = height;
+      refusal.style.minHeight = `${height}px`;
+    });
   }
 
   private _renderAdjust(overrideActive: boolean, scheduled: boolean | null) {
