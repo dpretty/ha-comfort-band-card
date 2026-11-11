@@ -5,8 +5,8 @@ import type { ZoneEntities } from '../src/helpers.js';
 import type { HassEntity, HomeAssistant } from '../src/types.js';
 import { mount, stubConnection, teardown } from './_fixture.js';
 
-// #27: a change HA refuses is told in the tab, in plain words, in place of
-// HA's own toast.
+// #27: a change HA refuses is told in the tab, in plain words, as well as
+// by HA's own toast.
 
 afterEach(() => {
   teardown();
@@ -208,6 +208,37 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     document.body.appendChild(el);
     await flush(el);
     expect(failed(el)).toBeNull();
+  });
+
+  it('puts no length back for a change refused after the tab has closed', async () => {
+    const { hass, hold } = setup({ adjusted: true });
+    const el = await nowTab(hass);
+    const held = hold();
+    await pick(el, '1');
+    el.remove();
+    held.reject();
+    await flush(el);
+    document.body.appendChild(el);
+    await flush(el);
+    expect(lengths(el)[0]).toEqual({ text: '1 h', checked: true });
+  });
+
+  // A picked "Until" is for the change it named: put back, it's that one
+  // still, not the one HA names now.
+  it('puts back “Until” for the change it was picked for', async () => {
+    const at = Date.now() + 5 * 3_600_000;
+    const { hass, refuse } = setup({ adjusted: true, next: at });
+    const el = await nowTab(hass);
+    await pick(el, 'next');
+    // The schedule is edited: HA names another change.
+    const later = new Date(at + 3_600_000).toISOString();
+    const id = 'sensor.gym_next_band_change';
+    el.hass = { ...hass, states: { ...hass.states, [id]: { ...hass.states[id], state: later } } };
+    await flush(el);
+    expect(lengths(el).map((l) => l.checked)).toEqual([false, true, false]);
+    refuse();
+    await pick(el, '1');
+    expect(lengths(el).map((l) => l.checked)).toEqual([false, true, false]);
   });
 
   it('says a refused re-time, and shows the length picked before as picked again', async () => {
@@ -430,7 +461,6 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     expect(lengths(el)[0]).toEqual({ text: '1 h', checked: true });
   });
 
-  // In HA the tab is inside the card's and the modal's shadow roots.
   it('says a second refusal afresh, as a new alert', async () => {
     const { hass, refuse } = setup({ adjusted: true });
     const el = await nowTab(hass);
@@ -499,6 +529,67 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     pill(el, 'just_right').click();
     await flush(el);
     expect(failed(el)!.classList.contains('held')).toBe(true);
+  });
+
+  it('keeps its place at a refused feedback tap too', async () => {
+    const { hass, refuse } = setup();
+    const el = await nowTab(hass);
+    refuse();
+    await tap(el, 'warmer');
+    refuse();
+    pill(el, 'just_right').click();
+    await flush(el);
+    expect(failed(el)!.classList.contains('held')).toBe(true);
+    expect(text(failed(el))).toBe(ADJUST);
+  });
+
+  // A later refusal in fewer lines would otherwise shorten the panel, and a
+  // panel scrolled to its end would pull every control above down.
+  it('never gets shorter until the tab closes', async () => {
+    const real = Element.prototype.getBoundingClientRect;
+    const spy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element,
+    ) {
+      if (!this.classList.contains('refusal')) return real.call(this);
+      // Two lines for the re-time's words, one for the others.
+      const height = (this.textContent ?? '').includes('how long') ? 30 : 18;
+      return {
+        x: 0,
+        y: 0,
+        width: 200,
+        height,
+        top: 0,
+        left: 0,
+        right: 200,
+        bottom: height,
+        toJSON() {},
+      } as DOMRect;
+    });
+    afterEachCleanup.push(() => spy.mockRestore());
+    const { hass, refuse } = setup({ adjusted: true });
+    const el = await nowTab(hass);
+    refuse();
+    await pick(el, '1');
+    expect(text(failed(el))).toBe(RETIME);
+    expect(failed(el)!.style.minHeight).toBe('30px');
+    refuse();
+    await tap(el, 'warmer');
+    expect(text(failed(el))).toBe(ADJUST);
+    expect(failed(el)!.style.minHeight).toBe('30px');
+    // Held, still.
+    root(el).querySelector<HTMLElement>('.steps .cooler')!.click();
+    await el.updateComplete;
+    expect(failed(el)!.classList.contains('held')).toBe(true);
+    expect(failed(el)!.style.minHeight).toBe('30px');
+    // A new tab starts afresh.
+    vi.advanceTimersByTime(1_500);
+    await flush(el);
+    el.remove();
+    document.body.appendChild(el);
+    await flush(el);
+    refuse();
+    await tap(el, 'warmer');
+    expect(failed(el)!.style.minHeight).toBe('18px');
   });
 
   it('says nothing after a change goes through', async () => {

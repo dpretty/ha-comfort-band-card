@@ -23,13 +23,14 @@
  * When HA refuses a change (#27), a line under the controls (above the
  * feedback pills) says so in plain words ("Couldn’t adjust the room. Try
  * again."), and a length picked for it goes back to the one before. HA's own
- * toast says it too: always on screen, where the line may be below the fold
- * on a short screen, though screen readers don't hear a toast outside the
- * open dialog, and do hear the line. Below the controls, the line moves none
- * of those that change the room: a retry lands where it's aimed. At the
- * next press it empties, but its place is kept until the tab closes, so the
- * pills below don't move then either. A refused feedback tap shows
- * "Not sent" on its pill, with HA's toast.
+ * toast says it too: from HA 2026.9 it shows above the dialog, so it's on
+ * screen where the line may be below the fold on a short screen. Screen
+ * readers don't hear a toast outside the open dialog, and do hear the line.
+ * Below the controls, the line moves none of those that change the room, so
+ * a retry lands where it's aimed: at the next press it empties, but its
+ * place is kept, and it never gets shorter (a later refusal in fewer lines
+ * would otherwise pull a panel scrolled to its end), until the tab closes.
+ * A refused feedback tap shows "Not sent" on its pill, with HA's toast.
  *
  * When the room sensor is offline, a sentence under the status says what that
  * means for the room and what to do.
@@ -143,6 +144,9 @@ export class ComfortBandNowTab extends LitElement {
   /** Its line is kept, empty, after the next press, until the tab closes
    *  or HA refuses another: so the controls under it don't move again. */
   @state() private _failedHeld = false;
+  /** The line's tallest height so far (px), kept as its least until the
+   *  tab closes, so it never gets shorter. */
+  private _refusalHeight = 0;
 
   public static override styles = [
     tokens,
@@ -328,6 +332,7 @@ export class ComfortBandNowTab extends LitElement {
     this._feedbackFailed = null;
     this._failed = null;
     this._failedHeld = false;
+    this._refusalHeight = 0;
     // Closing the dialog mid-burst still makes the change the taps asked for.
     this._commitBurst();
   }
@@ -586,14 +591,27 @@ export class ComfortBandNowTab extends LitElement {
   }
 
   /** A refused change, said; or, after the next press, its place kept. Two
-   *  templates, so each refusal is a new alert. */
+   *  templates, so each refusal is a new alert; each starts at the line's
+   *  tallest height so far. */
   private _renderFailed() {
     if (this._failed === null) return nothing;
     const line = html`<ha-icon icon="mdi:alert-circle-outline" aria-hidden="true"></ha-icon>
       <span>${this._failed}</span>`;
+    const least = `min-height: ${this._refusalHeight}px`;
     return this._failedHeld
-      ? html`<div class="refusal held" aria-hidden="true">${line}</div>`
-      : html`<div class="refusal" role="alert">${line}</div>`;
+      ? html`<div class="refusal held" aria-hidden="true" style=${least}>${line}</div>`
+      : html`<div class="refusal" role="alert" style=${least}>${line}</div>`;
+  }
+
+  /** Keeps the line's tallest height so far as its least, before it's
+   *  painted: so words in fewer lines don't shorten it. */
+  protected override updated(): void {
+    const refusal = this.shadowRoot?.querySelector<HTMLElement>('.refusal');
+    if (!refusal) return;
+    const height = refusal.getBoundingClientRect().height;
+    if (height <= this._refusalHeight) return;
+    this._refusalHeight = height;
+    refusal.style.minHeight = `${height}px`;
   }
 
   private _renderAdjust(overrideActive: boolean, scheduled: boolean | null) {
