@@ -519,6 +519,24 @@ describe('comfort-band-now-tab', () => {
       expect(status.getAttribute('role')).toBe('status');
       expect(status.getAttribute('aria-live')).toBe('polite');
     });
+
+    // #55: at a tap it says "Adjusting to …", often a line shorter than the
+    // room's state; two lines' height either way keeps the controls still.
+    it('is two lines tall, whether its words take one or two', () => {
+      const css = (
+        customElements.get('comfort-band-now-tab') as unknown as {
+          styles: Array<{ cssText: string }>;
+        }
+      ).styles
+        .flat()
+        .map((st) => st.cssText)
+        .join('\n');
+      const rule = css.match(/\.status\s*\{([^}]*)\}/)![1];
+      expect(rule).toMatch(/min-height:\s*2lh/);
+      // Where `lh` isn't known: two of HA's 1.6 lines of the status's 15 px.
+      expect(rule).toMatch(/min-height:\s*3\.2em/);
+      expect(rule.indexOf('3.2em')).toBeLessThan(rule.indexOf('2lh'));
+    });
   });
 
   describe('Warmer and Cooler', () => {

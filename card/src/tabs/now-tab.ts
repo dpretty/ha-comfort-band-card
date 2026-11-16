@@ -28,6 +28,10 @@
  * When the room sensor is offline, a sentence under the status says what that
  * means for the room and what to do.
  *
+ * The status line is two lines tall even when its words take one (#55): at
+ * a tap it says what the tap will do, and its words' length mustn't move the
+ * controls under a finger.
+ *
  * Where the integration (v0.23.0+) says no schedule sets the zone's band, an
  * adjustment's band is the zone's band from then on, so there is no length to
  * choose, no "until" and no "Back to schedule".
@@ -163,7 +167,11 @@ export class ComfortBandNowTab extends LitElement {
         gap: var(--cb-gap-sm);
         font-size: 15px;
         color: var(--cb-text-primary);
-        min-height: 24px;
+        /* Two lines' height, whether its words take one or two, so going
+           from the room's state to "Adjusting to …" at a tap, and back as
+           HA answers, doesn't move the controls below it (#55). */
+        min-height: 3.2em;
+        min-height: 2lh;
       }
       .status ha-icon {
         --mdc-icon-size: 20px;
