@@ -1393,7 +1393,11 @@ Nt.styles = [
         gap: var(--cb-gap-sm);
         font-size: 15px;
         color: var(--cb-text-primary);
-        min-height: 24px;
+        /* Two lines' height, whether its words take one or two, so going
+           from the room's state to "Adjusting to …" at a tap, and back as
+           HA answers, doesn't move the controls below it (#55). */
+        min-height: 3.2em;
+        min-height: 2lh;
       }
       .status ha-icon {
         --mdc-icon-size: 20px;
@@ -8896,7 +8900,7 @@ Ei = is([
   preview: !1
 });
 console.info(
-  "%c COMFORT-BAND-CARD %c v0.19.2 ",
+  "%c COMFORT-BAND-CARD %c v0.19.3 ",
   "color:white;background:#2196F3;padding:2px 4px;border-radius:3px",
   "color:#000;background:#fff;padding:2px 4px;border-radius:3px"
 );
