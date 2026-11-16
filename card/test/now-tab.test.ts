@@ -530,12 +530,29 @@ describe('comfort-band-now-tab', () => {
       ).styles
         .flat()
         .map((st) => st.cssText)
-        .join('\n');
-      const rule = css.match(/\.status\s*\{([^}]*)\}/)![1];
-      expect(rule).toMatch(/min-height:\s*2lh/);
-      // Where `lh` isn't known: two of HA's 1.6 lines of the status's 15 px.
-      expect(rule).toMatch(/min-height:\s*3\.2em/);
-      expect(rule.indexOf('3.2em')).toBeLessThan(rule.indexOf('2lh'));
+        .join('\n')
+        // What's commented out doesn't count.
+        .replace(/\/\*[\s\S]*?\*\//g, '');
+      const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map((m) => ({
+        selectors: m[1].split(',').map((s) => s.trim()),
+        body: m[2],
+      }));
+      const status = rules.filter((r) => r.selectors.includes('.status'));
+      expect(status).toHaveLength(1);
+      const heights = [...status[0].body.matchAll(/min-height:\s*([^;]+);/g)].map((m) => m[1]);
+      // Where `lh` isn't known: two of HA's 1.6 lines of the status's 15 px;
+      // where it is, the later `2lh`, which wins.
+      expect(heights).toEqual(['3.2em', '2lh']);
+      expect(status[0].body).toMatch(/display:\s*flex/);
+      // Nor does another rule for the status line itself undo it.
+      const others = rules.filter(
+        (r) =>
+          r !== status[0] &&
+          r.selectors.some((s) => /\.status(\.[\w-]+|:[\w-]+)*$/.test(s.split(/\s+/).pop()!)),
+      );
+      for (const r of others) {
+        expect(r.body).not.toMatch(/(^|[;\s])(min-height|max-height|height|display)\s*:/);
+      }
     });
   });
 
