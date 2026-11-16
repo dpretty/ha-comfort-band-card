@@ -1099,6 +1099,41 @@ describe('comfort-band-now-tab', () => {
         expect(el.shadowRoot!.querySelectorAll('.back')).toHaveLength(1);
       });
 
+      it('keeps it where Back was: after Cooler/Warmer, last under Adjust for', async () => {
+        const el = await nowTab(adjusted());
+        const before = shown(el)!;
+        expect(before.previousElementSibling!.classList.contains('steps')).toBe(true);
+        expect(before.nextElementSibling).toBeNull();
+        el.hass = scheduledHass(null);
+        await flush(el);
+        const place = held(el)!;
+        expect(place.previousElementSibling!.classList.contains('steps')).toBe(true);
+        expect(place.nextElementSibling).toBeNull();
+        expect(place.parentElement!.classList.contains('adjust')).toBe(true);
+      });
+
+      // The commonest way: open the tab, tap, then go back to the schedule.
+      it('keeps its place where Back first showed after the tab opened', async () => {
+        const el = await nowTab(scheduledHass(null));
+        expect(el.shadowRoot!.querySelector('.back')).toBeNull();
+        el.hass = adjusted();
+        await flush(el);
+        expect(shown(el)).not.toBeNull();
+        el.hass = scheduledHass(null);
+        await flush(el);
+        expect(held(el)!.textContent!.trim()).toBe('Back to schedule');
+      });
+
+      // A schedule edit leaves the room with none while it's adjusted: there's
+      // no way back to a schedule to offer, but Back's place stays.
+      it('keeps its place where a schedule edit leaves the adjusted room with none', async () => {
+        const el = await nowTab(adjusted());
+        el.hass = scheduledHass(null, { 'binary_sensor.gym_override_active': 'on' }, false);
+        await flush(el);
+        expect(shown(el)).toBeNull();
+        expect(held(el)).not.toBeNull();
+      });
+
       it('shows it again in its place when an adjustment starts', async () => {
         const el = await nowTab(adjusted());
         el.hass = scheduledHass(null);
@@ -1134,7 +1169,7 @@ describe('comfort-band-now-tab', () => {
         expect(el.shadowRoot!.querySelector('.back')).toBeNull();
       });
 
-      it('lets its place go when the tab closes', async () => {
+      it('lets its place go when the tab is taken off the page', async () => {
         const el = await nowTab(adjusted());
         el.hass = scheduledHass(null);
         await flush(el);
@@ -1155,7 +1190,20 @@ describe('comfort-band-now-tab', () => {
           .map((st) => st.cssText)
           .join('\n')
           .replace(/\/\*[\s\S]*?\*\//g, '');
-        expect(css).toMatch(/\.back\.held\s*\{\s*visibility:\s*hidden;?\s*\}/);
+        const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map((m) => ({
+          selectors: m[1].split(',').map((s) => s.trim()),
+          body: m[2].trim(),
+        }));
+        // One rule for the held copy, which only hides it: it's otherwise
+        // Back's own box.
+        const forHeld = rules.filter((r) => r.selectors.some((s) => /\.held\b/.test(s)));
+        expect(forHeld.map((r) => r.selectors)).toEqual([['.back.held']]);
+        expect(forHeld[0].body).toMatch(/^visibility:\s*hidden;?$/);
+        // Nor does its being disabled give it another box.
+        const forDisabled = rules.filter((r) =>
+          r.selectors.some((s) => /\.back/.test(s) && /(\[disabled\]|:disabled)/.test(s)),
+        );
+        expect(forDisabled).toEqual([]);
       });
     });
   });
