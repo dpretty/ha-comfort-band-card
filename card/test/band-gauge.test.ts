@@ -72,6 +72,16 @@ describe('band-gauge', () => {
     expect(part(el, '.track')).not.toBeNull();
     expect(part(el, '.band')).toBeNull();
     expect(part(el, '.limits')).not.toBeNull();
+    expect(part(el, '.limits')!.hidden).toBe(false);
+    expect(limits(el)).toEqual([]);
+  });
+
+  it.each([
+    ['low', { low: 19, high: NaN }],
+    ['high', { low: NaN, high: 23 }],
+  ])('draws no band, nor its limits, with only the %s known', async (_, band) => {
+    const el = await gauge({ ...band, room: 21, action: 'idle' });
+    expect(part(el, '.band')).toBeNull();
     expect(limits(el)).toEqual([]);
   });
 
@@ -97,7 +107,8 @@ describe('band-gauge', () => {
     expect(ruleFor('.limits .high')).toContain(
       'left: max(min(var(--hi), 100% - 5ch), min(max(var(--lo), 5ch), 100% - 5ch));',
     );
-    expect(ruleFor('.limits')).toContain('height: 14px;');
+    // Its own height, not only its lines'.
+    expect(ruleFor('.limits')).toMatch(/(^|; )height: 14px;/);
     expect(ruleFor('.limits')).toContain('color: var(--cb-text-secondary);');
   });
 
