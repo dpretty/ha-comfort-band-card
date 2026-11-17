@@ -138,7 +138,8 @@ export class ComfortBandNowTab extends LitElement {
   /** What a call from this tab is doing while it goes through, such as
    *  "Going back to the schedule"; the controls ignore presses meanwhile, so
    *  no other such call starts (the feedback buttons aside, which don't
-   *  change the range). */
+   *  change the range, and taps sent to their room on a move to another,
+   *  which aren't waited for: #52). */
   @state() private _busy: string | null = null;
   /** Back to schedule's (or End adjustment's) words while it was last
    *  shown: once the adjustment ends, its place is kept, empty, until the

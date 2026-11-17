@@ -334,6 +334,44 @@ describe('Now tab: taps held when the card moves to another room (#52)', () => {
     expect(busy(el).some(Boolean)).toBe(false);
   });
 
+  it('sends nothing on the move for taps that cancel out with no length picked', async () => {
+    const { hass, callService } = setup({ adjusted: ['gym', 'study'] });
+    const el = await gymTab(hass);
+    await tap(el, 'warmer');
+    await tap(el, 'cooler');
+
+    await moveToStudy(el);
+    await vi.advanceTimersByTimeAsync(3_000);
+    await flush(el);
+
+    expect(callService).not.toHaveBeenCalled();
+  });
+
+  it("stops their 1.5 s on the move, so the new room's taps keep their own", async () => {
+    const { hass, callService } = setup();
+    const el = await gymTab(hass);
+    await tap(el, 'warmer', 2);
+    await vi.advanceTimersByTimeAsync(400);
+    await moveToStudy(el);
+    expect(callService).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(600);
+    await tap(el, 'warmer');
+    // When the gym's 1.5 s would have ended: the study's tap is still held.
+    await vi.advanceTimersByTimeAsync(500);
+    await flush(el);
+    expect(callService).toHaveBeenCalledTimes(1);
+    await tap(el, 'warmer');
+    expect(statusText(el)).toContain('Adjusting to 17–19°');
+
+    await vi.advanceTimersByTimeAsync(1_500);
+    await flush(el);
+    expect(calls(callService)).toEqual([
+      ['start_override', { zone: 'gym', low: 20.5, high: 23.5, hours: 3 }],
+      ['start_override', { zone: 'study', low: 17, high: 19, hours: 3 }],
+    ]);
+  });
+
   it("sends an Until picked during them for their room's next change", async () => {
     const { hass, callService } = setup();
     const el = await gymTab(hass);
