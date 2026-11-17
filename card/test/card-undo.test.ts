@@ -151,7 +151,7 @@ async function warmer(card: ComfortBandCard): Promise<void> {
 }
 
 const undoButton = (card: ComfortBandCard) =>
-  nowTab(card)?.shadowRoot?.querySelector('.undo:not(.held)') ?? null;
+  nowTab(card)?.shadowRoot?.querySelector('.undo[aria-disabled="false"]') ?? null;
 
 describe('comfort-band-card Undo, as HA runs it', () => {
   it('is offered once HA’s state shows the change after the answer', async () => {

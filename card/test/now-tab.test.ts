@@ -138,8 +138,9 @@ function calls(hass: HomeAssistant): unknown[] {
  *  rendered, so an every() over the result can't pass on an empty list. */
 function controlsDisabled(el: ComfortBandNowTab): boolean[] {
   const controls = Array.from(
-    // Not a kept place: a disabled copy, not a control.
-    el.shadowRoot!.querySelectorAll('.lengths button, .steps button, .back:not(.held)'),
+    // Back is greyed, too, while no adjustment runs: its busy look is tested
+    // on its own.
+    el.shadowRoot!.querySelectorAll('.lengths button, .steps button'),
   );
   if (controls.length === 0) throw new Error('no controls rendered');
   return controls.map((b) => b.getAttribute('aria-disabled') === 'true');
@@ -1021,9 +1022,15 @@ describe('comfort-band-now-tab', () => {
       expect(calls(hass)).toEqual([['cancel_override', { zone: 'gym' }]]);
     });
 
-    it("isn't shown when nothing is adjusted", async () => {
-      const el = await nowTab(scheduledHass(null));
-      expect(backButton(el)).toBeNull();
+    // #25: always there, so nothing moves when it can act.
+    it('is there, greyed, when nothing is adjusted, and does nothing', async () => {
+      const hass = scheduledHass(null);
+      const el = await nowTab(hass);
+      expect(backButton(el)!.textContent!.trim()).toBe('Back to schedule');
+      expect(backButton(el)!.getAttribute('aria-disabled')).toBe('true');
+      backButton(el)!.click();
+      await flush(el);
+      expect(calls(hass)).toEqual([]);
     });
 
     it('drops taps not yet sent, for good', async () => {
@@ -1051,6 +1058,7 @@ describe('comfort-band-now-tab', () => {
       await flush(el);
       expect(statusText(el)).toBe('Going back to the schedule');
       expect(controlsDisabled(el).every((d) => d)).toBe(true);
+      expect(backButton(el)!.getAttribute('aria-disabled')).toBe('true');
       await tap(el, 'warmer');
       await pickLength(el, '1');
       backButton(el)!.click();
@@ -1061,6 +1069,8 @@ describe('comfort-band-now-tab', () => {
       // Nothing was queued behind the cancel, either.
       expect(calls(hass)).toEqual([['cancel_override', { zone: 'gym' }]]);
       expect(controlsDisabled(el).every((d) => !d)).toBe(true);
+      // HA hasn't shown it ended yet: Back is offered again.
+      expect(backButton(el)!.getAttribute('aria-disabled')).toBe('false');
     });
 
     it('carries on after a rejected cancel', async () => {
@@ -1079,109 +1089,66 @@ describe('comfort-band-now-tab', () => {
       ]);
     });
 
-    // #57: going, it would shorten a panel scrolled to its end, and
-    // everything above would move down under a finger.
-    describe('once the adjustment has ended', () => {
-      const held = (el: ComfortBandNowTab) =>
-        el.shadowRoot!.querySelector<HTMLButtonElement>('.back.held');
-      const shown = (el: ComfortBandNowTab) =>
-        el.shadowRoot!.querySelector<HTMLButtonElement>('.back:not(.held)');
-
-      it('keeps its place, empty, unread and not to be pressed', async () => {
-        const el = await nowTab(adjusted());
+    // #57, then #25: going, it shortened a panel scrolled to its end, and
+    // coming, it pushed the feedback buttons down under a tap meant for
+    // them. It's always there, greyed while nothing is adjusted.
+    describe('always there', () => {
+      it('greys out as the adjustment ends: the same button, focus kept on it', async () => {
+        const hass = adjusted();
+        const el = await nowTab(hass);
+        const back = backButton(el)!;
+        expect(back.getAttribute('aria-disabled')).toBe('false');
+        back.focus();
         el.hass = scheduledHass(null);
+        el.hass.callService = hass.callService;
         await flush(el);
-        expect(shown(el)).toBeNull();
-        const place = held(el)!;
-        expect(place.textContent!.trim()).toBe('Back to schedule');
-        expect(place.getAttribute('aria-hidden')).toBe('true');
-        expect(place.disabled).toBe(true);
-        expect(place.getAttribute('tabindex')).toBe('-1');
-        expect(el.shadowRoot!.querySelectorAll('.back')).toHaveLength(1);
+        expect(backButton(el)).toBe(back);
+        expect(back.getAttribute('aria-disabled')).toBe('true');
+        expect(el.shadowRoot!.activeElement).toBe(back);
+        back.click();
+        await flush(el);
+        expect(calls(hass)).toEqual([]);
       });
 
-      it('keeps it where Back was: after Cooler/Warmer, last under Adjust for', async () => {
-        const el = await nowTab(adjusted());
-        const before = shown(el)!;
-        expect(before.previousElementSibling!.classList.contains('steps')).toBe(true);
-        expect(before.nextElementSibling).toBeNull();
-        el.hass = scheduledHass(null);
-        await flush(el);
-        const place = held(el)!;
-        expect(place.previousElementSibling!.classList.contains('steps')).toBe(true);
-        expect(place.nextElementSibling).toBeNull();
-        expect(place.parentElement!.classList.contains('adjust')).toBe(true);
-      });
-
-      // The commonest way: open the tab, tap, then go back to the schedule.
-      it('keeps its place where Back first showed after the tab opened', async () => {
+      it('turns on in its place as an adjustment starts', async () => {
         const el = await nowTab(scheduledHass(null));
-        expect(el.shadowRoot!.querySelector('.back')).toBeNull();
+        const back = backButton(el)!;
         el.hass = adjusted();
         await flush(el);
-        expect(shown(el)).not.toBeNull();
-        el.hass = scheduledHass(null);
-        await flush(el);
-        expect(held(el)!.textContent!.trim()).toBe('Back to schedule');
+        expect(backButton(el)).toBe(back);
+        expect(back.getAttribute('aria-disabled')).toBe('false');
       });
 
-      // A schedule edit leaves the room with none while it's adjusted: there's
-      // no way back to a schedule to offer, but Back's place stays.
-      it('keeps its place where a schedule edit leaves the adjusted room with none', async () => {
-        const el = await nowTab(adjusted());
+      it('sits after Cooler/Warmer, under Adjust for, either way', async () => {
+        const el = await nowTab(scheduledHass(null));
+        for (const hass of [scheduledHass(null), adjusted()]) {
+          el.hass = hass;
+          await flush(el);
+          const back = backButton(el)!;
+          expect(back.previousElementSibling!.classList.contains('steps')).toBe(true);
+          expect(back.parentElement!.classList.contains('adjust')).toBe(true);
+        }
+      });
+
+      it('says End adjustment, greyed or not, where it can’t be told a schedule sets it', async () => {
+        const el = await nowTab(makeHass());
+        expect(backButton(el)!.textContent!.trim()).toBe('End adjustment');
+        expect(backButton(el)!.getAttribute('aria-disabled')).toBe('true');
+        el.hass = makeHass({ 'binary_sensor.gym_override_active': 'on' });
+        await flush(el);
+        expect(backButton(el)!.getAttribute('aria-disabled')).toBe('false');
+      });
+
+      it('isn’t there in a room with no schedule, adjusted or not', async () => {
+        const el = await nowTab(scheduledHass(null, {}, false));
+        expect(backButton(el)).toBeNull();
         el.hass = scheduledHass(null, { 'binary_sensor.gym_override_active': 'on' }, false);
         await flush(el);
-        expect(shown(el)).toBeNull();
-        expect(held(el)).not.toBeNull();
+        expect(backButton(el)).toBeNull();
       });
 
-      it('shows it again in its place when an adjustment starts', async () => {
-        const el = await nowTab(adjusted());
-        el.hass = scheduledHass(null);
-        await flush(el);
-        el.hass = adjusted();
-        await flush(el);
-        expect(shown(el)!.textContent!.trim()).toBe('Back to schedule');
-        expect(held(el)).toBeNull();
-        expect(el.shadowRoot!.querySelectorAll('.back')).toHaveLength(1);
-      });
-
-      it('keeps End adjustment’s place by its own words', async () => {
-        const el = await nowTab(makeHass({ 'binary_sensor.gym_override_active': 'on' }));
-        expect(shown(el)!.textContent!.trim()).toBe('End adjustment');
-        el.hass = makeHass();
-        await flush(el);
-        expect(held(el)!.textContent!.trim()).toBe('End adjustment');
-      });
-
-      it('keeps no place where it was never shown', async () => {
-        const el = await nowTab(scheduledHass(null));
-        el.hass = scheduledHass(null, { 'sensor.gym_room_temperature': '21.5' });
-        await flush(el);
-        expect(el.shadowRoot!.querySelector('.back')).toBeNull();
-      });
-
-      it('keeps no place in a room with no schedule, which never shows it', async () => {
-        const el = await nowTab(
-          scheduledHass(null, { 'binary_sensor.gym_override_active': 'on' }, false),
-        );
-        el.hass = scheduledHass(null, {}, false);
-        await flush(el);
-        expect(el.shadowRoot!.querySelector('.back')).toBeNull();
-      });
-
-      it('lets its place go when the tab is taken off the page', async () => {
-        const el = await nowTab(adjusted());
-        el.hass = scheduledHass(null);
-        await flush(el);
-        expect(held(el)).not.toBeNull();
-        el.remove();
-        document.body.appendChild(el);
-        await flush(el);
-        expect(el.shadowRoot!.querySelector('.back')).toBeNull();
-      });
-
-      it('keeps its place hidden, at the size it had', () => {
+      // Greyed is busy's look: the same box, only fainter.
+      it('is greyed as a busy control is, its box the same', () => {
         const css = (
           customElements.get('comfort-band-now-tab') as unknown as {
             styles: Array<{ cssText: string }>;
@@ -1195,12 +1162,11 @@ describe('comfort-band-now-tab', () => {
           selectors: m[1].split(',').map((s) => s.trim()),
           body: m[2].trim(),
         }));
-        // One rule for each held copy (Back's here, Undo's from #25), which
-        // only hides it: it's otherwise the button's own box.
-        const forHeld = rules.filter((r) => r.selectors.some((s) => /\.held\b/.test(s)));
-        expect(forHeld.map((r) => r.selectors)).toEqual([['.back.held'], ['.undo.held']]);
-        for (const rule of forHeld) expect(rule.body).toMatch(/^visibility:\s*hidden;?$/);
-        // Nor does its being disabled give it another box.
+        const greyed = rules.filter((r) => r.selectors.includes(".back[aria-disabled='true']"));
+        expect(greyed).toHaveLength(1);
+        expect(greyed[0].body.replace(/\s+/g, ' ')).toBe('opacity: 0.5; cursor: default;');
+        // No held copies any more, nor a box of its own for being disabled.
+        expect(rules.filter((r) => r.selectors.some((s) => /\.held\b/.test(s)))).toEqual([]);
         const forDisabled = rules.filter((r) =>
           r.selectors.some((s) => /\.(back|undo)/.test(s) && /(\[disabled\]|:disabled)/.test(s)),
         );

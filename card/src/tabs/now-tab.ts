@@ -18,12 +18,15 @@
  *     to the room they were made in, as closing the tab sends them (#52);
  *     the tab doesn't wait for that change, or put a length back if it's
  *     refused.
- *   - "Back to schedule" while an adjustment runs.
- *   - With integration v0.25.0+, "Undo" under those, after a change made
- *     here, once HA shows it (#25): it puts back what the change replaced.
- *     It goes when another change is made here, the tab closes, the room's
- *     adjustment changes from elsewhere, or putting it back would change
- *     nothing.
+ *   - "Back to schedule", which ends an adjustment; greyed while none runs.
+ *   - With integration v0.25.0+, "Undo", which after a change made here,
+ *     once HA shows it, puts back what the change replaced (#25). It goes
+ *     back to greyed when another change is made here, the tab closes, the
+ *     room's adjustment changes from elsewhere, or putting it back would
+ *     change nothing.
+ *     Both are always there (#25 review): coming as they could act, they
+ *     moved the feedback buttons under a tap meant for those, and going,
+ *     a panel scrolled to its end.
  *   - While a call from this tab is going through, these controls ignore
  *     presses (marked aria-disabled, so they keep focus), so nothing is
  *     built on a state the tab has just changed.
@@ -40,13 +43,8 @@
  *
  * The status line is two lines tall even when its words take one (#55): at
  * a tap it says what the tap will do, and its words' length mustn't move the
- * controls under a finger. For the same reason, once an adjustment ends,
- * "Back to schedule" leaves its place empty until the tab closes (#57):
- * going, it would shorten a panel scrolled to its end, and everything above
- * would move down. Undo's place is kept the same way. And both places are
- * made at the press of a change that will bring them (#25 review): made when
- * HA answers, they'd push the feedback buttons down, under a tap meant for
- * them.
+ * controls under a finger. For the same reason "Back to schedule" and
+ * "Undo" are always there (#57, #25).
  *
  * Where the integration (v0.23.0+) says no schedule sets the zone's band, an
  * adjustment's band is the zone's band from then on, so there is no length to
@@ -172,22 +170,12 @@ export class ComfortBandNowTab extends LitElement {
    *  change the range, and taps sent to their room on a move to another,
    *  which aren't waited for: #52). */
   @state() private _busy: string | null = null;
-  /** Back to schedule's (or End adjustment's) words while it was last
-   *  shown: once the adjustment ends, its place is kept, empty, until the
-   *  tab closes (#57). */
-  @state() private _backLabel: string | null = null;
   /** What Undo would put back, once HA shows the change it undoes (#25). */
   @state() private _undo: Undo | null = null;
-  /** Undo's place, made at the press of a change it can undo and kept,
-   *  empty while Undo's away, until the tab closes. */
-  @state() private _undoPlace = false;
   /** Ends the wait for HA to show the change Undo undoes. */
   private _undoWait: ReturnType<typeof setTimeout> | null = null;
   /** Fires when an earlier end gets too near to put back. */
   private _undoTick: ReturnType<typeof setTimeout> | null = null;
-  /** Focus goes to the status line once Undo's button has gone from under it:
-   *  something that doesn't act, so a key meant for Undo does nothing. */
-  private _focusStatus = false;
 
   public static override styles = [
     tokens,
@@ -304,7 +292,8 @@ export class ComfortBandNowTab extends LitElement {
       }
       .lengths button[aria-disabled='true'],
       .steps button[aria-disabled='true'],
-      .back[aria-disabled='true'] {
+      .back[aria-disabled='true'],
+      .undo[aria-disabled='true'] {
         opacity: 0.5;
         cursor: default;
       }
@@ -313,19 +302,6 @@ export class ComfortBandNowTab extends LitElement {
         display: block;
         width: 100%;
         margin-top: var(--cb-gap-sm);
-      }
-      /* Its place, kept once the adjustment has ended (#57). */
-      .back.held {
-        visibility: hidden;
-      }
-      /* Undo's place, kept once it has shown (#25). */
-      .undo.held {
-        visibility: hidden;
-      }
-      /* Focus comes here when Undo goes from under it: shown for a key,
-         not for a tap. */
-      .status:focus:not(:focus-visible) {
-        outline: none;
       }
       button:focus-visible {
         outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
@@ -373,36 +349,19 @@ export class ComfortBandNowTab extends LitElement {
     }
     this._feedbackConfirmed = null;
     this._feedbackFailed = null;
-    this._backLabel = null;
     // Closing the dialog mid-burst still makes the change the taps asked for.
     this._commitBurst();
-    // Closing it also ends what Undo would put back, and its place.
+    // Closing it also ends what Undo would put back.
     this._dropUndo();
-    this._focusStatus = false;
-    this._undoPlace = false;
   }
 
-  /** Sends taps held for another room to theirs (#52); keeps Undo only
-   *  while it would put back what its change replaced (#25); and notes
-   *  Back's words while it's shown, so its place can be kept. */
+  /** Sends taps held for another room to theirs (#52), and keeps Undo
+   *  only while it would put back what its change replaced (#25). */
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (this._burst && this._burst.zone !== this.zone) this._commitBurst();
     // The card hands on a new `entities` with each update from HA, the same
     // ids in it: `_checkUndo` goes by the ids.
     if (changed.has('hass') || changed.has('zone') || changed.has('entities')) this._checkUndo();
-    if (!this.hass || !this.entities) return;
-    const { overrideActive, scheduled } = readRoom(this.hass, this.entities);
-    if (overrideActive && scheduled !== false) {
-      this._backLabel = scheduled === true ? 'Back to schedule' : 'End adjustment';
-    }
-  }
-
-  protected override updated(): void {
-    if (!this._focusStatus || this._undo) return;
-    this._focusStatus = false;
-    // Without scrolling: the panel moving would move every control under
-    // a finger that pressed Undo (#25 review).
-    this.shadowRoot?.querySelector<HTMLElement>('.status')?.focus({ preventScroll: true });
   }
 
   /** Keeps Undo only while it would put back what the change it undoes
@@ -463,9 +422,6 @@ export class ComfortBandNowTab extends LitElement {
   }
 
   private _dropUndo(): void {
-    if (this._undo && this.shadowRoot?.activeElement?.classList.contains('undo')) {
-      this._focusStatus = true;
-    }
     this._clearUndoTimers();
     this._undo = null;
   }
@@ -585,25 +541,8 @@ export class ComfortBandNowTab extends LitElement {
     } finally {
       this._busy = null;
     }
-    // Outside the try: nothing here can pass for a refusal. Only in the
-    // place made for it at the press, which a tab closed meanwhile has lost.
-    if (sent && undo && this.isConnected && this._undoPlace && undo.key === this._undoKey()) {
-      this._offerUndo(undo);
-    }
-  }
-
-  /** Makes room, at the press of a change, for what it brings once HA
-   *  shows it: Undo, where it can be offered, and Back where the change
-   *  starts an adjustment. Both places come empty and inert now, under the
-   *  finger's own press, so nothing below moves when HA answers. */
-  private _makeRoom(startsAdjustment: boolean): void {
-    if (!this.hass || !this.entities) return;
-    if (overrideEndsSupported(this.hass)) this._undoPlace = true;
-    if (!startsAdjustment || this._backLabel !== null) return;
-    const { scheduled } = readRoom(this.hass, this.entities);
-    if (scheduled !== false) {
-      this._backLabel = scheduled === true ? 'Back to schedule' : 'End adjustment';
-    }
+    // Outside the try: nothing here can pass for a refusal.
+    if (sent && undo && this.isConnected && undo.key === this._undoKey()) this._offerUndo(undo);
   }
 
   /** Adjusts `zone`, by default the tab's room, to `band`. For another
@@ -660,7 +599,6 @@ export class ComfortBandNowTab extends LitElement {
     if (after.low === before.low && after.high === before.high) return;
     // A new change: Undo would put back what's now in force only before it.
     this._dropUndo();
-    this._makeRoom(true);
     this._burst = { ...burst, steps: burst.steps + direction };
     if (this._burstTimer !== null) clearTimeout(this._burstTimer);
     this._burstTimer = setTimeout(() => this._commitBurst(), ADJUST_DELAY_MS);
@@ -700,10 +638,7 @@ export class ComfortBandNowTab extends LitElement {
       return;
     }
     // It re-times a running adjustment, a change; with none, nothing's sent.
-    if (this._stateOf(this.entities?.overrideActive ?? null)?.state === 'on') {
-      this._dropUndo();
-      this._makeRoom(false);
-    }
+    if (this._stateOf(this.entities?.overrideActive ?? null)?.state === 'on') this._dropUndo();
     this._retime(length, before);
   };
 
@@ -724,11 +659,12 @@ export class ComfortBandNowTab extends LitElement {
 
   private _onBackToSchedule = () => {
     if (this._busy || !this.hass || !this.zone) return;
+    // Greyed while no adjustment runs: nothing to end.
+    if (this._stateOf(this.entities?.overrideActive ?? null)?.state !== 'on') return;
     const hass = this.hass;
     const zone = this.zone;
     this._dropBurst();
     this._dropUndo();
-    this._makeRoom(false);
     const from = this._undoFrom();
     const doing =
       this._schedule().scheduled === true ? 'Going back to the schedule' : 'Ending the adjustment';
@@ -863,7 +799,7 @@ export class ComfortBandNowTab extends LitElement {
           .action=${controlling(reading) ? reading.action : 'unknown'}
         ></band-gauge>
       </div>
-      <div class="status ${status.kind}" role="status" aria-live="polite" tabindex="-1">
+      <div class="status ${status.kind}" role="status" aria-live="polite">
         <ha-icon icon=${STATUS_ICONS[status.kind]} aria-hidden="true"></ha-icon>
         <span>${status.text}</span>
       </div>
@@ -909,33 +845,36 @@ export class ComfortBandNowTab extends LitElement {
               </button>
             </div>`
           : nothing}
-        ${overrideActive && scheduled !== false
-          ? html`<button class="back" aria-disabled=${busy} @click=${this._onBackToSchedule}>
+        ${scheduled === false
+          ? nothing
+          : html`<button
+              class="back"
+              aria-disabled=${busy === 'true' || !overrideActive ? 'true' : 'false'}
+              @click=${this._onBackToSchedule}
+            >
               ${scheduled === true ? 'Back to schedule' : 'End adjustment'}
-            </button>`
-          : this._backLabel !== null
-            ? html`<button class="back held" aria-hidden="true" tabindex="-1" disabled>
-                ${this._backLabel}
-              </button>`
-            : nothing}
+            </button>`}
         ${this._renderUndo()}
       </section>
     `;
   }
 
-  /** Undo while it's offered; else its place, once made, kept empty. */
+  /** Undo, where it can be offered: greyed and inert until there's a
+   *  change to undo. The same button throughout, so focus stays on it. */
   private _renderUndo() {
-    const undo = this._undo;
-    if (undo?.shown) {
-      const plan = undoPlan(undo.before, undo.shown) ?? 'end';
-      const { label } = this._undoWords(undo.before, plan);
-      return html`<button class="undo" aria-label=${`Undo: ${label}`} @click=${this._onUndo}>
-        Undo
-      </button>`;
-    }
-    return this._undoPlace
-      ? html`<button class="undo held" aria-hidden="true" tabindex="-1" disabled>Undo</button>`
-      : nothing;
+    if (!this.hass || !overrideEndsSupported(this.hass)) return nothing;
+    const undo = this._undo?.shown ? this._undo : null;
+    const label = undo
+      ? this._undoWords(undo.before, undoPlan(undo.before, undo.shown!) ?? 'end').label
+      : null;
+    return html`<button
+      class="undo"
+      aria-disabled=${undo ? 'false' : 'true'}
+      aria-label=${label ? `Undo: ${label}` : nothing}
+      @click=${this._onUndo}
+    >
+      Undo
+    </button>`;
   }
 
   private _renderFeedbackSection() {

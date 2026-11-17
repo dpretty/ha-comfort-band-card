@@ -120,12 +120,12 @@ async function nowTab(hass: HomeAssistant): Promise<ComfortBandNowTab> {
 }
 
 const root = (el: ComfortBandNowTab) => el.shadowRoot!;
-/** Undo itself, not its kept place. */
+/** Undo, where it's offered: not greyed. */
 const undoButton = (el: ComfortBandNowTab) =>
-  root(el).querySelector<HTMLButtonElement>('.undo:not(.held)');
-/** Undo's kept place, once it has shown and gone. */
-const undoPlace = (el: ComfortBandNowTab) =>
-  root(el).querySelector<HTMLButtonElement>('.undo.held');
+  root(el).querySelector<HTMLButtonElement>('.undo[aria-disabled="false"]');
+/** Undo, greyed: nothing to undo. */
+const greyedUndo = (el: ComfortBandNowTab) =>
+  root(el).querySelector<HTMLButtonElement>('.undo[aria-disabled="true"]');
 const calls = (hass: HomeAssistant) =>
   (hass.callService as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => [c[1], c[2]]);
 const status = (el: ComfortBandNowTab) =>
@@ -319,18 +319,23 @@ describe('comfort-band-now-tab Undo', () => {
     ]);
   });
 
-  // Focus goes to the status line, which doesn't act: a key meant for Undo
-  // does nothing.
-  it('goes when the adjustment changes from elsewhere, focus with it', async () => {
+  // The same button, greyed: focus stays on it, and a key does nothing.
+  it('greys out when the adjustment changes from elsewhere, focus kept on it', async () => {
     const { hass, put, deliver } = setup();
     const el = await nowTab(hass);
     await tap(el, 'warmer');
     await deliver(el);
-    undoButton(el)!.focus();
+    const button = undoButton(el)!;
+    button.focus();
     put('sensor.gym_override_ends', new Date(NOW + 6 * HOUR).toISOString());
     await deliver(el);
     expect(undoButton(el)).toBeNull();
-    expect(root(el).activeElement).toBe(root(el).querySelector('.status'));
+    expect(greyedUndo(el)).toBe(button);
+    expect(button.hasAttribute('aria-label')).toBe(false);
+    expect(root(el).activeElement).toBe(button);
+    button.click();
+    await flush(el);
+    expect(calls(hass)).toHaveLength(1);
   });
 
   it('goes when another change starts here', async () => {
@@ -365,7 +370,7 @@ describe('comfort-band-now-tab Undo', () => {
     expect(undoButton(el)).toBeNull();
   });
 
-  it('goes when the tab closes, its place with it', async () => {
+  it('goes when the tab closes', async () => {
     const { hass, deliver } = setup();
     const el = await nowTab(hass);
     await tap(el, 'warmer');
@@ -374,23 +379,22 @@ describe('comfort-band-now-tab Undo', () => {
     el.remove();
     document.body.appendChild(el);
     await deliver(el);
-    expect(root(el).querySelector('.undo')).toBeNull();
+    expect(undoButton(el)).toBeNull();
+    expect(greyedUndo(el)).not.toBeNull();
   });
 
-  it('isn’t undone in its turn, and moves focus to the status line', async () => {
+  it('isn’t undone in its turn: greyed after, focus kept on it', async () => {
     const { hass, deliver } = setup();
     const el = await nowTab(hass);
     await tap(el, 'warmer');
     await deliver(el);
-    undoButton(el)!.focus();
+    const button = undoButton(el)!;
+    button.focus();
     await undo(el);
     await deliver(el);
     expect(undoButton(el)).toBeNull();
-    expect(root(el).activeElement).toBe(root(el).querySelector('.status'));
-    // Once: a later update leaves focus where it's gone since.
-    root(el).querySelector<HTMLElement>('.steps .warmer')!.focus();
-    await deliver(el);
-    expect(root(el).activeElement).toBe(root(el).querySelector('.steps .warmer'));
+    expect(greyedUndo(el)).toBe(button);
+    expect(root(el).activeElement).toBe(button);
   });
 
   it('ignores presses while a call goes through, saying what it puts back', async () => {
@@ -471,98 +475,81 @@ describe('comfort-band-now-tab Undo', () => {
     expect(undoButton(el)).toBeNull();
   });
 
-  // Its place is kept once it has shown, as Back's is (#57): going, it
-  // would shorten a panel scrolled to its end and move everything above.
-  it('keeps its place, empty, under the controls once it has shown', async () => {
-    const { hass, put, deliver } = setup();
-    const el = await nowTab(hass);
-    expect(root(el).querySelector('.undo')).toBeNull();
-    await tap(el, 'warmer');
-    await deliver(el);
-    // Under the steps and Back, last in the section.
-    const section = root(el).querySelector('section.adjust')!;
-    const order = Array.from(section.children).map((c) => c.className.trim());
-    expect(order.slice(-3)).toEqual(['steps', 'back', 'undo']);
-    // Changed from elsewhere: Undo goes, its place stays.
-    put('sensor.gym_override_ends', new Date(NOW + 6 * HOUR).toISOString());
-    await deliver(el);
-    expect(undoButton(el)).toBeNull();
-    const place = undoPlace(el)!;
-    expect(section.lastElementChild).toBe(place);
-    expect(place.textContent!.trim()).toBe('Undo');
-    expect(place.getAttribute('aria-hidden')).toBe('true');
-    expect(place.getAttribute('tabindex')).toBe('-1');
-    expect(place.disabled).toBe(true);
-    place.click();
-    await flush(el);
-    expect(calls(hass)).toHaveLength(1);
-  });
+  // #25 review round 1: coming as it could act, Undo pushed the feedback
+  // buttons down under a tap meant for them. It's always there, greyed
+  // while there's nothing to undo, and nothing comes or goes for it.
+  describe('always there', () => {
+    const rows = (el: ComfortBandNowTab) =>
+      Array.from(root(el).querySelector('section.adjust')!.children).map((c) => c.className.trim());
 
-  it('shows again in its place when another change can be undone', async () => {
-    const { hass, deliver } = setup();
-    const el = await nowTab(hass);
-    await tap(el, 'warmer');
-    await deliver(el);
-    root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
-    await el.updateComplete;
-    expect(undoButton(el)).toBeNull();
-    expect(undoPlace(el)).not.toBeNull();
-    vi.advanceTimersByTime(1_500);
-    await flush(el);
-    await deliver(el);
-    expect(undoPlace(el)).toBeNull();
-    expect(root(el).querySelector('section.adjust')!.lastElementChild).toBe(undoButton(el));
-  });
+    it('is there, greyed, under Back, from the start', async () => {
+      const { hass } = setup();
+      const el = await nowTab(hass);
+      expect(rows(el).slice(-3)).toEqual(['steps', 'back', 'undo']);
+      const button = greyedUndo(el)!;
+      expect(button.textContent!.trim()).toBe('Undo');
+      expect(button.hasAttribute('aria-label')).toBe(false);
+      button.click();
+      await flush(el);
+      expect(calls(hass)).toEqual([]);
+    });
 
-  it('lets its place go when the tab is taken off the page', async () => {
-    const { hass, put, deliver } = setup();
-    const el = await nowTab(hass);
-    await tap(el, 'warmer');
-    await deliver(el);
-    put('sensor.gym_override_ends', new Date(NOW + 6 * HOUR).toISOString());
-    await deliver(el);
-    expect(undoPlace(el)).not.toBeNull();
-    el.remove();
-    document.body.appendChild(el);
-    await deliver(el);
-    expect(root(el).querySelector('.undo')).toBeNull();
-  });
+    it('is the same button, greyed or offered, through a change and its undoing', async () => {
+      const { hass, deliver } = setup();
+      const el = await nowTab(hass);
+      const before = rows(el);
+      const button = greyedUndo(el)!;
+      root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
+      await el.updateComplete;
+      expect(rows(el)).toEqual(before);
+      vi.advanceTimersByTime(1_500);
+      await flush(el);
+      await deliver(el);
+      expect(rows(el)).toEqual(before);
+      expect(undoButton(el)).toBe(button);
+      await undo(el);
+      await deliver(el);
+      expect(rows(el)).toEqual(before);
+      expect(greyedUndo(el)).toBe(button);
+    });
 
-  // Undo is the button Back to schedule is: the same box, so its place is
-  // the size it had.
-  it('is drawn as Back to schedule is, its place only hidden', () => {
-    const css = (
-      customElements.get('comfort-band-now-tab') as unknown as {
-        styles: Array<{ cssText: string }>;
+    it('is drawn as Back to schedule is', () => {
+      const css = (
+        customElements.get('comfort-band-now-tab') as unknown as {
+          styles: Array<{ cssText: string }>;
+        }
+      ).styles
+        .flat()
+        .map((x) => x.cssText)
+        .join('\n')
+        .replace(/\/\*[\s\S]*?\*\//g, '');
+      const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map((m) => ({
+        selectors: m[1].split(',').map((x) => x.trim()),
+      }));
+      const forBack = rules.filter((r) => r.selectors.some((x) => /^\.back\b/.test(x)));
+      expect(forBack.length).toBeGreaterThan(0);
+      for (const rule of forBack) {
+        for (const sel of rule.selectors.filter((x) => /^\.back\b/.test(x))) {
+          expect(rule.selectors).toContain(sel.replace('.back', '.undo'));
+        }
       }
-    ).styles
-      .flat()
-      .map((x) => x.cssText)
-      .join('\n')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-    const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map((m) => ({
-      selectors: m[1].split(',').map((x) => x.trim()),
-      body: m[2].trim(),
-    }));
-    const naming = (sel: string) => rules.filter((r) => r.selectors.includes(sel));
-    // Every rule for Back names Undo too, but Back's held place and its
-    // look while a call goes through (Undo never shows then: each change
-    // drops it before it's sent).
-    for (const rule of rules.filter((r) => r.selectors.some((x) => /^\.back\b/.test(x)))) {
-      if (rule.selectors.includes('.back.held')) continue;
-      if (rule.selectors.some((x) => x.includes('aria-disabled'))) continue;
-      const undoSel = rule.selectors.map((x) => x.replace('.back', '.undo'));
-      for (const sel of undoSel) expect(rule.selectors).toContain(sel);
-    }
-    expect(naming('.undo.held').map((r) => r.body)).toEqual(['visibility: hidden;']);
-  });
+    });
 
-  it('has no place where it can’t be offered', async () => {
-    const { hass, deliver } = setup({}, { services: {} });
-    const el = await nowTab(hass);
-    await tap(el, 'warmer');
-    await deliver(el);
-    expect(root(el).querySelector('.undo')).toBeNull();
+    it('isn’t there where it can’t be offered', async () => {
+      const { hass, deliver } = setup({}, { services: {} });
+      const el = await nowTab(hass);
+      await tap(el, 'warmer');
+      await deliver(el);
+      expect(root(el).querySelector('.undo')).toBeNull();
+    });
+
+    it('is there in a room with no schedule, under the steps', async () => {
+      const { hass } = setup({
+        'sensor.gym_next_band_change': { state: 'unknown', attributes: { scheduled: false } },
+      });
+      const el = await nowTab(hass);
+      expect(rows(el).slice(-2)).toEqual(['steps', 'undo']);
+    });
   });
 
   // Overtaken before HA showed it: not ours to undo, then or later.
@@ -1117,8 +1104,7 @@ describe('comfort-band-now-tab Undo', () => {
     expect(undoButton(el)).toBeNull();
   });
 
-  // #57: Back's kept place, then Undo, under the steps.
-  it('sits under Back’s kept place after Back to schedule', async () => {
+  it('sits under Back, greyed, after Back to schedule', async () => {
     const { hass, deliver } = setup({
       'binary_sensor.gym_override_active': { state: 'on' },
       'sensor.gym_override_ends': { state: new Date(NOW + 2 * HOUR).toISOString() },
@@ -1126,127 +1112,9 @@ describe('comfort-band-now-tab Undo', () => {
     const el = await nowTab(hass);
     await back(el);
     await deliver(el);
-    const section = root(el).querySelector('section.adjust')!;
-    const order = Array.from(section.children).map((c) => c.className.trim());
-    expect(order.slice(-3)).toEqual(['steps', 'back held', 'undo']);
-  });
-
-  // #25 review round 1: made when HA answers, Undo's place (and Back's)
-  // pushed the feedback buttons down under a tap meant for them. They're
-  // made at the press instead, empty, and HA's answer fills them.
-  describe('room made at the press', () => {
-    const rows = (el: ComfortBandNowTab) =>
-      Array.from(root(el).querySelector('section.adjust')!.children).map((c) => c.className.trim());
-
-    it('makes room for Back and Undo at the tap, which HA’s answer fills', async () => {
-      const { hass, deliver } = setup();
-      const el = await nowTab(hass);
-      expect(rows(el).slice(-1)).toEqual(['steps']);
-      root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
-      await el.updateComplete;
-      expect(rows(el).slice(-3)).toEqual(['steps', 'back held', 'undo held']);
-      vi.advanceTimersByTime(1_500);
-      await flush(el);
-      await deliver(el);
-      expect(rows(el).slice(-3)).toEqual(['steps', 'back', 'undo']);
-    });
-
-    it.each([
-      ['a new length', async (el: ComfortBandNowTab) => pick(el, '1')],
-      ['Back to schedule', async (el: ComfortBandNowTab) => back(el)],
-    ])('makes room for Undo at %s', async (_, press) => {
-      const { hass } = setup({
-        'binary_sensor.gym_override_active': { state: 'on' },
-        'sensor.gym_override_ends': { state: new Date(NOW + 2 * HOUR).toISOString() },
-      });
-      const el = await nowTab(hass);
-      expect(rows(el).slice(-2)).toEqual(['steps', 'back']);
-      await press(el);
-      // Before HA shows the change.
-      expect(rows(el).slice(-1)).toEqual(['undo held']);
-    });
-
-    it('makes room for Undo alone in a room with no schedule', async () => {
-      const { hass } = setup({
-        'sensor.gym_next_band_change': { state: 'unknown', attributes: { scheduled: false } },
-      });
-      const el = await nowTab(hass);
-      root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
-      await el.updateComplete;
-      expect(rows(el).slice(-2)).toEqual(['steps', 'undo held']);
-    });
-
-    it('makes room for Back alone where Undo can’t be offered', async () => {
-      const { hass } = setup({}, { services: {} });
-      const el = await nowTab(hass);
-      root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
-      await el.updateComplete;
-      expect(rows(el).slice(-2)).toEqual(['steps', 'back held']);
-    });
-
-    it('makes no room for a tap at a limit, or a length picked with nothing running', async () => {
-      const { hass } = setup({
-        'sensor.gym_effective_low': { state: '34.5' },
-        'sensor.gym_effective_high': { state: '35' },
-      });
-      const el = await nowTab(hass);
-      root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
-      await el.updateComplete;
-      await pick(el, '1');
-      expect(rows(el).slice(-1)).toEqual(['steps']);
-      expect(calls(hass)).toEqual([]);
-    });
-
-    // A tab moved in the page while the call went through lost the place
-    // made for Undo: none is offered, so none comes without its place.
-    it('isn’t offered where the tab was moved in the page during the call', async () => {
-      const { hass, deliver } = setup();
-      const el = await nowTab(hass);
-      const answered = answerAfter(hass, async () => {
-        el.remove();
-        document.body.appendChild(el);
-        await deliver(el);
-      });
-      await tap(el, 'warmer');
-      await answered(el);
-      await deliver(el);
-      expect(root(el).querySelector('.undo')).toBeNull();
-    });
-  });
-
-  // #25 review round 1: focus moving with a scroll moved every control
-  // under the finger that pressed Undo.
-  it('moves focus to the status line without scrolling', async () => {
-    const { hass, deliver } = setup();
-    const el = await nowTab(hass);
-    await tap(el, 'warmer');
-    await deliver(el);
-    const status = root(el).querySelector<HTMLElement>('.status')!;
-    const focus = vi.spyOn(status, 'focus');
-    undoButton(el)!.focus();
-    await undo(el);
-    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
-  });
-
-  // Its ring is hidden only where focus came by a tap.
-  it('shows the status line’s focus ring for a key', () => {
-    const css = (
-      customElements.get('comfort-band-now-tab') as unknown as {
-        styles: Array<{ cssText: string }>;
-      }
-    ).styles
-      .flat()
-      .map((x) => x.cssText)
-      .join('\n')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-    const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map((m) => ({
-      selectors: m[1].split(',').map((x) => x.trim()),
-      body: m[2].trim(),
-    }));
-    const forStatusFocus = rules.filter((r) =>
-      r.selectors.some((x) => x.startsWith('.status:focus')),
-    );
-    expect(forStatusFocus.map((r) => r.selectors)).toEqual([['.status:focus:not(:focus-visible)']]);
+    const backButton = root(el).querySelector('.back')!;
+    expect(backButton.getAttribute('aria-disabled')).toBe('true');
+    expect(backButton.nextElementSibling).toBe(undoButton(el));
   });
 
   // Undo is offered only after the call went through: nothing about it can
