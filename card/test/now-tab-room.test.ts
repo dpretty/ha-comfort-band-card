@@ -69,7 +69,10 @@ function setup({ adjusted = [] as Array<'gym' | 'study'> } = {}) {
     devices: {},
     entities: {},
     connection: stubConnection(),
-    callService: callService as unknown as HomeAssistant['callService'],
+    // A promise of its own, as HA's is: vitest watches a mock's, so a
+    // rejection the tab left unhandled wouldn't show.
+    callService: (async (...args: unknown[]) =>
+      callService(...args)) as unknown as HomeAssistant['callService'],
     callWS: vi.fn().mockResolvedValue(undefined),
     locale: { language: 'en-GB', time_format: '24' },
     // v0.25.0's, for "Until".
