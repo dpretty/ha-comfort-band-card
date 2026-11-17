@@ -1392,9 +1392,9 @@ let kt = class extends Te {
     !Number.isFinite(o) || !Number.isFinite(s) || this._sendBand({ low: o, high: s }, e, t, n, i);
   }
   /** What Undo does, in words: "back to 19–22° until 5 pm", and the status
-   *  while it does it. With no schedule, a range has no end to name; where
-   *  it can't be told if a schedule sets the range, just "end the
-   *  adjustment". */
+   *  while it does it. With no schedule, a range has no end to name. Ending
+   *  the adjustment is "back to the schedule" where one sets the range, and
+   *  "end the adjustment" where that can't be told. */
   _undoWords(e, t) {
     const n = en(e), i = this._schedule().scheduled;
     if (i === !1) return { label: `back to ${n}`, doing: `Going back to ${n}` };

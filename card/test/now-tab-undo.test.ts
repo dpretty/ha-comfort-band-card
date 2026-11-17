@@ -397,7 +397,7 @@ describe('comfort-band-now-tab Undo', () => {
     expect(root(el).activeElement).toBe(button);
   });
 
-  it('ignores presses while a call goes through, saying what it puts back', async () => {
+  it('says what it puts back while its call goes through', async () => {
     const { hass, deliver } = setup();
     const el = await nowTab(hass);
     await tap(el, 'warmer');
@@ -1263,5 +1263,24 @@ describe('comfort-band-now-tab Undo', () => {
     greyedUndo(el)!.click();
     await flush(el);
     expect(calls(hass)).toHaveLength(1);
+  });
+
+  // Putting back an earlier adjustment names its range and end, whether or
+  // not it can be told a schedule sets the range.
+  it('names what it puts back where it can’t be told a schedule sets the range', async () => {
+    const ends = NOW + 2 * HOUR;
+    const { hass, deliver } = setup({
+      'binary_sensor.gym_override_active': { state: 'on' },
+      'sensor.gym_override_ends': { state: new Date(ends).toISOString() },
+      'number.gym_manual_low': { state: '20.5' },
+      'number.gym_manual_high': { state: '23' },
+      'sensor.gym_next_band_change': { state: 'unknown', attributes: {} },
+    });
+    const el = await nowTab(hass);
+    await tap(el, 'warmer');
+    await deliver(el);
+    expect(undoButton(el)!.getAttribute('aria-label')).toBe(
+      `Undo: back to 20.5–23° until ${formatTime(ends, hass)}`,
+    );
   });
 });

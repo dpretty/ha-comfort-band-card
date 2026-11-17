@@ -712,9 +712,9 @@ export class ComfortBandNowTab extends LitElement {
   };
 
   /** What Undo does, in words: "back to 19–22° until 5 pm", and the status
-   *  while it does it. With no schedule, a range has no end to name; where
-   *  it can't be told if a schedule sets the range, just "end the
-   *  adjustment". */
+   *  while it does it. With no schedule, a range has no end to name. Ending
+   *  the adjustment is "back to the schedule" where one sets the range, and
+   *  "end the adjustment" where that can't be told. */
   private _undoWords(
     before: Adjustment,
     plan: 'restore' | 'end',
