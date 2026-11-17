@@ -138,7 +138,8 @@ function calls(hass: HomeAssistant): unknown[] {
  *  rendered, so an every() over the result can't pass on an empty list. */
 function controlsDisabled(el: ComfortBandNowTab): boolean[] {
   const controls = Array.from(
-    el.shadowRoot!.querySelectorAll('.lengths button, .steps button, .back'),
+    // Not a kept place: a disabled copy, not a control.
+    el.shadowRoot!.querySelectorAll('.lengths button, .steps button, .back:not(.held)'),
   );
   if (controls.length === 0) throw new Error('no controls rendered');
   return controls.map((b) => b.getAttribute('aria-disabled') === 'true');

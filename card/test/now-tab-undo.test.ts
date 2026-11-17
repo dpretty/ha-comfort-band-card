@@ -970,7 +970,8 @@ describe('comfort-band-now-tab Undo', () => {
     await tap(el, 'warmer');
     vi.advanceTimersByTime(5_000);
     await tap(el, 'cooler');
-    // The first wait would have ended now; the second's runs to 16.5 s.
+    // The first wait would have ended now; the second's, from its answer at
+    // 8 s, runs to 18 s.
     vi.advanceTimersByTime(6_000);
     await deliver(el);
     expect(undoButton(el)).not.toBeNull();
@@ -1009,11 +1010,11 @@ describe('comfort-band-now-tab Undo', () => {
     });
     await tap(el, 'warmer');
     await deliver(el);
-    expect(root(el).querySelector('.undo')).toBeNull();
+    expect(undoButton(el)).toBeNull();
     // Nor for Back to schedule, from an adjustment whose end can't be read.
     await back(el);
     await deliver(el);
-    expect(root(el).querySelector('.undo')).toBeNull();
+    expect(undoButton(el)).toBeNull();
   });
 
   it('goes where a running adjustment’s end can’t be read any more', async () => {
@@ -1029,14 +1030,17 @@ describe('comfort-band-now-tab Undo', () => {
 
   // The integration puts the band back as an override ends only from
   // v0.25.0, told by cancel_override's fields.
-  it('isn’t offered where cancel_override takes no band, Until still is', async () => {
+  it.each([
+    ['high', { zone: {}, low: {} }],
+    ['low', { zone: {}, high: {} }],
+  ])('isn’t offered where cancel_override takes no %s, Until still is', async (_, fields) => {
     const { hass, deliver } = setup(
       {},
       {
         services: {
           comfort_band: {
             start_override: { fields: { zone: {}, low: {}, high: {}, hours: {}, until: {} } },
-            cancel_override: { fields: { zone: {}, low: {} } },
+            cancel_override: { fields },
           },
         },
       },
@@ -1060,7 +1064,7 @@ describe('comfort-band-now-tab Undo', () => {
     });
     await pick(el, '1');
     await deliver(el);
-    expect(root(el).querySelector('.undo')).toBeNull();
+    expect(undoButton(el)).toBeNull();
     const pressed = Array.from(root(el).querySelectorAll('.lengths button[aria-pressed="true"]'));
     expect(pressed.map((b) => b.getAttribute('data-length'))).toEqual(['3']);
   });
@@ -1076,7 +1080,7 @@ describe('comfort-band-now-tab Undo', () => {
     });
     await back(el);
     await deliver(el);
-    expect(root(el).querySelector('.undo')).toBeNull();
+    expect(undoButton(el)).toBeNull();
   });
 
   // Undo's own call refused: HA's toast says so; nothing is offered for it.
@@ -1110,7 +1114,7 @@ describe('comfort-band-now-tab Undo', () => {
     el.zone = 'gym';
     await flush(el);
     await deliver(el);
-    expect(root(el).querySelector('.undo')).toBeNull();
+    expect(undoButton(el)).toBeNull();
   });
 
   // #57: Back's kept place, then Undo, under the steps.
@@ -1125,5 +1129,236 @@ describe('comfort-band-now-tab Undo', () => {
     const section = root(el).querySelector('section.adjust')!;
     const order = Array.from(section.children).map((c) => c.className.trim());
     expect(order.slice(-3)).toEqual(['steps', 'back held', 'undo']);
+  });
+
+  // #25 review round 1: made when HA answers, Undo's place (and Back's)
+  // pushed the feedback buttons down under a tap meant for them. They're
+  // made at the press instead, empty, and HA's answer fills them.
+  describe('room made at the press', () => {
+    const rows = (el: ComfortBandNowTab) =>
+      Array.from(root(el).querySelector('section.adjust')!.children).map((c) => c.className.trim());
+
+    it('makes room for Back and Undo at the tap, which HA’s answer fills', async () => {
+      const { hass, deliver } = setup();
+      const el = await nowTab(hass);
+      expect(rows(el).slice(-1)).toEqual(['steps']);
+      root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
+      await el.updateComplete;
+      expect(rows(el).slice(-3)).toEqual(['steps', 'back held', 'undo held']);
+      vi.advanceTimersByTime(1_500);
+      await flush(el);
+      await deliver(el);
+      expect(rows(el).slice(-3)).toEqual(['steps', 'back', 'undo']);
+    });
+
+    it.each([
+      ['a new length', async (el: ComfortBandNowTab) => pick(el, '1')],
+      ['Back to schedule', async (el: ComfortBandNowTab) => back(el)],
+    ])('makes room for Undo at %s', async (_, press) => {
+      const { hass } = setup({
+        'binary_sensor.gym_override_active': { state: 'on' },
+        'sensor.gym_override_ends': { state: new Date(NOW + 2 * HOUR).toISOString() },
+      });
+      const el = await nowTab(hass);
+      expect(rows(el).slice(-2)).toEqual(['steps', 'back']);
+      await press(el);
+      // Before HA shows the change.
+      expect(rows(el).slice(-1)).toEqual(['undo held']);
+    });
+
+    it('makes room for Undo alone in a room with no schedule', async () => {
+      const { hass } = setup({
+        'sensor.gym_next_band_change': { state: 'unknown', attributes: { scheduled: false } },
+      });
+      const el = await nowTab(hass);
+      root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
+      await el.updateComplete;
+      expect(rows(el).slice(-2)).toEqual(['steps', 'undo held']);
+    });
+
+    it('makes room for Back alone where Undo can’t be offered', async () => {
+      const { hass } = setup({}, { services: {} });
+      const el = await nowTab(hass);
+      root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
+      await el.updateComplete;
+      expect(rows(el).slice(-2)).toEqual(['steps', 'back held']);
+    });
+
+    it('makes no room for a tap at a limit, or a length picked with nothing running', async () => {
+      const { hass } = setup({
+        'sensor.gym_effective_low': { state: '34.5' },
+        'sensor.gym_effective_high': { state: '35' },
+      });
+      const el = await nowTab(hass);
+      root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
+      await el.updateComplete;
+      await pick(el, '1');
+      expect(rows(el).slice(-1)).toEqual(['steps']);
+      expect(calls(hass)).toEqual([]);
+    });
+
+    // A tab moved in the page while the call went through lost the place
+    // made for Undo: none is offered, so none comes without its place.
+    it('isn’t offered where the tab was moved in the page during the call', async () => {
+      const { hass, deliver } = setup();
+      const el = await nowTab(hass);
+      const answered = answerAfter(hass, async () => {
+        el.remove();
+        document.body.appendChild(el);
+        await deliver(el);
+      });
+      await tap(el, 'warmer');
+      await answered(el);
+      await deliver(el);
+      expect(root(el).querySelector('.undo')).toBeNull();
+    });
+  });
+
+  // #25 review round 1: focus moving with a scroll moved every control
+  // under the finger that pressed Undo.
+  it('moves focus to the status line without scrolling', async () => {
+    const { hass, deliver } = setup();
+    const el = await nowTab(hass);
+    await tap(el, 'warmer');
+    await deliver(el);
+    const status = root(el).querySelector<HTMLElement>('.status')!;
+    const focus = vi.spyOn(status, 'focus');
+    undoButton(el)!.focus();
+    await undo(el);
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+  });
+
+  // Its ring is hidden only where focus came by a tap.
+  it('shows the status line’s focus ring for a key', () => {
+    const css = (
+      customElements.get('comfort-band-now-tab') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((x) => x.cssText)
+      .join('\n')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map((m) => ({
+      selectors: m[1].split(',').map((x) => x.trim()),
+      body: m[2].trim(),
+    }));
+    const forStatusFocus = rules.filter((r) =>
+      r.selectors.some((x) => x.startsWith('.status:focus')),
+    );
+    expect(forStatusFocus.map((r) => r.selectors)).toEqual([['.status:focus:not(:focus-visible)']]);
+  });
+
+  // Undo is offered only after the call went through: nothing about it can
+  // pass for a refusal, which would put a length back (#27).
+  it('leaves a length picked during the taps where Undo can’t be offered', async () => {
+    const unhandled = vi.fn();
+    const proc = (
+      globalThis as unknown as {
+        process: {
+          on(event: string, listener: (...args: unknown[]) => void): void;
+          off(event: string, listener: (...args: unknown[]) => void): void;
+        };
+      }
+    ).process;
+    proc.on('unhandledRejection', unhandled);
+    try {
+      const { hass, deliver } = setup();
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+      vi.setSystemTime(NOW);
+      const el = await mount('comfort-band-now-tab', {
+        hass,
+        entities: { ...ENTITIES, overrideEnds: null } as unknown as ZoneEntities,
+        zone: 'gym',
+      });
+      const answered = answerAfter(hass, () => deliver(el));
+      root(el).querySelector<HTMLElement>('.steps .warmer')!.click();
+      await el.updateComplete;
+      await pick(el, '1');
+      vi.advanceTimersByTime(1_500);
+      await answered(el);
+      vi.useRealTimers();
+      await new Promise((r) => setTimeout(r, 0));
+      await flush(el);
+      const pressed = Array.from(root(el).querySelectorAll('.lengths button[aria-pressed="true"]'));
+      expect(pressed.map((b) => b.getAttribute('data-length'))).toEqual(['1']);
+      expect(undoButton(el)).toBeNull();
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      proc.off('unhandledRejection', unhandled);
+    }
+  });
+
+  it.each([
+    ['low edge 0.1° off', 'number.gym_manual_low', '20.1'],
+    ['high edge 0.1° off', 'number.gym_manual_high', '23.1'],
+  ])('isn’t offered where HA shows the %s', async (_, id, value) => {
+    const { hass, put, deliver } = setup();
+    const el = await nowTab(hass);
+    await tap(el, 'warmer');
+    put(id, value);
+    await deliver(el);
+    expect(undoButton(el)).toBeNull();
+  });
+
+  it('isn’t offered where HA shows the end two seconds off', async () => {
+    const { hass, put, deliver } = setup();
+    const el = await nowTab(hass);
+    await pick(el, 'next');
+    await tap(el, 'warmer');
+    put('sensor.gym_override_ends', new Date(NEXT + 2_000).toISOString());
+    await deliver(el);
+    expect(undoButton(el)).toBeNull();
+  });
+
+  // With HA's state first (the usual order), an edge that couldn't be read
+  // at the change would be put back as nothing.
+  it.each(['number.gym_manual_low', 'number.gym_manual_high'])(
+    'isn’t offered where %s couldn’t be read at the change',
+    async (id) => {
+      const { hass, deliver } = setup({ [id]: { state: 'unavailable' } });
+      const el = await nowTab(hass);
+      const answered = answerAfter(hass, () => deliver(el));
+      await tap(el, 'warmer');
+      await answered(el);
+      expect(undoButton(el)).toBeNull();
+    },
+  );
+
+  // The wait for HA's state runs from the call's answer, not its sending.
+  it('waits from the answer, however long that takes', async () => {
+    const { hass, deliver } = setup();
+    const el = await nowTab(hass);
+    const call = hass.callService as unknown as ReturnType<typeof vi.fn>;
+    const real = call.getMockImplementation()!;
+    call.mockImplementationOnce(
+      (...args: Parameters<typeof real>) =>
+        new Promise<void>((r) => setTimeout(() => void real(...args).then(() => r()), 12_000)),
+    );
+    await tap(el, 'warmer');
+    vi.advanceTimersByTime(12_000);
+    await flush(el);
+    await deliver(el);
+    expect(undoButton(el)).not.toBeNull();
+  });
+
+  // After Back to schedule, pressed in the earlier end's last seconds,
+  // before Undo's own look at it: it ends nothing more, rather than put
+  // back an end about to pass.
+  it('puts back no end seconds away at the press, after Back to schedule', async () => {
+    const ends = NOW + 2 * HOUR;
+    const { hass, deliver } = setup({
+      'binary_sensor.gym_override_active': { state: 'on' },
+      'sensor.gym_override_ends': { state: new Date(ends).toISOString() },
+      'number.gym_manual_low': { state: '21' },
+      'number.gym_manual_high': { state: '24' },
+    });
+    const el = await nowTab(hass);
+    await back(el);
+    await deliver(el);
+    // The clock moves on without the timer that would look again.
+    vi.setSystemTime(ends - 4_000);
+    await undo(el);
+    expect(calls(hass)[1]).toEqual(['cancel_override', { zone: 'gym', low: 21, high: 24 }]);
   });
 });
