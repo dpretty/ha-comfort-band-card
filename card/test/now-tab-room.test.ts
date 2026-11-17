@@ -36,8 +36,10 @@ function entitiesOf(zone: 'gym' | 'study'): ZoneEntities {
 
 /**
  * HA with two rooms, each set by its schedule: the gym at 19.5–22.5°, the
- * study at 16–18°, those in `adjusted` adjusted (to 19–22° and 16.5–17.5°).
- * Calls go through unless `hold` says otherwise for the next one.
+ * study at 16–18°. Those in `adjusted` have an adjustment running, kept in
+ * their manual values (the gym's 19–22°, the study's 16.5–17.5°); the range
+ * in force stays as above. Calls go through unless `hold` says otherwise
+ * for the next one.
  */
 function setup({ adjusted = [] as Array<'gym' | 'study'> } = {}) {
   type Raw = Record<string, [string, Record<string, unknown>?]>;
@@ -133,6 +135,12 @@ const calls = (callService: ReturnType<typeof vi.fn>) =>
   callService.mock.calls.map((c) => [c[1], c[2]]);
 const statusText = (el: ComfortBandNowTab) =>
   root(el).querySelector('.status span')!.textContent!.trim();
+/** Whether each length and step button ignores presses. */
+const busy = (el: ComfortBandNowTab) => {
+  const controls = Array.from(root(el).querySelectorAll('.lengths button, .steps button'));
+  if (controls.length === 0) throw new Error('no controls rendered');
+  return controls.map((b) => b.getAttribute('aria-disabled') === 'true');
+};
 const pressed = (el: ComfortBandNowTab) =>
   Array.from(root(el).querySelectorAll('.lengths button[aria-pressed="true"]')).map((b) =>
     b.getAttribute('data-length'),
@@ -270,6 +278,10 @@ describe('Now tab: taps held when the card moves to another room (#52)', () => {
       expect(callService).not.toHaveBeenCalled();
 
       await moveToStudy(el);
+      // At once, so a tap in the study can't join them.
+      expect(calls(callService)).toEqual([
+        ['start_override', { zone: 'gym', low: 19, high: 22, hours: 1 }],
+      ]);
       await vi.advanceTimersByTimeAsync(3_000);
       await flush(el);
 
@@ -278,6 +290,49 @@ describe('Now tab: taps held when the card moves to another room (#52)', () => {
       ]);
     },
   );
+
+  it('re-times the room they were made in until its own next change, Until picked', async () => {
+    const { hass, callService } = setup({ adjusted: ['gym', 'study'] });
+    const el = await gymTab(hass);
+    await tap(el, 'warmer');
+    await tap(el, 'cooler');
+    await pick(el, 'next');
+    expect(callService).not.toHaveBeenCalled();
+
+    await moveToStudy(el);
+
+    expect(calls(callService)).toEqual([
+      [
+        'start_override',
+        { zone: 'gym', low: 19, high: 22, until: new Date(NEXT.gym).toISOString() },
+      ],
+    ]);
+  });
+
+  it("keeps the new room's own change waited for when the old room's answer comes first", async () => {
+    const { hass, callService, hold } = setup({ adjusted: ['study'] });
+    const el = await gymTab(hass);
+    await tap(el, 'warmer', 2);
+    const gym = hold();
+    await moveToStudy(el);
+    const study = hold();
+    // Re-times the study's adjustment: its own change, waited for.
+    await pick(el, '1');
+    expect(calls(callService)).toEqual([
+      ['start_override', { zone: 'gym', low: 20.5, high: 23.5, hours: 3 }],
+      ['start_override', { zone: 'study', low: 16.5, high: 17.5, hours: 1 }],
+    ]);
+    expect(busy(el).every(Boolean)).toBe(true);
+
+    gym.resolve();
+    await flush(el);
+    expect(busy(el).every(Boolean)).toBe(true);
+    expect(statusText(el)).toContain('Adjusting to 16.5–17.5°');
+
+    study.resolve();
+    await flush(el);
+    expect(busy(el).some(Boolean)).toBe(false);
+  });
 
   it("sends an Until picked during them for their room's next change", async () => {
     const { hass, callService } = setup();
@@ -315,5 +370,32 @@ describe('Now tab: taps held when the card moves to another room (#52)', () => {
     expect(calls(callService)).toEqual([
       ['start_override', { zone: 'gym', low: 20.5, high: 23.5, hours: 3 }],
     ]);
+  });
+
+  it('sends them as before on the same room: waited for, and a refusal puts the length back', async () => {
+    const { hass, callService, hold } = setup();
+    const el = await gymTab(hass);
+    await pick(el, '1');
+    await tap(el, 'warmer');
+    // Picked during the taps; the one before is 1 h.
+    await pick(el, '3');
+    // An HA update meanwhile: new objects, same room.
+    el.hass = { ...hass, states: { ...hass.states } };
+    el.entities = entitiesOf('gym');
+    await flush(el);
+    const gym = hold();
+
+    await vi.advanceTimersByTimeAsync(1_500);
+    await flush(el);
+    expect(calls(callService)).toEqual([
+      ['start_override', { zone: 'gym', low: 20, high: 23, hours: 3 }],
+    ]);
+    expect(busy(el).every(Boolean)).toBe(true);
+    expect(statusText(el)).toContain('Adjusting to 20–23°');
+
+    gym.reject();
+    await flush(el);
+    expect(pressed(el)).toEqual(['1']);
+    expect(busy(el).some(Boolean)).toBe(false);
   });
 });

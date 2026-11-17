@@ -15,7 +15,9 @@
  *     A picked "Until" is for that change: once it's passed, or while HA
  *     names another, three hours.
  *     Taps still held when the card moves on to another room go at once
- *     to the room they were made in, as closing the tab sends them (#52).
+ *     to the room they were made in, as closing the tab sends them (#52);
+ *     the tab doesn't wait for that change, or put a length back if it's
+ *     refused.
  *   - "Back to schedule" while an adjustment runs.
  *   - While a call from this tab is going through, these controls ignore
  *     presses (marked aria-disabled, so they keep focus), so nothing is
@@ -24,7 +26,8 @@
  *
  * When HA refuses a change (#27), HA's own toast says so, and a length
  * picked for it (to re-time an adjustment, or during its taps) goes back to
- * the one before; one picked before the taps began stays. A refused feedback
+ * the one before; one picked before the taps began stays. Taps sent to
+ * their room on a move to another (#52) put no length back. A refused feedback
  * tap shows "Not sent" on its pill, with HA's toast.
  *
  * When the room sensor is offline, a sentence under the status says what that
@@ -85,7 +88,8 @@ type Length = 1 | 3 | 'next';
 
 /** The length picked, as it was before a pick: put back if the change
  *  the pick was sent with (its re-time, or the taps it was picked during)
- *  is refused (#27). */
+ *  is refused (#27), unless it went to a room the tab had moved on from
+ *  (#52). */
 interface PickedLength {
   length: Length | null;
   pickedNext: number | null;
