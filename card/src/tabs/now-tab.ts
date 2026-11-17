@@ -14,6 +14,8 @@
  *     decides only whether that change is still ahead. The end shown is HA's.
  *     A picked "Until" is for that change: once it's passed, or while HA
  *     names another, three hours.
+ *     Taps still held when the card moves on to another room go at once
+ *     to the room they were made in, as closing the tab sends them (#52).
  *   - "Back to schedule" while an adjustment runs.
  *   - While a call from this tab is going through, these controls ignore
  *     presses (marked aria-disabled, so they keep focus), so nothing is
@@ -89,9 +91,12 @@ interface PickedLength {
   pickedNext: number | null;
 }
 
-/** Warmer / Cooler taps not yet sent: the range they started from, and how
- *  many steps from it (warmer positive). They're sent for the length picked. */
+/** Warmer / Cooler taps not yet sent: the room they were made in, the range
+ *  they started from, and how many steps from it (warmer positive). They're
+ *  sent to that room, for the length picked. */
 interface Burst {
+  zone: string;
+  entities: ZoneEntities;
   base: Band;
   steps: number;
   /** A length was picked during the burst: send it even if the taps cancel out. */
@@ -314,8 +319,10 @@ export class ComfortBandNowTab extends LitElement {
     this._commitBurst();
   }
 
-  /** Notes Back's words while it's shown, so its place can be kept. */
+  /** Sends taps held for another room to theirs (#52), and notes Back's
+   *  words while it's shown, so its place can be kept. */
   protected override willUpdate(): void {
+    if (this._burst && this._burst.zone !== this.zone) this._commitBurst();
     if (!this.hass || !this.entities) return;
     const { overrideActive, scheduled } = readRoom(this.hass, this.entities);
     if (overrideActive && scheduled !== false) {
@@ -343,27 +350,30 @@ export class ComfortBandNowTab extends LitElement {
     return { low: Math.round(low * 10) / 10, high: Math.round(high * 10) / 10 };
   }
 
-  private _schedule(): { scheduled: boolean | null; nextChange: number | null } {
-    if (!this.hass || !this.entities) return { scheduled: null, nextChange: null };
-    return readSchedule(this.hass, this.entities);
+  private _schedule(entities = this.entities): {
+    scheduled: boolean | null;
+    nextChange: number | null;
+  } {
+    if (!this.hass || !entities) return { scheduled: null, nextChange: null };
+    return readSchedule(this.hass, entities);
   }
 
-  /** The schedule's next change (ms), where an adjustment can last until
-   *  it: integration v0.25.0+, a schedule setting the range, and its next
-   *  change ahead. Null otherwise. */
-  private _nextChange(now = Date.now()): number | null {
+  /** The schedule's next change (ms) in the room of `entities`, where an
+   *  adjustment can last until it: integration v0.25.0+, a schedule setting
+   *  the range, and its next change ahead. Null otherwise. */
+  private _nextChange(entities = this.entities, now = Date.now()): number | null {
     if (!this.hass || !overrideUntilSupported(this.hass)) return null;
-    const { scheduled, nextChange } = this._schedule();
+    const { scheduled, nextChange } = this._schedule(entities);
     return scheduled === true && nextChange !== null && nextChange > now ? nextChange : null;
   }
 
   /** The length in force: the one picked here, else three hours. A picked
    *  "Until" is for the change it named: once that's passed, or while HA
    *  names another, three hours. */
-  private _hours(): Length {
+  private _hours(entities = this.entities): Length {
     const length = this._length ?? DEFAULT_HOURS;
     if (length !== 'next') return length;
-    const next = this._nextChange();
+    const next = this._nextChange(entities);
     return next !== null && next === this._pickedNext ? 'next' : DEFAULT_HOURS;
   }
 
@@ -390,18 +400,27 @@ export class ComfortBandNowTab extends LitElement {
     }
   }
 
-  private _sendBand(band: Band, length: Length, before?: PickedLength): void {
-    if (!this.hass || !this.zone) return;
+  /** Adjusts `zone`, by default the tab's room, to `band`. For another
+   *  room (taps held when the tab moved on, #52) the tab doesn't wait for
+   *  the call or put a length back: HA's toast tells of a refusal. */
+  private _sendBand(
+    band: Band,
+    length: Length,
+    before?: PickedLength,
+    zone = this.zone,
+    entities = this.entities,
+  ): void {
+    if (!this.hass || !zone) return;
     const hass = this.hass;
-    const zone = this.zone;
-    const next = length === 'next' ? this._nextChange() : null;
+    const next = length === 'next' ? this._nextChange(entities) : null;
     const until = next !== null ? new Date(next).toISOString() : undefined;
     const hours = next !== null ? undefined : length === 'next' ? DEFAULT_HOURS : length;
-    void this._run(
-      `Adjusting to ${bandText(band)}`,
-      () => startOverride(hass, { zone, low: band.low, high: band.high, hours, until }),
-      before,
-    );
+    const call = () => startOverride(hass, { zone, low: band.low, high: band.high, hours, until });
+    if (zone !== this.zone) {
+      call().catch(() => undefined);
+      return;
+    }
+    void this._run(`Adjusting to ${bandText(band)}`, call, before);
   }
 
   private _onStep = (direction: 1 | -1) => {
@@ -409,8 +428,8 @@ export class ComfortBandNowTab extends LitElement {
     let burst = this._burst;
     if (!burst) {
       const base = this._bandInForce();
-      if (!base) return;
-      burst = { base, steps: 0, picked: false };
+      if (!base || !this.entities) return;
+      burst = { zone: this.zone, entities: this.entities, base, steps: 0, picked: false };
     }
     // At a limit a further tap would change nothing; don't count it.
     const before = shiftBand(burst.base, burst.steps);
@@ -421,18 +440,20 @@ export class ComfortBandNowTab extends LitElement {
     this._burstTimer = setTimeout(() => this._commitBurst(), ADJUST_DELAY_MS);
   };
 
-  /** Sends the taps so far as one change; nothing if they cancel out, unless
-   *  a length was picked meanwhile. */
+  /** Sends the taps so far as one change, to the room they were made in;
+   *  nothing if they cancel out, unless a length was picked meanwhile. */
   private _commitBurst(): void {
     if (this._burstTimer !== null) clearTimeout(this._burstTimer);
     this._burstTimer = null;
     const burst = this._burst;
     this._burst = null;
     if (!burst) return;
+    const { zone, entities } = burst;
+    const length = this._hours(entities);
     if (burst.steps !== 0) {
-      this._sendBand(shiftBand(burst.base, burst.steps), this._hours(), burst.before);
+      this._sendBand(shiftBand(burst.base, burst.steps), length, burst.before, zone, entities);
     } else if (burst.picked) {
-      this._retime(this._hours(), burst.before);
+      this._retime(length, burst.before, zone, entities);
     }
   }
 
@@ -457,12 +478,17 @@ export class ComfortBandNowTab extends LitElement {
 
   /** Gives a running adjustment a new length, keeping its band: the
    *  integration keeps an adjustment's band in the manual values. */
-  private _retime(length: Length, before?: PickedLength): void {
-    if (this._stateOf(this.entities?.overrideActive ?? null)?.state !== 'on') return;
-    const low = this._numericState(this.entities?.manualLow ?? null);
-    const high = this._numericState(this.entities?.manualHigh ?? null);
+  private _retime(
+    length: Length,
+    before?: PickedLength,
+    zone = this.zone,
+    entities = this.entities,
+  ): void {
+    if (this._stateOf(entities?.overrideActive ?? null)?.state !== 'on') return;
+    const low = this._numericState(entities?.manualLow ?? null);
+    const high = this._numericState(entities?.manualHigh ?? null);
     if (!Number.isFinite(low) || !Number.isFinite(high)) return;
-    this._sendBand({ low, high }, length, before);
+    this._sendBand({ low, high }, length, before, zone, entities);
   }
 
   private _onBackToSchedule = () => {
