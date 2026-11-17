@@ -30,7 +30,10 @@
  *
  * The status line is two lines tall even when its words take one (#55): at
  * a tap it says what the tap will do, and its words' length mustn't move the
- * controls under a finger.
+ * controls under a finger. For the same reason, once an adjustment ends,
+ * "Back to schedule" leaves its place empty until the tab closes (#57):
+ * going, it would shorten a panel scrolled to its end, and everything above
+ * would move down.
  *
  * Where the integration (v0.23.0+) says no schedule sets the zone's band, an
  * adjustment's band is the zone's band from then on, so there is no length to
@@ -128,6 +131,10 @@ export class ComfortBandNowTab extends LitElement {
    *  no other such call starts (the feedback buttons aside, which don't
    *  change the range). */
   @state() private _busy: string | null = null;
+  /** Back to schedule's (or End adjustment's) words while it was last
+   *  shown: once the adjustment ends, its place is kept, empty, until the
+   *  tab closes (#57). */
+  @state() private _backLabel: string | null = null;
 
   public static override styles = [
     tokens,
@@ -252,6 +259,10 @@ export class ComfortBandNowTab extends LitElement {
         width: 100%;
         margin-top: var(--cb-gap-sm);
       }
+      /* Its place, kept once the adjustment has ended (#57). */
+      .back.held {
+        visibility: hidden;
+      }
       button:focus-visible {
         outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
         outline-offset: 1px;
@@ -298,8 +309,18 @@ export class ComfortBandNowTab extends LitElement {
     }
     this._feedbackConfirmed = null;
     this._feedbackFailed = null;
+    this._backLabel = null;
     // Closing the dialog mid-burst still makes the change the taps asked for.
     this._commitBurst();
+  }
+
+  /** Notes Back's words while it's shown, so its place can be kept. */
+  protected override willUpdate(): void {
+    if (!this.hass || !this.entities) return;
+    const { overrideActive, scheduled } = readRoom(this.hass, this.entities);
+    if (overrideActive && scheduled !== false) {
+      this._backLabel = scheduled === true ? 'Back to schedule' : 'End adjustment';
+    }
   }
 
   private get _stateOf() {
@@ -572,7 +593,11 @@ export class ComfortBandNowTab extends LitElement {
           ? html`<button class="back" aria-disabled=${busy} @click=${this._onBackToSchedule}>
               ${scheduled === true ? 'Back to schedule' : 'End adjustment'}
             </button>`
-          : nothing}
+          : this._backLabel !== null
+            ? html`<button class="back held" aria-hidden="true" tabindex="-1" disabled>
+                ${this._backLabel}
+              </button>`
+            : nothing}
       </section>
     `;
   }
