@@ -36,10 +36,10 @@ function entitiesOf(zone: 'gym' | 'study'): ZoneEntities {
 
 /**
  * HA with two rooms, each set by its schedule: the gym at 19.5–22.5°, the
- * study at 16–18°, adjusted (to 19–22° and 16.5–17.5°) with `adjusted`.
+ * study at 16–18°, those in `adjusted` adjusted (to 19–22° and 16.5–17.5°).
  * Calls go through unless `hold` says otherwise for the next one.
  */
-function setup({ adjusted = false } = {}) {
+function setup({ adjusted = [] as Array<'gym' | 'study'> } = {}) {
   type Raw = Record<string, [string, Record<string, unknown>?]>;
   const room = (zone: 'gym' | 'study', band: [string, string], manual: [string, string]): Raw => ({
     [`sensor.${zone}_effective_low`]: [band[0]],
@@ -47,7 +47,7 @@ function setup({ adjusted = false } = {}) {
     [`sensor.${zone}_room_temperature`]: ['18.0'],
     [`sensor.${zone}_current_action`]: ['idle'],
     [`sensor.${zone}_override_ends`]: ['unknown'],
-    [`binary_sensor.${zone}_override_active`]: [adjusted ? 'on' : 'off'],
+    [`binary_sensor.${zone}_override_active`]: [adjusted.includes(zone) ? 'on' : 'off'],
     [`number.${zone}_manual_low`]: [manual[0]],
     [`number.${zone}_manual_high`]: [manual[1]],
     [`sensor.${zone}_next_band_change`]: [
@@ -213,44 +213,68 @@ describe('Now tab: taps held when the card moves to another room (#52)', () => {
   });
 
   it("leaves a refusal to HA's toast, keeping the length the new room shows", async () => {
-    const { hass, callService, hold } = setup();
-    const el = await gymTab(hass);
-    await tap(el, 'warmer');
-    // Picked during the gym's taps, from none picked (three hours shown).
-    await pick(el, '3');
-    const gym = hold();
-    await moveToStudy(el);
-    // Picked for the study before the gym's answer comes.
-    await pick(el, '1');
-    expect(pressed(el)).toEqual(['1']);
+    const unhandled = vi.fn();
+    // Node's own process; the project has no Node types.
+    const proc = (
+      globalThis as unknown as {
+        process: {
+          on(event: string, listener: (...args: unknown[]) => void): void;
+          off(event: string, listener: (...args: unknown[]) => void): void;
+        };
+      }
+    ).process;
+    proc.on('unhandledRejection', unhandled);
+    try {
+      const { hass, callService, hold } = setup();
+      const el = await gymTab(hass);
+      await tap(el, 'warmer');
+      // Picked during the gym's taps, from none picked (three hours shown).
+      await pick(el, '3');
+      const gym = hold();
+      await moveToStudy(el);
+      // Picked for the study before the gym's answer comes.
+      await pick(el, '1');
+      expect(pressed(el)).toEqual(['1']);
 
-    gym.reject();
-    await flush(el);
+      vi.useRealTimers();
+      gym.reject();
+      await new Promise((r) => setTimeout(r, 0));
+      await flush(el);
 
-    expect(pressed(el)).toEqual(['1']);
-    // HA's own toast: the call isn't made quiet.
-    expect(callService.mock.calls[0][4]).toBeUndefined();
-    expect(calls(callService)).toEqual([
-      ['start_override', { zone: 'gym', low: 20, high: 23, hours: 3 }],
-    ]);
+      expect(pressed(el)).toEqual(['1']);
+      // Nothing left unhandled, and HA's own toast: the call isn't made quiet.
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(callService.mock.calls[0][4]).toBeUndefined();
+      expect(calls(callService)).toEqual([
+        ['start_override', { zone: 'gym', low: 20, high: 23, hours: 3 }],
+      ]);
+    } finally {
+      proc.off('unhandledRejection', unhandled);
+    }
   });
 
-  it('re-times the room they were made in when a length was picked and they cancel out', async () => {
-    const { hass, callService } = setup({ adjusted: true });
-    const el = await gymTab(hass);
-    await tap(el, 'warmer');
-    await tap(el, 'cooler');
-    await pick(el, '1');
-    expect(callService).not.toHaveBeenCalled();
+  it.each([
+    ['both rooms', ['gym', 'study'] as Array<'gym' | 'study'>],
+    ['only the gym', ['gym'] as Array<'gym' | 'study'>],
+  ])(
+    're-times the room they were made in when a length was picked and they cancel out (%s adjusted)',
+    async (_, adjusted) => {
+      const { hass, callService } = setup({ adjusted });
+      const el = await gymTab(hass);
+      await tap(el, 'warmer');
+      await tap(el, 'cooler');
+      await pick(el, '1');
+      expect(callService).not.toHaveBeenCalled();
 
-    await moveToStudy(el);
-    await vi.advanceTimersByTimeAsync(3_000);
-    await flush(el);
+      await moveToStudy(el);
+      await vi.advanceTimersByTimeAsync(3_000);
+      await flush(el);
 
-    expect(calls(callService)).toEqual([
-      ['start_override', { zone: 'gym', low: 19, high: 22, hours: 1 }],
-    ]);
-  });
+      expect(calls(callService)).toEqual([
+        ['start_override', { zone: 'gym', low: 19, high: 22, hours: 1 }],
+      ]);
+    },
+  );
 
   it("sends an Until picked during them for their room's next change", async () => {
     const { hass, callService } = setup();
