@@ -1229,4 +1229,39 @@ describe('comfort-band-now-tab Undo', () => {
     await undo(el);
     expect(calls(hass)[1]).toEqual(['cancel_override', { zone: 'gym', low: 21, high: 24 }]);
   });
+
+  // A refused change leaves nothing waiting: the same change made elsewhere
+  // within the wait isn't ours to undo.
+  it('isn’t offered where a refused change then shows, made elsewhere', async () => {
+    const { hass, put, deliver } = setup();
+    const el = await nowTab(hass);
+    (hass.callService as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+      throw new Error('refused');
+    });
+    await tap(el, 'warmer');
+    // Another panel makes the same change.
+    put('binary_sensor.gym_override_active', 'on');
+    put('sensor.gym_override_ends', new Date(NOW + 3 * HOUR).toISOString());
+    put('number.gym_manual_low', '20');
+    put('number.gym_manual_high', '23');
+    await deliver(el);
+    expect(undoButton(el)).toBeNull();
+  });
+
+  // Greyed while the change waits for HA to show it: a press does nothing.
+  it('does nothing when pressed while its change waits to show', async () => {
+    const ends = NOW + 2 * HOUR;
+    const { hass } = setup({
+      'binary_sensor.gym_override_active': { state: 'on' },
+      'sensor.gym_override_ends': { state: new Date(ends).toISOString() },
+      'number.gym_manual_low': { state: '20.5' },
+      'number.gym_manual_high': { state: '23' },
+    });
+    const el = await nowTab(hass);
+    await tap(el, 'warmer');
+    // The answer's in; HA's state isn't.
+    greyedUndo(el)!.click();
+    await flush(el);
+    expect(calls(hass)).toHaveLength(1);
+  });
 });
