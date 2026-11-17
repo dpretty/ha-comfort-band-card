@@ -1156,8 +1156,8 @@ let kt = class extends Ce {
       let t = this._burst;
       if (!t) {
         const o = this._bandInForce();
-        if (!o) return;
-        t = { base: o, steps: 0, picked: !1 };
+        if (!o || !this.entities) return;
+        t = { zone: this.zone, entities: this.entities, base: o, steps: 0, picked: !1 };
       }
       const n = Co(t.base, t.steps), i = Co(t.base, t.steps + e);
       i.low === n.low && i.high === n.high || (this._burst = { ...t, steps: t.steps + e }, this._burstTimer !== null && clearTimeout(this._burstTimer), this._burstTimer = setTimeout(() => this._commitBurst(), sh));
@@ -1192,9 +1192,10 @@ let kt = class extends Ce {
   disconnectedCallback() {
     super.disconnectedCallback(), this._feedbackTimer !== null && (clearTimeout(this._feedbackTimer), this._feedbackTimer = null), this._feedbackConfirmed = null, this._feedbackFailed = null, this._backLabel = null, this._commitBurst();
   }
-  /** Notes Back's words while it's shown, so its place can be kept. */
+  /** Sends taps held for another room to theirs (#52), and notes Back's
+   *  words while it's shown, so its place can be kept. */
   willUpdate() {
-    if (!this.hass || !this.entities) return;
+    if (this._burst && this._burst.zone !== this.zone && this._commitBurst(), !this.hass || !this.entities) return;
     const { overrideActive: e, scheduled: t } = co(this.hass, this.entities);
     e && t !== !1 && (this._backLabel = t === !0 ? "Back to schedule" : "End adjustment");
   }
@@ -1213,25 +1214,25 @@ let kt = class extends Ce {
     const e = this._numericState(this.entities?.effectiveLow ?? null), t = this._numericState(this.entities?.effectiveHigh ?? null);
     return !Number.isFinite(e) || !Number.isFinite(t) ? null : { low: Math.round(e * 10) / 10, high: Math.round(t * 10) / 10 };
   }
-  _schedule() {
-    return !this.hass || !this.entities ? { scheduled: null, nextChange: null } : Ol(this.hass, this.entities);
+  _schedule(e = this.entities) {
+    return !this.hass || !e ? { scheduled: null, nextChange: null } : Ol(this.hass, e);
   }
-  /** The schedule's next change (ms), where an adjustment can last until
-   *  it: integration v0.25.0+, a schedule setting the range, and its next
-   *  change ahead. Null otherwise. */
-  _nextChange(e = Date.now()) {
+  /** The schedule's next change (ms) in the room of `entities`, where an
+   *  adjustment can last until it: integration v0.25.0+, a schedule setting
+   *  the range, and its next change ahead. Null otherwise. */
+  _nextChange(e = this.entities, t = Date.now()) {
     if (!this.hass || !Ku(this.hass)) return null;
-    const { scheduled: t, nextChange: n } = this._schedule();
-    return t === !0 && n !== null && n > e ? n : null;
+    const { scheduled: n, nextChange: i } = this._schedule(e);
+    return n === !0 && i !== null && i > t ? i : null;
   }
   /** The length in force: the one picked here, else three hours. A picked
    *  "Until" is for the change it named: once that's passed, or while HA
    *  names another, three hours. */
-  _hours() {
-    const e = this._length ?? Ds;
-    if (e !== "next") return e;
-    const t = this._nextChange();
-    return t !== null && t === this._pickedNext ? "next" : Ds;
+  _hours(e = this.entities) {
+    const t = this._length ?? Ds;
+    if (t !== "next") return t;
+    const n = this._nextChange(e);
+    return n !== null && n === this._pickedNext ? "next" : Ds;
   }
   /** Runs a call, saying what it's doing meanwhile. A failed call is
    *  reported by HA's own toast; the status falls back to what is actually
@@ -1246,31 +1247,37 @@ let kt = class extends Ce {
       this._busy = null;
     }
   }
-  _sendBand(e, t, n) {
-    if (!this.hass || !this.zone) return;
-    const i = this.hass, o = this.zone, s = t === "next" ? this._nextChange() : null, a = s !== null ? new Date(s).toISOString() : void 0, u = s !== null ? void 0 : t === "next" ? Ds : t;
-    this._run(
-      `Adjusting to ${vn(e)}`,
-      () => Ll(i, { zone: o, low: e.low, high: e.high, hours: u, until: a }),
-      n
-    );
+  /** Adjusts `zone`, by default the tab's room, to `band`. For another
+   *  room (taps held when the tab moved on, #52) the tab doesn't wait for
+   *  the call or put a length back: HA's toast tells of a refusal. */
+  _sendBand(e, t, n, i = this.zone, o = this.entities) {
+    if (!this.hass || !i) return;
+    const s = this.hass, a = t === "next" ? this._nextChange(o) : null, u = a !== null ? new Date(a).toISOString() : void 0, h = a !== null ? void 0 : t === "next" ? Ds : t, f = () => Ll(s, { zone: i, low: e.low, high: e.high, hours: h, until: u });
+    if (i !== this.zone) {
+      f().catch(() => {
+      });
+      return;
+    }
+    this._run(`Adjusting to ${vn(e)}`, f, n);
   }
-  /** Sends the taps so far as one change; nothing if they cancel out, unless
-   *  a length was picked meanwhile. */
+  /** Sends the taps so far as one change, to the room they were made in;
+   *  nothing if they cancel out, unless a length was picked meanwhile. */
   _commitBurst() {
     this._burstTimer !== null && clearTimeout(this._burstTimer), this._burstTimer = null;
     const e = this._burst;
-    this._burst = null, e && (e.steps !== 0 ? this._sendBand(Co(e.base, e.steps), this._hours(), e.before) : e.picked && this._retime(this._hours(), e.before));
+    if (this._burst = null, !e) return;
+    const { zone: t, entities: n } = e, i = this._hours(n);
+    e.steps !== 0 ? this._sendBand(Co(e.base, e.steps), i, e.before, t, n) : e.picked && this._retime(i, e.before, t, n);
   }
   _dropBurst() {
     this._burstTimer !== null && clearTimeout(this._burstTimer), this._burstTimer = null, this._burst = null;
   }
   /** Gives a running adjustment a new length, keeping its band: the
    *  integration keeps an adjustment's band in the manual values. */
-  _retime(e, t) {
-    if (this._stateOf(this.entities?.overrideActive ?? null)?.state !== "on") return;
-    const n = this._numericState(this.entities?.manualLow ?? null), i = this._numericState(this.entities?.manualHigh ?? null);
-    !Number.isFinite(n) || !Number.isFinite(i) || this._sendBand({ low: n, high: i }, e, t);
+  _retime(e, t, n = this.zone, i = this.entities) {
+    if (this._stateOf(i?.overrideActive ?? null)?.state !== "on") return;
+    const o = this._numericState(i?.manualLow ?? null), s = this._numericState(i?.manualHigh ?? null);
+    !Number.isFinite(o) || !Number.isFinite(s) || this._sendBand({ low: o, high: s }, e, t, n, i);
   }
   render() {
     if (!this.hass || !this.entities) return S;
@@ -8915,7 +8922,7 @@ Ei = is([
   preview: !1
 });
 console.info(
-  "%c COMFORT-BAND-CARD %c v0.19.4 ",
+  "%c COMFORT-BAND-CARD %c v0.19.5 ",
   "color:white;background:#2196F3;padding:2px 4px;border-radius:3px",
   "color:#000;background:#fff;padding:2px 4px;border-radius:3px"
 );
