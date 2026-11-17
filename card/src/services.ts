@@ -68,8 +68,23 @@ export function overrideUntilSupported(hass: HomeAssistant): boolean {
   return hass.services?.[DOMAIN]?.start_override?.fields?.until !== undefined;
 }
 
-export function cancelOverride(hass: HomeAssistant, args: { zone: string }): Promise<unknown> {
-  return hass.callService(DOMAIN, 'cancel_override', { ...args });
+/** `low` / `high` (integration v0.25.0+) set the manual band as it ends. */
+export function cancelOverride(
+  hass: HomeAssistant,
+  args: { zone: string; low?: number; high?: number },
+): Promise<unknown> {
+  const data: Record<string, unknown> = { zone: args.zone };
+  if (args.low !== undefined) data.low = args.low;
+  if (args.high !== undefined) data.high = args.high;
+  return hass.callService(DOMAIN, 'cancel_override', data);
+}
+
+/** Whether the integration ends an override at a given time and puts the
+ *  band back as one ends (v0.25.0+), which Undo needs (#25): from the fields
+ *  HA says its services take. */
+export function overrideEndsSupported(hass: HomeAssistant): boolean {
+  const cancel = hass.services?.[DOMAIN]?.cancel_override?.fields;
+  return overrideUntilSupported(hass) && cancel?.low !== undefined && cancel?.high !== undefined;
 }
 
 export function setProfile(hass: HomeAssistant, args: { profile: string }): Promise<unknown> {

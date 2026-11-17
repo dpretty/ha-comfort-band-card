@@ -1194,14 +1194,14 @@ describe('comfort-band-now-tab', () => {
           selectors: m[1].split(',').map((s) => s.trim()),
           body: m[2].trim(),
         }));
-        // One rule for the held copy, which only hides it: it's otherwise
-        // Back's own box.
+        // One rule for each held copy (Back's here, Undo's from #25), which
+        // only hides it: it's otherwise the button's own box.
         const forHeld = rules.filter((r) => r.selectors.some((s) => /\.held\b/.test(s)));
-        expect(forHeld.map((r) => r.selectors)).toEqual([['.back.held']]);
-        expect(forHeld[0].body).toMatch(/^visibility:\s*hidden;?$/);
+        expect(forHeld.map((r) => r.selectors)).toEqual([['.back.held'], ['.undo.held']]);
+        for (const rule of forHeld) expect(rule.body).toMatch(/^visibility:\s*hidden;?$/);
         // Nor does its being disabled give it another box.
         const forDisabled = rules.filter((r) =>
-          r.selectors.some((s) => /\.back/.test(s) && /(\[disabled\]|:disabled)/.test(s)),
+          r.selectors.some((s) => /\.(back|undo)/.test(s) && /(\[disabled\]|:disabled)/.test(s)),
         );
         expect(forDisabled).toEqual([]);
       });
