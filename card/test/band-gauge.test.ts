@@ -14,12 +14,13 @@ const drawn = (el: BandGauge) => part(el, '.gauge')!;
 const limits = (el: BandGauge) =>
   Array.from(el.shadowRoot!.querySelectorAll('.limits span')).map((s) => s.textContent!.trim());
 
-/** The gauge's CSS rules, comments stripped, each with the at-rules it's in. */
-function rules(): Array<{ at: string; selectors: string[]; body: string }> {
-  const css = (
+/** The gauge's CSS rules (the shared tokens' too, unless `own`), comments
+ *  stripped, each with the at-rules it's in. */
+function rules(own = false): Array<{ at: string; selectors: string[]; body: string }> {
+  const styles = (
     customElements.get('band-gauge') as unknown as { styles: Array<{ cssText: string }> }
-  ).styles
-    .flat()
+  ).styles.flat();
+  const css = (own ? styles.slice(-1) : styles)
     .map((s) => s.cssText)
     .join('\n')
     .replace(/\/\*[\s\S]*?\*\//g, '');
@@ -82,7 +83,26 @@ describe('band-gauge', () => {
   it('writes the lower limit first, whichever way round they come', async () => {
     const el = await gauge({ low: 23, high: 19.5, room: 21, action: 'idle' });
     expect(limits(el)).toEqual(['19.5°', '23°']);
+    expect(part(el, '.limits .low')!.textContent!.trim()).toBe('19.5°');
+    expect(part(el, '.limits .high')!.textContent!.trim()).toBe('23°');
+    // The band, and the labels' places, from the lower end too.
     expect(parseFloat(part(el, '.band')!.style.left)).toBeCloseTo((4.5 / 13) * 100, 3);
+    expect(parseFloat(part(el, '.band')!.style.width)).toBeCloseTo((3.5 / 13) * 100, 3);
+    expect(parseFloat(drawn(el).style.getPropertyValue('--lo'))).toBeCloseTo((4.5 / 13) * 100, 3);
+    expect(parseFloat(drawn(el).style.getPropertyValue('--hi'))).toBeCloseTo((8 / 13) * 100, 3);
+  });
+
+  // Painted in this order: the band over the track, the marker over both;
+  // the limits under the bar, the low one at the band's start.
+  it('draws track, band and marker in that order, the limits under them', async () => {
+    const el = await gauge({ low: 19, high: 23, room: 21, action: 'idle' });
+    const classes = (sel: string) =>
+      Array.from(part(el, sel)!.children).map((c) => c.className.trim());
+    expect(classes('.gauge')).toEqual(['bar', 'limits']);
+    expect(classes('.bar')).toEqual(['track', 'band', 'marker']);
+    expect(classes('.limits')).toEqual(['low', 'high']);
+    expect(part(el, '.limits .low')!.textContent!.trim()).toBe('19°');
+    expect(part(el, '.limits .high')!.textContent!.trim()).toBe('23°');
   });
 
   // The row stays, so the gauge's height doesn't change.
@@ -196,7 +216,7 @@ describe('band-gauge', () => {
     expect(ruleFor('.marker')).toContain('border: 2.5px solid var(--cb-gauge-color);');
   });
 
-  // #22 review: happy-dom lays nothing out, so the layout's load-bearing
+  // #22 review: the test DOM (jsdom) lays nothing out, so the layout's load-bearing
   // declarations are pinned here; a real browser checked what they draw.
   it('lays the track, band and marker on one centre line in a 24 px bar', () => {
     for (const d of ['position: relative;', 'height: 24px;']) expect(ruleFor('.bar')).toContain(d);
@@ -252,5 +272,89 @@ describe('band-gauge', () => {
   it('prints as shown', () => {
     expect(ruleFor('.bar')).toMatch(/(^|; )print-color-adjust: exact;/);
     expect(ruleFor('.bar')).toContain('-webkit-print-color-adjust: exact;');
+  });
+
+  // #22 review: each rule whole, so a declaration added that overrides
+  // another (an extra transform, a forced-color-adjust, a print setting)
+  // fails here too. A change to the gauge's CSS is a change to this list.
+  it('has exactly these rules', () => {
+    const norm = (body: string) => body.replace(/\( /g, '(').replace(/ \)/g, ')');
+    expect(rules(true).map((r) => ({ ...r, body: norm(r.body) }))).toEqual([
+      {
+        at: '',
+        selectors: [':host'],
+        body: 'display: block; width: 100%; font-size: 11px; container-type: inline-size;',
+      },
+      {
+        at: '',
+        selectors: ['.gauge'],
+        body: '--cb-gauge-color: color-mix(in oklab, var(--cb-gauge-base) 70%, var(--cb-text-primary)); --cb-gauge-base: var(--cb-action-unknown);',
+      },
+      { at: '', selectors: ['.gauge.heating'], body: '--cb-gauge-base: var(--cb-action-heating);' },
+      { at: '', selectors: ['.gauge.cooling'], body: '--cb-gauge-base: var(--cb-action-cooling);' },
+      { at: '', selectors: ['.gauge.idle'], body: '--cb-gauge-base: var(--cb-action-idle);' },
+      {
+        at: '',
+        selectors: ['.bar'],
+        body: 'position: relative; height: 24px; print-color-adjust: exact; -webkit-print-color-adjust: exact;',
+      },
+      {
+        at: '',
+        selectors: ['.track', '.band'],
+        body: 'position: absolute; top: 50%; transform: translateY(-50%);',
+      },
+      {
+        at: '',
+        selectors: ['.track'],
+        body: 'left: 0; right: 0; height: 4px; border-radius: 2px; background: var(--cb-track-bg);',
+      },
+      {
+        at: '',
+        selectors: ['.band'],
+        body: 'height: 6px; border-radius: 3px; background: var(--cb-gauge-color);',
+      },
+      {
+        at: '',
+        selectors: ['.marker'],
+        body: 'position: absolute; top: 50%; width: 9px; height: 9px; box-sizing: border-box; border-radius: 50%; border: 2.5px solid var(--cb-gauge-color); background: var(--ha-card-background, var(--card-background-color, #ffffff)); transform: translate(-50%, -50%);',
+      },
+      {
+        at: '',
+        selectors: ['.limits'],
+        body: 'position: relative; height: 14px; line-height: 14px; color: var(--cb-text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap;',
+      },
+      { at: '', selectors: ['.limits span'], body: 'position: absolute; top: 0;' },
+      {
+        at: '',
+        selectors: ['.limits .low'],
+        body: 'left: min(max(var(--lo), 5ch + 2px), 100% - 5ch - 2px); transform: translateX(-100%); padding-right: 2px;',
+      },
+      {
+        at: '',
+        selectors: ['.limits .high'],
+        body: 'left: max(min(var(--hi), 100% - 5ch - 2px), min(max(var(--lo), 5ch + 2px), 100% - 5ch - 2px)); padding-left: 2px;',
+      },
+      { at: '@container (width < 11ch)', selectors: ['.limits span'], body: 'visibility: hidden;' },
+      {
+        at: '@media (forced-colors: active)',
+        selectors: ['.track', '.band', '.marker'],
+        body: 'forced-color-adjust: none;',
+      },
+      {
+        at: '@media (forced-colors: active)',
+        selectors: ['.track'],
+        body: 'background: GrayText;',
+      },
+      {
+        at: '@media (forced-colors: active)',
+        selectors: ['.band'],
+        body: 'background: CanvasText;',
+      },
+      {
+        at: '@media (forced-colors: active)',
+        selectors: ['.marker'],
+        body: 'border-color: CanvasText; background: Canvas;',
+      },
+    ]);
   });
 });
