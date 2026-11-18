@@ -250,6 +250,7 @@ describe('band-gauge', () => {
   });
 
   it('prints as shown', () => {
-    expect(ruleFor('.bar')).toContain('print-color-adjust: exact;');
+    expect(ruleFor('.bar')).toMatch(/(^|; )print-color-adjust: exact;/);
+    expect(ruleFor('.bar')).toContain('-webkit-print-color-adjust: exact;');
   });
 });
