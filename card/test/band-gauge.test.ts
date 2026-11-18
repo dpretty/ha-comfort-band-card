@@ -14,8 +14,8 @@ const drawn = (el: BandGauge) => part(el, '.gauge')!;
 const limits = (el: BandGauge) =>
   Array.from(el.shadowRoot!.querySelectorAll('.limits span')).map((s) => s.textContent!.trim());
 
-/** The gauge's CSS rules, comments stripped. */
-function rules(): Array<{ selectors: string[]; body: string }> {
+/** The gauge's CSS rules, comments stripped, each with the at-rules it's in. */
+function rules(): Array<{ at: string; selectors: string[]; body: string }> {
   const css = (
     customElements.get('band-gauge') as unknown as { styles: Array<{ cssText: string }> }
   ).styles
@@ -23,15 +23,33 @@ function rules(): Array<{ selectors: string[]; body: string }> {
     .map((s) => s.cssText)
     .join('\n')
     .replace(/\/\*[\s\S]*?\*\//g, '');
-  return [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map((m) => ({
-    selectors: m[1].split(',').map((s) => s.trim()),
-    body: m[2].replace(/\s+/g, ' ').trim(),
-  }));
+  const out: Array<{ at: string; selectors: string[]; body: string }> = [];
+  const open: string[] = [];
+  let text = '';
+  for (const ch of css) {
+    if (ch === '{') {
+      open.push(text.replace(/\s+/g, ' ').trim());
+      text = '';
+    } else if (ch === '}') {
+      const head = open.pop()!;
+      if (!head.startsWith('@')) {
+        out.push({
+          at: open.join(' '),
+          selectors: head.split(',').map((x) => x.trim()),
+          body: text.replace(/\s+/g, ' ').trim(),
+        });
+      }
+      text = '';
+    } else {
+      text += ch;
+    }
+  }
+  return out;
 }
-/** Every declaration for a selector, across the rules naming it. */
-const ruleFor = (sel: string) =>
+/** Every declaration for a selector, across the rules naming it, in `at`. */
+const ruleFor = (sel: string, at = '') =>
   rules()
-    .filter((r) => r.selectors.includes(sel))
+    .filter((r) => r.at === at && r.selectors.includes(sel))
     .map((r) => r.body)
     .join(' ');
 
@@ -41,7 +59,8 @@ describe('band-gauge', () => {
     expect(part(el, '.track')).not.toBeNull();
     expect(part(el, '.band')).not.toBeNull();
     expect(part(el, '.marker')).not.toBeNull();
-    expect(limits(el)).toEqual(['19.0°', '23.0°']);
+    // As the status line writes them: no trailing ".0".
+    expect(limits(el)).toEqual(['19°', '23°']);
     expect(el.shadowRoot!.querySelector('svg')).toBeNull();
   });
 
@@ -62,7 +81,7 @@ describe('band-gauge', () => {
 
   it('writes the lower limit first, whichever way round they come', async () => {
     const el = await gauge({ low: 23, high: 19.5, room: 21, action: 'idle' });
-    expect(limits(el)).toEqual(['19.5°', '23.0°']);
+    expect(limits(el)).toEqual(['19.5°', '23°']);
     expect(parseFloat(part(el, '.band')!.style.left)).toBeCloseTo((4.5 / 13) * 100, 3);
   });
 
@@ -102,11 +121,15 @@ describe('band-gauge', () => {
 
   // #22: under the band's ends, never over each other, kept inside the gauge.
   it('writes the limits under the band’s ends, inside the gauge', () => {
-    expect(ruleFor('.limits .low')).toContain('left: min(max(var(--lo), 5ch), 100% - 5ch);');
-    expect(ruleFor('.limits .low')).toContain('transform: translateX(-100%);');
-    expect(ruleFor('.limits .high')).toContain(
-      'left: max(min(var(--hi), 100% - 5ch), min(max(var(--lo), 5ch), 100% - 5ch));',
+    expect(ruleFor('.limits .low')).toContain(
+      'left: min(max(var(--lo), 5ch + 2px), 100% - 5ch - 2px);',
     );
+    expect(ruleFor('.limits .low')).toContain('transform: translateX(-100%);');
+    expect(ruleFor('.limits .low')).toContain('padding-right: 2px;');
+    expect(ruleFor('.limits .high').replace(/\( /g, '(').replace(/ \)/g, ')')).toContain(
+      'left: max(min(var(--hi), 100% - 5ch - 2px), min(max(var(--lo), 5ch + 2px), 100% - 5ch - 2px));',
+    );
+    expect(ruleFor('.limits .high')).toContain('padding-left: 2px;');
     // Its own height, not only its lines'.
     expect(ruleFor('.limits')).toMatch(/(^|; )height: 14px;/);
     expect(ruleFor('.limits')).toContain('color: var(--cb-text-secondary);');
@@ -168,8 +191,65 @@ describe('band-gauge', () => {
     expect(ruleFor('.gauge')).toContain('--cb-gauge-base: var(--cb-action-unknown);');
     expect(ruleFor('.gauge.heating')).toBe('--cb-gauge-base: var(--cb-action-heating);');
     expect(ruleFor('.gauge.cooling')).toBe('--cb-gauge-base: var(--cb-action-cooling);');
-    expect(ruleFor('.gauge.idle')).toBe('--cb-gauge-base: var(--cb-text-secondary);');
+    expect(ruleFor('.gauge.idle')).toBe('--cb-gauge-base: var(--cb-action-idle);');
     expect(ruleFor('.band')).toContain('background: var(--cb-gauge-color);');
     expect(ruleFor('.marker')).toContain('border: 2.5px solid var(--cb-gauge-color);');
+  });
+
+  // #22 review: happy-dom lays nothing out, so the layout's load-bearing
+  // declarations are pinned here; a real browser checked what they draw.
+  it('lays the track, band and marker on one centre line in a 24 px bar', () => {
+    for (const d of ['position: relative;', 'height: 24px;']) expect(ruleFor('.bar')).toContain(d);
+    for (const sel of ['.track', '.band']) {
+      for (const d of ['position: absolute;', 'top: 50%;', 'transform: translateY(-50%);']) {
+        expect(ruleFor(sel)).toContain(d);
+      }
+    }
+    for (const d of ['left: 0;', 'right: 0;', 'height: 4px;', 'background: var(--cb-track-bg);']) {
+      expect(ruleFor('.track')).toContain(d);
+    }
+    expect(ruleFor('.band')).toContain('height: 6px;');
+    for (const d of [
+      'position: absolute;',
+      'top: 50%;',
+      'transform: translate(-50%, -50%);',
+      'background: var(--ha-card-background, var(--card-background-color, #ffffff));',
+    ]) {
+      expect(ruleFor('.marker')).toContain(d);
+    }
+    for (const d of ['position: relative;', 'line-height: 14px;']) {
+      expect(ruleFor('.limits')).toContain(d);
+    }
+    for (const d of ['position: absolute;', 'top: 0;'])
+      expect(ruleFor('.limits span')).toContain(d);
+  });
+
+  // In HA's own font and the gauge's 11 px, inherited, and measured in it.
+  it('writes the limits in the font it inherits, at 11 px', () => {
+    expect(ruleFor(':host')).toContain('font-size: 11px;');
+    expect(ruleFor(':host')).toContain('container-type: inline-size;');
+    expect(ruleFor('.limits')).not.toContain('font-family');
+    expect(ruleFor('.limits')).not.toContain('font-size');
+  });
+
+  it('writes no limits on a gauge too narrow for both', () => {
+    expect(ruleFor('.limits span', '@container (width < 11ch)')).toBe('visibility: hidden;');
+  });
+
+  // #22 review: backgrounds become Canvas in forced colours; the SVG fills
+  // they replaced weren't.
+  it('draws in the system’s colours in forced colours', () => {
+    const at = '@media (forced-colors: active)';
+    for (const sel of ['.track', '.band', '.marker']) {
+      expect(ruleFor(sel, at)).toContain('forced-color-adjust: none;');
+    }
+    expect(ruleFor('.track', at)).toContain('background: GrayText;');
+    expect(ruleFor('.band', at)).toContain('background: CanvasText;');
+    expect(ruleFor('.marker', at)).toContain('border-color: CanvasText;');
+    expect(ruleFor('.marker', at)).toContain('background: Canvas;');
+  });
+
+  it('prints as shown', () => {
+    expect(ruleFor('.bar')).toContain('print-color-adjust: exact;');
   });
 });

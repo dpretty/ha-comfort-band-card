@@ -3,19 +3,21 @@
  *
  * A fixed-range track (15–28 °C) with a coloured band between `low` and
  * `high`, a round marker at `room`, and the band's two limits written under
- * it (#22). The band and marker take the action's colour: heating, cooling,
- * or at idle a neutral grey (the theme's secondary text colour) that stands
- * out from the track. The colour is mixed 30% towards the theme's text
- * colour, darker on a light card and lighter on a dark one, so a light
- * theme colour (HA's orange heat, say) still meets 3:1 against the card.
+ * it (#22), as the status line writes them ("19.5°", "23°"). The band and
+ * marker take the action's colour (heating, cooling, idle, or not being
+ * controlled), mixed 30% towards the theme's text colour: darker on a light
+ * card and lighter on a dark one, so with Home Assistant's own themes even
+ * its light orange heat, and its idle grey, meet 3:1 against the card.
  *
  * Laid out in HTML rather than a stretched SVG, so the marker stays round at
- * any width.
+ * any width. In forced colours (Windows contrast themes) it's drawn in the
+ * system's colours, and printed as shown.
  */
 
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { tokens, asAction } from './styles.js';
+import { degrees } from './now-status.js';
 
 const RANGE_MIN = 15;
 const RANGE_MAX = 28;
@@ -47,6 +49,9 @@ export class BandGauge extends LitElement {
       :host {
         display: block;
         width: 100%;
+        /* The limits' size; and the gauge's width is what's asked below. */
+        font-size: 11px;
+        container-type: inline-size;
       }
       .gauge {
         /* The action's colour, moved towards the text's: darker on a light
@@ -60,14 +65,17 @@ export class BandGauge extends LitElement {
       .gauge.cooling {
         --cb-gauge-base: var(--cb-action-cooling);
       }
-      /* Idle is the commonest state: a neutral grey that stands out from the
-         track, not the inactive grey, which didn't (#22). */
+      /* The theme's idle grey, mixed as the others are, so it stands out
+         from the track; unmixed, and faded, it didn't (#22). */
       .gauge.idle {
-        --cb-gauge-base: var(--cb-text-secondary);
+        --cb-gauge-base: var(--cb-action-idle);
       }
       .bar {
         position: relative;
         height: 24px;
+        /* Printed as shown, not without its backgrounds. */
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
       }
       .track,
       .band {
@@ -101,15 +109,14 @@ export class BandGauge extends LitElement {
       }
       /* The band's limits, under its ends: the low one ending at the band's
          start, the high one starting at its end, so they never overlap, and
-         kept within the gauge (each is under 5ch). The row is there, empty,
-         when the band can't be read, so the gauge's height doesn't change. */
+         kept within the gauge (each is at most 5ch, plus its 2px). The row
+         is there, empty, when the band can't be read, so the gauge's height
+         doesn't change. In HA's own font, inherited. */
       .limits {
         position: relative;
         height: 14px;
-        font-size: 11px;
         line-height: 14px;
         color: var(--cb-text-secondary);
-        font-family: var(--paper-font-body1_-_font-family, sans-serif);
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
       }
@@ -118,13 +125,41 @@ export class BandGauge extends LitElement {
         top: 0;
       }
       .limits .low {
-        left: min(max(var(--lo), 5ch), 100% - 5ch);
+        left: min(max(var(--lo), 5ch + 2px), 100% - 5ch - 2px);
         transform: translateX(-100%);
         padding-right: 2px;
       }
       .limits .high {
-        left: max(min(var(--hi), 100% - 5ch), min(max(var(--lo), 5ch), 100% - 5ch));
+        left: max(
+          min(var(--hi), 100% - 5ch - 2px),
+          min(max(var(--lo), 5ch + 2px), 100% - 5ch - 2px)
+        );
         padding-left: 2px;
+      }
+      /* Too narrow for both: none, rather than either outside the gauge. */
+      @container (width < 11ch) {
+        .limits span {
+          visibility: hidden;
+        }
+      }
+      /* Windows contrast themes make backgrounds the Canvas colour, which
+         would lose the track and band: draw them in the system's colours. */
+      @media (forced-colors: active) {
+        .track,
+        .band,
+        .marker {
+          forced-color-adjust: none;
+        }
+        .track {
+          background: GrayText;
+        }
+        .band {
+          background: CanvasText;
+        }
+        .marker {
+          border-color: CanvasText;
+          background: Canvas;
+        }
       }
     `,
   ];
@@ -165,8 +200,8 @@ export class BandGauge extends LitElement {
         </div>
         <div class="limits">
           ${band
-            ? html`<span class="low">${fmt(Math.min(this.low, this.high))}</span>
-                <span class="high">${fmt(Math.max(this.low, this.high))}</span>`
+            ? html`<span class="low">${degrees(Math.min(this.low, this.high))}°</span>
+                <span class="high">${degrees(Math.max(this.low, this.high))}°</span>`
             : nothing}
         </div>
       </div>
