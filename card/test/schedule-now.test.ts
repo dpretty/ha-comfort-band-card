@@ -366,6 +366,22 @@ describe('nextChangeLine', () => {
     expect(next(change(at(21), { low: 18, high: Number.NaN, scheduled: true }))).toBeNull();
   });
 
+  // The list below is the room's own, not the one in force, then.
+  it('says it’s the shared schedule’s while the room follows one', () => {
+    expect(
+      next({
+        'select.gym_schedule_assignment': {
+          state: 'Bedrooms',
+          attributes: { schedule_id: 'abc', options: ['Own schedule', 'Bedrooms'] },
+        },
+      }),
+    ).toBe('The shared schedule’s next change: 21:00 → 18–22°');
+    // Where that can't be told, as the schedule's.
+    expect(next({ 'select.gym_schedule_assignment': 'unavailable' })).toBe(
+      'The schedule’s next change: 21:00 → 18–22°',
+    );
+  });
+
   it('says its time in HA’s time zone', () => {
     const hass = makeHass(change('2026-10-23T08:00:00Z', { low: 18, high: 22, scheduled: true }));
     hass.config = { time_zone: 'Pacific/Auckland' } as HomeAssistant['config'];

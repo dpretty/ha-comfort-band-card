@@ -128,8 +128,10 @@ export function nowLine(hass: HomeAssistant, entities: ZoneEntities, now: number
  * "The schedule’s next change: 9 pm → 18–22°": the schedule's own, said as
  * the schedule's, since the range in force can differ from then (an
  * adjustment or a peak can outlast it, and the band ramp eases into it)
- * (#33). Null where no schedule sets the range, or its next change, ahead,
- * or its range can't be read.
+ * (#33). It's the schedule in force: "The shared schedule’s" while the
+ * room follows one, as the list below isn't it then. Null where no
+ * schedule sets the range, or its next change, ahead, or its range can't
+ * be read.
  */
 export function nextChangeLine(
   hass: HomeAssistant,
@@ -145,5 +147,6 @@ export function nextChangeLine(
   if (typeof low !== 'number' || typeof high !== 'number') return null;
   if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
   const when = formatWhen(r.nextChange, now, hass, hass.config?.time_zone);
-  return `The schedule’s next change: ${when} → ${bandText({ low, high })}`;
+  const whose = ownScheduleInForce(hass, entities) === false ? 'shared schedule' : 'schedule';
+  return `The ${whose}’s next change: ${when} → ${bandText({ low, high })}`;
 }
