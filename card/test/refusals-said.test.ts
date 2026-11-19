@@ -648,13 +648,31 @@ describe('comfort-band-modal: what it says to screen readers (#53)', () => {
   // The exact range sends its call as the pointer comes down or is let go,
   // before the click of the same press: that click mustn't put the words
   // of its refusal away.
-  it('keeps the words through a click', async () => {
+  // Only a pointer coming down or a key: any later event of the same press
+  // (the pointer let go, a key coming up, the click) can come after the
+  // exact range has sent its call, and would put its refusal's words away.
+  it('puts the words away at no other event of a press', async () => {
     const el = await openModal();
-    tab(el, 'comfort-band-now-tab').announce!('Couldn’t set the range. Try again.');
-    await el.updateComplete;
-    tabButton(el, 'now').click();
-    await el.updateComplete;
-    expect(said(el)).toBe('Couldn’t set the range. Try again.');
+    const announce = tab(el, 'comfort-band-now-tab').announce!;
+    const target = tabButton(el, 'now');
+    for (const type of [
+      'pointerup',
+      'pointercancel',
+      'mousedown',
+      'mouseup',
+      'touchstart',
+      'touchend',
+      'keyup',
+      'click',
+      'focusin',
+      'focusout',
+    ]) {
+      announce(`Couldn’t set the range. Try again. (${type})`);
+      await el.updateComplete;
+      target.dispatchEvent(new Event(type, { bubbles: true, composed: true }));
+      await el.updateComplete;
+      expect(said(el), type).toBe(`Couldn’t set the range. Try again. (${type})`);
+    }
   });
 
   // The press's own handler can hear HA's answer before the press is done.
@@ -808,15 +826,44 @@ describe('a refusal said from the dialog, end to end (#53)', () => {
       'comfort-band-exact-range',
     ) as ComfortBandExactRange;
     const slider = exact.shadowRoot!.querySelector('dual-handle-slider')!;
-    for (const low of [20, 20.5]) {
-      slider.dispatchEvent(pointerDown());
-      refuse();
-      slider.dispatchEvent(new CustomEvent('change', { detail: { low, high: 23 }, bubbles: true }));
-      await flush(exact);
-      await flush(el);
-      slider.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
-      await flush(el);
-      expect(said(el), String(low)).toBe('Couldn’t set the range. Try again.');
+    // Each press's events in the order a browser sends them, with the
+    // slider's call where it makes it ("change").
+    const presses: Record<string, string[]> = {
+      'a tap on the track': ['pointerdown', 'change', 'mousedown', 'pointerup', 'mouseup', 'click'],
+      'a dragged handle': ['pointerdown', 'mousedown', 'pointerup', 'change', 'mouseup', 'click'],
+      'a touch on the track': [
+        'pointerdown',
+        'change',
+        'touchstart',
+        'pointerup',
+        'touchend',
+        'mousedown',
+        'mouseup',
+        'click',
+      ],
+      'a key': ['keydown', 'change', 'keyup'],
+    };
+    let low = 20;
+    for (const [press, events] of Object.entries(presses)) {
+      for (const type of events) {
+        if (type === 'change') {
+          refuse();
+          low += 0.5;
+          slider.dispatchEvent(
+            new CustomEvent('change', { detail: { low, high: 23 }, bubbles: true }),
+          );
+          await flush(exact);
+          await flush(el);
+        } else {
+          slider.dispatchEvent(
+            type === 'pointerdown'
+              ? pointerDown()
+              : new Event(type, { bubbles: true, composed: true }),
+          );
+          await flush(el);
+        }
+      }
+      expect(said(el), press).toBe('Couldn’t set the range. Try again.');
     }
   });
 });

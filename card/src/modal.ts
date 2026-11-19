@@ -182,7 +182,10 @@ export class ComfortBandModal extends LitElement {
 
   /** Says a refused call to screen readers, while the dialog is open on the
    *  page. Closed, or with the card off the page, the dialog makes nothing
-   *  inert, so HA's toast is heard, and nothing here is. Of refusals
+   *  inert, so HA's toast is heard, and nothing here is. Not covered: a
+   *  card moved in the page with the dialog open (as HA's masonry view can,
+   *  when its columns change) leaves the dialog open but not modal, as on
+   *  main; then the toast is heard, and these words too. Of refusals
    *  answered at the same moment, only the last one's words are said. */
   private _announce = (words: string): void => {
     if (!this._isOpen || !this.isConnected) return;
