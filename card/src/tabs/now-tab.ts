@@ -95,7 +95,8 @@ const REFUSED = {
     `Couldn’t change how long the adjustment${room ? ` in ${room}` : ''} lasts. Try again.`,
   back: 'Couldn’t go back to the schedule. Try again.',
   end: 'Couldn’t end the adjustment. Try again.',
-  undo: 'Couldn’t undo the change. Try again.',
+  // Undo isn't offered again after a refusal: nothing to try again.
+  undo: 'Couldn’t undo the change.',
   feedback: (text: string) => `${text}: not sent. Try again.`,
 };
 
@@ -723,8 +724,9 @@ export class ComfortBandNowTab extends LitElement {
   /** Puts back what the last change made here replaced: the adjustment
    *  then in force with its own end, or none, with the manual band it had
    *  (#25). An end that has (nearly) passed meanwhile isn't put back: the
-   *  adjustment is ended, as that one would have ended. A refusal is HA's
-   *  to report; nothing else is tried. */
+   *  adjustment is ended, as that one would have ended. A refusal is told
+   *  by HA's toast, and said to screen readers (#53); nothing else is
+   *  tried. */
   private _onUndo = () => {
     const undo = this._undo;
     // No call can be on its way: each change drops Undo before it's sent.
@@ -777,8 +779,8 @@ export class ComfortBandNowTab extends LitElement {
     } catch {
       // Service rejected (e.g. integration older than v0.11.0): HA's toast
       // says so, and the pill says "Not sent" rather than "Thanks!". Each
-      // refusal is said to screen readers, even one a later tap has taken
-      // the pill from (#53).
+      // refusal is handed on for screen readers, even one a later tap has
+      // taken the pill from (#53).
       ok = false;
       const text = FEEDBACK_PILLS.find((pill) => pill.label === label)?.text ?? label;
       this.announce?.(REFUSED.feedback(text));

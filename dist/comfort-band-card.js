@@ -1412,7 +1412,8 @@ const Ea = [
   retime: (e) => `Couldn’t change how long the adjustment${e ? ` in ${e}` : ""} lasts. Try again.`,
   back: "Couldn’t go back to the schedule. Try again.",
   end: "Couldn’t end the adjustment. Try again.",
-  undo: "Couldn’t undo the change. Try again.",
+  // Undo isn't offered again after a refusal: nothing to try again.
+  undo: "Couldn’t undo the change.",
   feedback: (e) => `${e}: not sent. Try again.`
 }, _h = 1500, vh = 1500, Ns = 3;
 let pt = class extends Te {
@@ -8679,10 +8680,10 @@ const Hn = [
 let Lt = class extends Te {
   constructor() {
     super(...arguments), this.zone = "", this.zoneName = "", this._activeTab = "now", this._isOpen = !1, this._refusal = null, this._refusals = 0, this._announce = (e) => {
-      this._isOpen && (this._refusal = { words: e, n: ++this._refusals });
+      !this._isOpen || !this.isConnected || (this._refusal = { words: e, n: ++this._refusals });
     }, this._quiet = () => {
       this._refusal = null;
-    }, this._quietOnTap = { handleEvent: this._quiet, capture: !0 }, this._onClose = () => {
+    }, this._quietOnPress = { handleEvent: this._quiet, capture: !0 }, this._onClose = () => {
       this._isOpen = !1, this._refusal = null, this.dispatchEvent(
         new CustomEvent("comfort-band-modal-close", { bubbles: !0, composed: !0 })
       );
@@ -8710,7 +8711,7 @@ let Lt = class extends Te {
       }
       e.preventDefault();
       const i = Hn[n].id;
-      this._quiet(), this._activeTab = i, this.updateComplete.then(() => {
+      this._activeTab = i, this.updateComplete.then(() => {
         this.renderRoot.querySelector(`#cb-tab-${i}`)?.focus();
       });
     };
@@ -8726,11 +8727,18 @@ let Lt = class extends Te {
   selectTab(e) {
     this._activeTab = e;
   }
+  disconnectedCallback() {
+    super.disconnectedCallback(), this._refusal = null;
+  }
   render() {
     if (!this._isOpen) return S;
     const e = this.zoneName || this.zone || "Comfort Band";
     return v`
-      <dialog @close=${this._onClose} @click=${this._quietOnTap}>
+      <dialog
+        @close=${this._onClose}
+        @pointerdown=${this._quietOnPress}
+        @keydown=${this._quietOnPress}
+      >
         <div class="frame">
           <header>
             <h2>${e}</h2>

@@ -174,23 +174,33 @@ export class ComfortBandModal extends LitElement {
     this._activeTab = tab;
   }
 
-  /** Says a refused call to screen readers, while the dialog is open. Once
-   *  it's closed, HA's toast is heard, and nothing here is. */
+  public override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    // HA's toast is heard meanwhile: there's nothing to say on its return.
+    this._refusal = null;
+  }
+
+  /** Says a refused call to screen readers, while the dialog is open on the
+   *  page. Closed, or with the card off the page, the dialog makes nothing
+   *  inert, so HA's toast is heard, and nothing here is. Of refusals
+   *  answered at the same moment, only the last one's words are said. */
   private _announce = (words: string): void => {
-    if (!this._isOpen) return;
+    if (!this._isOpen || !this.isConnected) return;
     this._refusal = { words, n: ++this._refusals };
   };
 
-  /** The next tap, or a move to another tab, puts the words away: they're
-   *  about what was just tried. Clearing isn't said. */
+  /** The next press puts the words away: they're about what was just
+   *  tried. Clearing isn't said. */
   private _quiet = (): void => {
     this._refusal = null;
   };
 
-  /** A tap anywhere in the dialog, heard as it comes down (the capture
-   *  phase), so before the tap's own handler: a refusal of the call it
-   *  makes is kept, however soon HA answers. */
-  private _quietOnTap = { handleEvent: this._quiet, capture: true };
+  /** A press anywhere in the dialog: a pointer coming down, or a key. Heard
+   *  in the capture phase, so before the control's own handler, and not at
+   *  the click: the exact range sends its call as the pointer comes down
+   *  or is let go, before the click of the same press. So a refusal of the
+   *  call a press makes is kept, however soon HA answers. */
+  private _quietOnPress = { handleEvent: this._quiet, capture: true };
 
   private _onClose = () => {
     this._isOpen = false;
@@ -236,7 +246,6 @@ export class ComfortBandModal extends LitElement {
     }
     e.preventDefault();
     const nextTab = TABS[nextIdx].id;
-    this._quiet();
     this._activeTab = nextTab;
     // Roving-tabindex focus management: after Lit re-renders with the
     // new active tab (which flips tabindex on the buttons), grab the
@@ -253,7 +262,11 @@ export class ComfortBandModal extends LitElement {
     if (!this._isOpen) return nothing;
     const title = this.zoneName || this.zone || 'Comfort Band';
     return html`
-      <dialog @close=${this._onClose} @click=${this._quietOnTap}>
+      <dialog
+        @close=${this._onClose}
+        @pointerdown=${this._quietOnPress}
+        @keydown=${this._quietOnPress}
+      >
         <div class="frame">
           <header>
             <h2>${title}</h2>

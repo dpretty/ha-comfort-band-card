@@ -158,6 +158,9 @@ async function nowTab(
 }
 
 const root = (el: ComfortBandNowTab) => el.shadowRoot!;
+/** A pointer coming down, as a tap or a click starts. */
+const pointerDown = () =>
+  new (window.PointerEvent ?? MouseEvent)('pointerdown', { bubbles: true, composed: true });
 const press = (el: ComfortBandNowTab, selector: string) =>
   root(el).querySelector<HTMLElement>(selector)!.click();
 
@@ -255,7 +258,8 @@ describe('Now tab: a refusal said to screen readers (#53)', () => {
     expect(announce.mock.calls).toEqual([['Couldn’t end the adjustment. Try again.']]);
   });
 
-  it('says a refused Undo', async () => {
+  // Undo isn't offered again after a refusal (#25): no "Try again".
+  it('says a refused Undo, without asking to try again', async () => {
     const announce = vi.fn();
     const { hass, service, refuse, deliver } = setup();
     const el = await nowTab(hass, announce);
@@ -266,7 +270,9 @@ describe('Now tab: a refusal said to screen readers (#53)', () => {
     press(el, '.undo');
     await flush(el);
     expect(service.mock.calls.map((c) => c[1])).toEqual(['start_override', 'cancel_override']);
-    expect(announce.mock.calls).toEqual([['Couldn’t undo the change. Try again.']]);
+    expect(announce.mock.calls).toEqual([['Couldn’t undo the change.']]);
+    await flush(el);
+    expect(root(el).querySelector('.undo')!.getAttribute('aria-disabled')).toBe('true');
   });
 
   it('says a refused feedback tap, by the pill’s words', async () => {
@@ -355,6 +361,18 @@ describe('Now tab: a refusal said to screen readers (#53)', () => {
     expect(announce.mock.calls).toEqual([['Couldn’t adjust the room. Try again.']]);
   });
 
+  it('says a refused feedback tap answered after the tab was taken off the page', async () => {
+    const announce = vi.fn();
+    const { hass, hold } = setup();
+    const el = await nowTab(hass, announce);
+    const held = hold();
+    press(el, '[data-feedback="too_cold"]');
+    el.remove();
+    held.reject();
+    await flush(el);
+    expect(announce.mock.calls).toEqual([['Too cool: not sent. Try again.']]);
+  });
+
   it('lets a refusal go quietly where no dialog hands it `announce`', async () => {
     const { hass, refuse } = setup();
     const el = await nowTab(hass);
@@ -387,6 +405,19 @@ describe('Now tab: a refusal for taps held when the card moved on (#52, #53)', (
     held.reject();
     await flush(el);
     expect(announce.mock.calls).toEqual([['Couldn’t adjust Home gym. Try again.']]);
+  });
+
+  it('names it where HA answers after the tab was taken off the page', async () => {
+    const announce = vi.fn();
+    const { hass, hold } = setup();
+    const el = await nowTab(hass, announce);
+    press(el, '.steps .warmer');
+    const held = hold();
+    await moveToStudy(el);
+    el.remove();
+    held.reject();
+    await flush(el);
+    expect(announce.mock.calls).toEqual([['Couldn’t adjust gym. Try again.']]);
   });
 
   it('names it by its device, where it has no area', async () => {
@@ -479,6 +510,22 @@ describe('exact range: a refusal said to screen readers (#53)', () => {
     expect(announce).toHaveBeenCalledTimes(2);
   });
 
+  // Its tab swapped out before HA answers, the dialog may still be open.
+  it('says a refusal answered after it was taken off the page', async () => {
+    const announce = vi.fn();
+    const { hass, hold } = setup();
+    const el = await exactRange(hass, announce);
+    const held = hold();
+    el.shadowRoot!.querySelector('dual-handle-slider')!.dispatchEvent(
+      new CustomEvent('change', { detail: { low: 20, high: 23 }, bubbles: true }),
+    );
+    await flush(el);
+    el.remove();
+    held.reject();
+    await flush(el);
+    expect(announce.mock.calls).toEqual([['Couldn’t set the range. Try again.']]);
+  });
+
   it('lets a refusal go quietly where no dialog hands it `announce`', async () => {
     const { hass, service, refuse } = setup();
     const el = await exactRange(hass);
@@ -517,8 +564,22 @@ describe('comfort-band-modal: what it says to screen readers (#53)', () => {
     const alert = region(el)!;
     expect(alert.getAttribute('role')).toBe('alert');
     // Inside the modal dialog: outside it, it would be inert, as HA's toast is.
-    expect(alert.closest('dialog')).not.toBeNull();
+    // Last in it, after the tabs: where reading the dialog through ends.
+    expect(alert.parentElement!.tagName).toBe('DIALOG');
+    expect(alert.parentElement!.lastElementChild).toBe(alert);
     expect(said(el)).toBe('');
+  });
+
+  // A region that's there, exposed, before its words are: one that comes
+  // with them, or is hidden until then, isn't reliably heard.
+  it('is there and exposed before a refusal, and the same region after', async () => {
+    const el = await openModal();
+    const before = region(el)!;
+    expect(before.getAttributeNames().sort()).toEqual(['class', 'role']);
+    tab(el, 'comfort-band-now-tab').announce!('Couldn’t adjust the room. Try again.');
+    await el.updateComplete;
+    expect(region(el)).toBe(before);
+    expect(before.getAttributeNames().sort()).toEqual(['class', 'role']);
   });
 
   it('says what the Now tab hands it', async () => {
@@ -555,26 +616,68 @@ describe('comfort-band-modal: what it says to screen readers (#53)', () => {
     expect(said(el)).toBe('Too cool: not sent. Try again.');
   });
 
-  it('puts the words away at the next tap in the dialog', async () => {
+  it('puts the words away at the next press anywhere in the dialog', async () => {
+    const { hass } = setup({ adjusted: true });
+    const el = await openModal(hass);
+    const nowTabEl = tab<ComfortBandNowTab>(el, 'comfort-band-now-tab');
+    await nowTabEl.updateComplete;
+    const inNow = (sel: string) => nowTabEl.shadowRoot!.querySelector(sel)!;
+    const targets: Array<[string, () => Element]> = [
+      ['a tab', () => tabButton(el, 'now')],
+      ['Warmer', () => inNow('.steps .warmer')],
+      ['a pill', () => inNow('[data-feedback="too_cold"]')],
+      ['Back', () => inNow('.back')],
+      ['Close', () => el.shadowRoot!.querySelector('.close')!],
+    ];
+    for (const [what, target] of targets) {
+      nowTabEl.announce!('Couldn’t adjust the room. Try again.');
+      await el.updateComplete;
+      target().dispatchEvent(pointerDown());
+      await el.updateComplete;
+      expect(said(el), what).toBe('');
+    }
+    nowTabEl.announce!('Couldn’t adjust the room. Try again.');
+    await el.updateComplete;
+    inNow('.steps .warmer').dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(said(el), 'a key').toBe('');
+  });
+
+  // The exact range sends its call as the pointer comes down or is let go,
+  // before the click of the same press: that click mustn't put the words
+  // of its refusal away.
+  it('keeps the words through a click', async () => {
     const el = await openModal();
-    tab(el, 'comfort-band-now-tab').announce!('Couldn’t adjust the room. Try again.');
+    tab(el, 'comfort-band-now-tab').announce!('Couldn’t set the range. Try again.');
     await el.updateComplete;
     tabButton(el, 'now').click();
     await el.updateComplete;
-    expect(said(el)).toBe('');
+    expect(said(el)).toBe('Couldn’t set the range. Try again.');
   });
 
-  // The tap's own handler can hear HA's answer before the tap is done.
-  it('keeps words handed on by the tap’s own handler', async () => {
+  // The press's own handler can hear HA's answer before the press is done.
+  it('keeps words handed on by the press’s own handler', async () => {
     const el = await openModal();
     const announce = tab(el, 'comfort-band-now-tab').announce!;
-    announce('Couldn’t go back to the schedule. Try again.');
-    await el.updateComplete;
     const now = tabButton(el, 'now');
-    now.addEventListener('click', () => announce('Couldn’t end the adjustment. Try again.'));
-    now.click();
-    await el.updateComplete;
-    expect(said(el)).toBe('Couldn’t end the adjustment. Try again.');
+    for (const [type, make] of [
+      ['pointerdown', pointerDown],
+      [
+        'keydown',
+        () => new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }),
+      ],
+    ] as const) {
+      announce('Couldn’t go back to the schedule. Try again.');
+      await el.updateComplete;
+      const own = () => announce(`Couldn’t end the adjustment. Try again. (${type})`);
+      now.addEventListener(type, own);
+      now.dispatchEvent(make());
+      now.removeEventListener(type, own);
+      await el.updateComplete;
+      expect(said(el)).toBe(`Couldn’t end the adjustment. Try again. (${type})`);
+    }
   });
 
   it('puts the words away on a move to another tab from the keyboard', async () => {
@@ -601,6 +704,19 @@ describe('comfort-band-modal: what it says to screen readers (#53)', () => {
     announce('Couldn’t undo the change. Try again.');
     await el.updateComplete;
     el.open();
+    await el.updateComplete;
+    expect(said(el)).toBe('');
+  });
+
+  // Off the page the dialog makes nothing inert either.
+  it('says nothing handed on while the card is off the page, nor keeps words for its return', async () => {
+    const el = await openModal();
+    const announce = tab(el, 'comfort-band-now-tab').announce!;
+    announce('Couldn’t adjust the room. Try again.');
+    await el.updateComplete;
+    el.remove();
+    announce('Couldn’t undo the change.');
+    document.body.appendChild(el);
     await el.updateComplete;
     expect(said(el)).toBe('');
   });
@@ -679,7 +795,9 @@ describe('a refusal said from the dialog, end to end (#53)', () => {
     expect(said(el)).toBe('Couldn’t adjust the room. Try again.');
   });
 
-  it('says a refused exact range', async () => {
+  // A tap on the track sends at once as the pointer comes down, a dragged
+  // handle as it's let go: either way before the press's click.
+  it('says a refused exact range, through the click of the press that set it', async () => {
     const { hass, refuse } = setup();
     const el = await openModal(hass);
     el.selectTab('advanced');
@@ -689,12 +807,16 @@ describe('a refusal said from the dialog, end to end (#53)', () => {
     const exact = advanced.shadowRoot!.querySelector(
       'comfort-band-exact-range',
     ) as ComfortBandExactRange;
-    refuse();
-    exact
-      .shadowRoot!.querySelector('dual-handle-slider')!
-      .dispatchEvent(new CustomEvent('change', { detail: { low: 20, high: 23 }, bubbles: true }));
-    await flush(exact);
-    await flush(el);
-    expect(said(el)).toBe('Couldn’t set the range. Try again.');
+    const slider = exact.shadowRoot!.querySelector('dual-handle-slider')!;
+    for (const low of [20, 20.5]) {
+      slider.dispatchEvent(pointerDown());
+      refuse();
+      slider.dispatchEvent(new CustomEvent('change', { detail: { low, high: 23 }, bubbles: true }));
+      await flush(exact);
+      await flush(el);
+      slider.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+      await flush(el);
+      expect(said(el), String(low)).toBe('Couldn’t set the range. Try again.');
+    }
   });
 });
