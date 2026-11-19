@@ -6,10 +6,18 @@
  *
  * Tabs: Now and Schedule for everyone; Advanced (settings, profiles and
  * history, #30) for whoever sets the house up.
+ *
+ * A change HA refuses is told by HA's own toast, which paints above the
+ * dialog (HA 2026.9+) but is outside it, so while the dialog is open screen
+ * readers don't hear it (#53). Where a tab leaves a refusal to that toast,
+ * it hands the dialog plain words through `announce`, said to screen readers
+ * from inside the dialog: nothing on screen changes. A tab's calls can be
+ * answered after it has been swapped out, so the words are the dialog's.
  */
 
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, query, state } from 'lit/decorators.js';
+import { keyed } from 'lit/directives/keyed.js';
 import './tabs/now-tab.js';
 import './tabs/schedule-tab.js';
 import './tabs/advanced-tab.js';
@@ -34,6 +42,10 @@ export class ComfortBandModal extends LitElement {
 
   @state() private _activeTab: TabId = 'now';
   @state() private _isOpen = false;
+  /** The last refusal said to screen readers, numbered so that the same
+   *  words again are a new node, and so said again (#53). */
+  @state() private _refusal: { words: string; n: number } | null = null;
+  private _refusals = 0;
 
   @query('dialog') private _dialog?: HTMLDialogElement;
 
@@ -126,6 +138,17 @@ export class ComfortBandModal extends LitElement {
         overflow-y: auto;
         flex: 1;
       }
+      /* Heard, not seen: nothing on screen changes or moves (#53). */
+      .refusal {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
       .placeholder {
         padding: var(--cb-gap-lg);
         color: var(--cb-text-secondary);
@@ -151,8 +174,27 @@ export class ComfortBandModal extends LitElement {
     this._activeTab = tab;
   }
 
+  /** Says a refused call to screen readers, while the dialog is open. Once
+   *  it's closed, HA's toast is heard, and nothing here is. */
+  private _announce = (words: string): void => {
+    if (!this._isOpen) return;
+    this._refusal = { words, n: ++this._refusals };
+  };
+
+  /** The next tap, or a move to another tab, puts the words away: they're
+   *  about what was just tried. Clearing isn't said. */
+  private _quiet = (): void => {
+    this._refusal = null;
+  };
+
+  /** A tap anywhere in the dialog, heard as it comes down (the capture
+   *  phase), so before the tap's own handler: a refusal of the call it
+   *  makes is kept, however soon HA answers. */
+  private _quietOnTap = { handleEvent: this._quiet, capture: true };
+
   private _onClose = () => {
     this._isOpen = false;
+    this._refusal = null;
     this.dispatchEvent(
       new CustomEvent('comfort-band-modal-close', { bubbles: true, composed: true }),
     );
@@ -194,6 +236,7 @@ export class ComfortBandModal extends LitElement {
     }
     e.preventDefault();
     const nextTab = TABS[nextIdx].id;
+    this._quiet();
     this._activeTab = nextTab;
     // Roving-tabindex focus management: after Lit re-renders with the
     // new active tab (which flips tabindex on the buttons), grab the
@@ -210,7 +253,7 @@ export class ComfortBandModal extends LitElement {
     if (!this._isOpen) return nothing;
     const title = this.zoneName || this.zone || 'Comfort Band';
     return html`
-      <dialog @close=${this._onClose}>
+      <dialog @close=${this._onClose} @click=${this._quietOnTap}>
         <div class="frame">
           <header>
             <h2>${title}</h2>
@@ -241,6 +284,11 @@ export class ComfortBandModal extends LitElement {
             ${this._renderTab()}
           </div>
         </div>
+        <div class="refusal" role="alert">
+          ${this._refusal
+            ? keyed(this._refusal.n, html`<span>${this._refusal.words}</span>`)
+            : nothing}
+        </div>
       </dialog>
     `;
   }
@@ -252,6 +300,7 @@ export class ComfortBandModal extends LitElement {
           .hass=${this.hass}
           .zone=${this.zone}
           .entities=${this.entities}
+          .announce=${this._announce}
         ></comfort-band-now-tab>`;
       case 'schedule':
         return html`<comfort-band-schedule-tab
@@ -264,6 +313,7 @@ export class ComfortBandModal extends LitElement {
           .hass=${this.hass}
           .zone=${this.zone}
           .entities=${this.entities}
+          .announce=${this._announce}
         ></comfort-band-advanced-tab>`;
     }
   }

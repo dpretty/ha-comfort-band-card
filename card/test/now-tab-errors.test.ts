@@ -6,7 +6,8 @@ import type { HassEntity, HomeAssistant } from '../src/types.js';
 import { mount, stubConnection, teardown } from './_fixture.js';
 
 // #27: a change HA refuses is told by HA's own toast; the tab puts back a
-// length picked for it, and marks a refused feedback tap "Not sent".
+// length picked for it, and marks a refused feedback tap "Not sent". What
+// screen readers hear, from the dialog, is in refusals-said.test.ts (#53).
 
 afterEach(() => {
   teardown();
@@ -365,7 +366,8 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     expect(lengths(el).map((l) => l.checked)).toEqual([false, true, false]);
   });
 
-  // HA's toast is the message; the status goes back to what's in force.
+  // HA's toast is the message on screen; the status goes back to what's in
+  // force. Screen readers hear it from the dialog (#53).
   it('adds no message of its own', async () => {
     const { hass, refuse } = setup({ adjusted: true });
     const el = await nowTab(hass);
@@ -388,8 +390,8 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
 });
 
 describe('comfort-band-now-tab when HA refuses feedback', () => {
-  // HA's own toast says it too, to the eye: screen readers don't hear a
-  // toast outside the open dialog, here as on main.
+  // HA's own toast says it too, to the eye; screen readers, which don't
+  // hear a toast outside the open dialog, hear it from the dialog (#53).
   it('marks the pill “Not sent”, leaving HA’s toast to say it as well, then puts it back', async () => {
     const seen = haptics();
     const { hass, callService, refuse } = setup();

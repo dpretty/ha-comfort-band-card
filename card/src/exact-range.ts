@@ -7,7 +7,9 @@
  * `comfort_band.start_override` with the range for three hours, the Now
  * tab's default length. With no schedule, the range
  * then stays until it's changed again. Calls go one after another, so they
- * land in the order made. A failed call is reported by HA's own toast.
+ * land in the order made. A failed call is reported by HA's own toast, and,
+ * as screen readers don't hear that while the dialog is open, said to them
+ * through the dialog's `announce` (#53).
  */
 
 import { LitElement, html, css, nothing } from 'lit';
@@ -25,12 +27,17 @@ const SLIDER_MAX = 26;
 const SLIDER_STEP = 0.5;
 /** How long a range set here lasts: the Now tab's default length. */
 export const EXACT_RANGE_HOURS = 3;
+/** What a screen reader hears when HA refuses a range set here (#53). */
+export const EXACT_RANGE_REFUSED = 'Couldn’t set the range. Try again.';
 
 @customElement('comfort-band-exact-range')
 export class ComfortBandExactRange extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
   @property({ type: String }) public zone = '';
   @property({ attribute: false }) public entities?: ZoneEntities;
+  /** Says a refusal to screen readers: the dialog's (#53). Kept when the
+   *  tab is swapped out, so a call answered after that is still said. */
+  @property({ attribute: false }) public announce?: (words: string) => void;
 
   @state() private _pendingLow: number | null = null;
   @state() private _pendingHigh: number | null = null;
@@ -77,8 +84,10 @@ export class ComfortBandExactRange extends LitElement {
       high: event.detail.high,
       hours: EXACT_RANGE_HOURS,
     };
-    // HA's own toast says a call failed.
-    this._chain = this._chain.then(() => startOverride(hass, data)).catch(() => undefined);
+    // HA's own toast says a call failed; screen readers hear the words.
+    this._chain = this._chain
+      .then(() => startOverride(hass, data))
+      .catch(() => this.announce?.(EXACT_RANGE_REFUSED));
   };
 
   protected override render() {
