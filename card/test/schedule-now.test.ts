@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   currentIndex,
   minutesOfDay,
+  nextChangeLine,
   nowLine,
   ownScheduleInForce,
   sameAsBefore,
@@ -183,29 +184,194 @@ describe('ownScheduleInForce and sharedScheduleName', () => {
   });
 });
 
+// Noon on the day `at` counts from, in the browser's zone (no HA time zone
+// given), as `at` is.
+const NOON = new Date(2026, 9, 23, 12, 0).getTime();
+
+/** The peak sensor, with its adjustments. */
+const peak = (state: string, low: number, high: number, more: Record<string, unknown> = {}) => ({
+  state,
+  attributes: { low_adjustment: low, high_adjustment: high, ...more },
+});
+
 describe('nowLine', () => {
-  const line = (overrides: Record<string, Spec | null> = {}, entities = makeEntities()) =>
-    nowLine(makeHass(overrides), entities);
+  const line = (
+    overrides: Record<string, Spec | null> = {},
+    entities = makeEntities(),
+    now = NOON,
+  ) => nowLine(makeHass(overrides), entities, now);
+  const adjusted = (ends: string) => ({
+    'binary_sensor.gym_override_active': 'on',
+    'sensor.gym_override_ends': ends,
+  });
+  const noSchedule: Spec = {
+    state: 'unknown',
+    attributes: { low: null, high: null, scheduled: false },
+  };
 
   it('says the range in force', () => {
     expect(line()).toBe('Now 19.5–22.5°');
   });
 
-  // Why it differs from the schedule's, and the schedule's next change, are
-  // left out: review found each untrue in some cases (#33).
-  it('says nothing more, whatever is shaping the range', () => {
-    const cases: Array<Record<string, Spec>> = [
-      { 'binary_sensor.gym_override_active': 'on', 'sensor.gym_override_ends': at(17) },
-      { 'sensor.gym_peak_saving': 'active' },
-      { 'sensor.gym_peak_saving': 'preconditioning' },
-    ];
-    for (const overrides of cases) {
-      expect(line(overrides)).toBe('Now 19.5–22.5°');
+  it('says an adjustment and when it ends, while a schedule sets the range', () => {
+    expect(line(adjusted(at(17)))).toBe('Now 19.5–22.5°, adjusted until 17:00');
+    expect(line(adjusted(at(7, 30, 1)))).toBe('Now 19.5–22.5°, adjusted until tomorrow 07:30');
+  });
+
+  it('says an adjustment without an end it can’t read, or one that has passed', () => {
+    expect(line(adjusted('unknown'))).toBe('Now 19.5–22.5°, adjusted');
+    expect(line(adjusted(at(11)))).toBe('Now 19.5–22.5°, adjusted');
+    expect(line(adjusted(at(12)))).toBe('Now 19.5–22.5°, adjusted');
+  });
+
+  // Without a schedule, an adjustment's range is simply the room's range.
+  it('says no adjustment where no schedule sets the range, or it can’t be told', () => {
+    expect(line({ ...adjusted(at(17)), 'sensor.gym_next_band_change': noSchedule })).toBe(
+      'Now 19.5–22.5°',
+    );
+    expect(line(adjusted(at(17)), makeEntities({ nextBandChange: null }))).toBe('Now 19.5–22.5°');
+  });
+
+  // Peak saving stands aside while an adjustment runs.
+  it('says only the adjustment while one runs, whatever the peak sensor says', () => {
+    expect(
+      line({
+        ...adjusted(at(17)),
+        'sensor.gym_peak_saving': peak('active', -1, 1, { ends: at(18) }),
+      }),
+    ).toBe('Now 19.5–22.5°, adjusted until 17:00');
+    expect(
+      line({
+        ...adjusted(at(17)),
+        'sensor.gym_next_band_change': noSchedule,
+        'sensor.gym_peak_saving': peak('active', -1, 1, { ends: at(18) }),
+      }),
+    ).toBe('Now 19.5–22.5°');
+  });
+
+  it('says a peak relaxed the range, and until when', () => {
+    expect(line({ 'sensor.gym_peak_saving': peak('active', -1, 1, { ends: at(18) }) })).toBe(
+      'Now 19.5–22.5°, relaxed for a peak until 18:00',
+    );
+    // One edge moved is enough.
+    expect(line({ 'sensor.gym_peak_saving': peak('active', 0, 0.5, { ends: at(18) }) })).toBe(
+      'Now 19.5–22.5°, relaxed for a peak until 18:00',
+    );
+    expect(line({ 'sensor.gym_peak_saving': peak('active', -0.5, 0) })).toBe(
+      'Now 19.5–22.5°, relaxed for a peak',
+    );
+    expect(line({ 'sensor.gym_peak_saving': peak('active', -1, 1, { ends: at(11) }) })).toBe(
+      'Now 19.5–22.5°, relaxed for a peak',
+    );
+  });
+
+  it('says the range was moved ahead of a peak, and when it starts', () => {
+    expect(
+      line({ 'sensor.gym_peak_saving': peak('preconditioning', 1, 0, { next_start: at(16) }) }),
+    ).toBe('Now 19.5–22.5°, getting ready for a peak at 16:00');
+    expect(
+      line({
+        'sensor.gym_peak_saving': peak('preconditioning', 0, -1, { next_start: at(16, 0, 1) }),
+      }),
+    ).toBe('Now 19.5–22.5°, getting ready for a peak at tomorrow 16:00');
+    expect(line({ 'sensor.gym_peak_saving': peak('preconditioning', 1, 0) })).toBe(
+      'Now 19.5–22.5°, getting ready for a peak',
+    );
+  });
+
+  // An offset of 0, the climate's limits or a narrow band move nothing,
+  // whatever the sensor's state (#33's review).
+  it('says no peak where its adjustments moved nothing', () => {
+    for (const state of ['active', 'preconditioning']) {
+      expect(line({ 'sensor.gym_peak_saving': peak(state, 0, 0, { ends: at(18) }) }), state).toBe(
+        'Now 19.5–22.5°',
+      );
+      expect(line({ 'sensor.gym_peak_saving': peak(state, -0.04, 0.04) }), state).toBe(
+        'Now 19.5–22.5°',
+      );
+      expect(line({ 'sensor.gym_peak_saving': state }), state).toBe('Now 19.5–22.5°');
+      expect(line({ 'sensor.gym_peak_saving': peak(state, Number.NaN, Number.NaN) }), state).toBe(
+        'Now 19.5–22.5°',
+      );
     }
+  });
+
+  it('says no peak in its other states, or without its sensor', () => {
+    for (const state of ['waiting', 'off', 'override', 'no_signal', 'unavailable']) {
+      expect(line({ 'sensor.gym_peak_saving': peak(state, -1, 1) }), state).toBe('Now 19.5–22.5°');
+    }
+    expect(line({}, makeEntities({ peakSaving: null }))).toBe('Now 19.5–22.5°');
   });
 
   it('says nothing while the range in force can’t be read', () => {
     expect(line({ 'sensor.gym_effective_low': 'unavailable' })).toBeNull();
     expect(line({ 'sensor.gym_effective_high': null })).toBeNull();
+  });
+
+  it('says its times in HA’s time zone', () => {
+    const hass = makeHass({
+      'binary_sensor.gym_override_active': 'on',
+      'sensor.gym_override_ends': '2026-10-23T04:00:00Z',
+    });
+    hass.config = { time_zone: 'Pacific/Auckland' } as HomeAssistant['config'];
+    // 17:00 in Auckland (UTC+13), the morning before in UTC.
+    expect(nowLine(hass, makeEntities(), Date.parse('2026-10-22T23:00:00Z'))).toBe(
+      'Now 19.5–22.5°, adjusted until 17:00',
+    );
+  });
+});
+
+describe('nextChangeLine', () => {
+  const next = (
+    overrides: Record<string, Spec | null> = {},
+    entities = makeEntities(),
+    now = NOON,
+  ) => nextChangeLine(makeHass(overrides), entities, now);
+  const change = (state: string, attributes: Record<string, unknown>) => ({
+    'sensor.gym_next_band_change': { state, attributes },
+  });
+
+  it('says the schedule’s next change, as the schedule’s', () => {
+    expect(next()).toBe('The schedule’s next change: 21:00 → 18–22°');
+    expect(next(change(at(6, 30, 1), { low: 17.5, high: 21, scheduled: true }))).toBe(
+      'The schedule’s next change: tomorrow 06:30 → 17.5–21°',
+    );
+  });
+
+  // An adjustment or a peak can keep the range in force past it: it's the
+  // schedule's change, said as such.
+  it('says the same under an adjustment or a peak', () => {
+    expect(
+      next({ 'binary_sensor.gym_override_active': 'on', 'sensor.gym_override_ends': at(23) }),
+    ).toBe('The schedule’s next change: 21:00 → 18–22°');
+    expect(next({ 'sensor.gym_peak_saving': peak('active', -1, 1, { ends: at(22) }) })).toBe(
+      'The schedule’s next change: 21:00 → 18–22°',
+    );
+  });
+
+  it('says nothing where no schedule sets the range, or it can’t be told', () => {
+    expect(next(change('unknown', { low: null, high: null, scheduled: false }))).toBeNull();
+    expect(next(change(at(21), { low: 18, high: 22 }))).toBeNull();
+    expect(next(change(at(21), { low: 18, high: 22, scheduled: false }))).toBeNull();
+    expect(next({}, makeEntities({ nextBandChange: null }))).toBeNull();
+    expect(next({ 'sensor.gym_next_band_change': null })).toBeNull();
+  });
+
+  it('says nothing for a change it can’t read, or one that isn’t ahead', () => {
+    expect(next(change('unknown', { low: 18, high: 22, scheduled: true }))).toBeNull();
+    expect(next(change(at(12), { low: 18, high: 22, scheduled: true }))).toBeNull();
+    expect(next(change(at(11), { low: 18, high: 22, scheduled: true }))).toBeNull();
+    expect(next(change(at(21), { low: '18', high: 22, scheduled: true }))).toBeNull();
+    expect(next(change(at(21), { low: 18, scheduled: true }))).toBeNull();
+    expect(next(change(at(21), { low: 18, high: Number.NaN, scheduled: true }))).toBeNull();
+  });
+
+  it('says its time in HA’s time zone', () => {
+    const hass = makeHass(change('2026-10-23T08:00:00Z', { low: 18, high: 22, scheduled: true }));
+    hass.config = { time_zone: 'Pacific/Auckland' } as HomeAssistant['config'];
+    // 21:00 in Auckland.
+    expect(nextChangeLine(hass, makeEntities(), Date.parse('2026-10-22T23:00:00Z'))).toBe(
+      'The schedule’s next change: 21:00 → 18–22°',
+    );
   });
 });

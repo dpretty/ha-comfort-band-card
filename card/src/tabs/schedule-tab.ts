@@ -8,7 +8,8 @@
  * inline confirmation (no more long-press surprise from v0.8.x).
  *
  * **#33**: above the chart, the range in force now, from the integration's
- * entities. While this list is the one in force (the active profile's, not
+ * entities; **#47**: why it differs from the schedule's, where an entity
+ * shows it, and the schedule's next change. While this list is the one in force (the active profile's, not
  * empty, and not while the room follows a shared schedule), a now marker on
  * the chart and its current change marked "Current". A change that repeats
  * the range before it is marked "Same as before". The list reads first:
@@ -48,6 +49,7 @@ import {
 import {
   currentIndex,
   minutesOfDay,
+  nextChangeLine,
   nowLine,
   ownScheduleInForce,
   sameAsBefore,
@@ -58,6 +60,7 @@ import { setSchedule, subscribeSchedule } from '../services.js';
 import { bandText, degrees, formatClock } from '../now-status.js';
 import type { HomeAssistant, Transition, UnsubscribeFunc } from '../types.js';
 import { tokens } from '../styles.js';
+import { readRoom } from '../room-status.js';
 
 /** Compare transitions by `at` numerically (minutes-since-midnight) so a
  *  non-zero-padded `at` ever produced by an external integration sorts
@@ -275,9 +278,21 @@ export class ComfortBandScheduleTab extends LitElement {
         color: var(--error-color, #b71c1c);
         border-color: var(--divider-color, #cccccc);
       }
+      /* Each two lines' height, whether its words take one or two, so a
+         reason coming or going, or a time changing, as HA updates doesn't
+         move the chart and list below (#47; as the Now tab's status, #55). */
+      .now-line,
+      .next-change {
+        min-height: 3.2em;
+        min-height: 2lh;
+      }
       .now-line {
         font-size: 14px;
         color: var(--cb-text-primary);
+      }
+      .next-change {
+        font-size: 13px;
+        color: var(--cb-text-secondary);
       }
       .profile-notice {
         margin-bottom: var(--cb-gap-sm);
@@ -815,15 +830,20 @@ export class ComfortBandScheduleTab extends LitElement {
     return !profileManagerExists(this.hass);
   }
 
-  /** The range in force now, from the integration's entities; and whether
-   *  the room follows a shared schedule. */
+  /** The range in force now, from the integration's entities, and why it
+   *  differs from the schedule's where that can be told; the schedule's
+   *  next change, where a schedule sets the range (its place kept while it
+   *  can't be read); and whether the room follows a shared schedule. */
   private _renderNow() {
     if (!this.hass || !this.entities) return nothing;
-    const line = nowLine(this.hass, this.entities);
+    const line = nowLine(this.hass, this.entities, this._now);
+    const scheduled = readRoom(this.hass, this.entities).scheduled === true;
+    const next = scheduled ? nextChangeLine(this.hass, this.entities, this._now) : null;
     const following = ownScheduleInForce(this.hass, this.entities) === false;
     const shared = sharedScheduleName(this.hass, this.entities);
     return html`
-      ${line ? html`<div class="now-line">${line}</div>` : nothing}
+      <div class="now-line">${line ?? nothing}</div>
+      ${scheduled ? html`<div class="next-change">${next ?? nothing}</div>` : nothing}
       ${following
         ? html`<div class="shared-note">
             This room follows ${shared ? `“${shared}”, a shared schedule` : 'a shared schedule'}.

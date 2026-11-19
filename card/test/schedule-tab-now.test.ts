@@ -12,7 +12,8 @@ import type {
 } from '../src/types.js';
 import { mount, teardown } from './_fixture.js';
 
-// #33: what's in force now, and a list that reads first.
+// #33: what's in force now, and a list that reads first. #47: why the
+// range differs from the schedule's, and the schedule's next change.
 
 afterEach(() => {
   teardown();
@@ -33,6 +34,7 @@ const ENTITIES = {
   overrideEnds: 'sensor.gym_override_ends',
   nextBandChange: 'sensor.gym_next_band_change',
   scheduleAssignment: 'select.gym_schedule_assignment',
+  peakSaving: 'sensor.gym_peak_saving',
 };
 
 type Spec = string | { state: string; attributes?: Record<string, unknown> };
@@ -152,9 +154,83 @@ const rows = (el: ComfortBandScheduleTab) =>
   }));
 
 describe('comfort-band-schedule-tab now', () => {
-  it('says the range in force', async () => {
+  const nowLine = (el: ComfortBandScheduleTab) => text(el.shadowRoot!.querySelector('.now-line'));
+  const nextChange = (el: ComfortBandScheduleTab) => el.shadowRoot!.querySelector('.next-change');
+
+  it('says the range in force, and the schedule’s next change', async () => {
     const el = await tab();
-    expect(text(el.shadowRoot!.querySelector('.now-line'))).toBe('Now 17–25°');
+    expect(nowLine(el)).toBe('Now 17–25°');
+    expect(text(nextChange(el))).toBe('The schedule’s next change: 17:30 → 19.5–22.5°');
+  });
+
+  it('says why the range differs from the schedule’s, where it can tell', async () => {
+    const adjusted = await tab(
+      makeHass({
+        'binary_sensor.gym_override_active': 'on',
+        'sensor.gym_override_ends': new Date(Date.UTC(2026, 9, 23, 15, 0)).toISOString(),
+      }),
+    );
+    expect(nowLine(adjusted)).toBe('Now 17–25°, adjusted until 15:00');
+    teardown();
+    const peak = await tab(
+      makeHass({
+        'sensor.gym_peak_saving': {
+          state: 'active',
+          attributes: {
+            low_adjustment: -1,
+            high_adjustment: 1,
+            ends: new Date(Date.UTC(2026, 9, 23, 16, 0)).toISOString(),
+          },
+        },
+      }),
+    );
+    expect(nowLine(peak)).toBe('Now 17–25°, relaxed for a peak until 16:00');
+  });
+
+  it('moves the next change on with the clock', async () => {
+    const el = await tab(
+      makeHass({
+        'sensor.gym_next_band_change': {
+          state: new Date(Date.UTC(2026, 9, 24, 6, 0)).toISOString(),
+          attributes: { low: 19, high: 22, scheduled: true },
+        },
+      }),
+      makeEntities(),
+      Date.UTC(2026, 9, 23, 23, 59),
+    );
+    expect(text(nextChange(el))).toBe('The schedule’s next change: tomorrow 06:00 → 19–22°');
+    vi.advanceTimersByTime(60_000);
+    await el.updateComplete;
+    expect(text(nextChange(el))).toBe('The schedule’s next change: 06:00 → 19–22°');
+  });
+
+  // Their places are kept, so nothing below moves as their words come and go.
+  it('keeps both lines’ places while their words can’t be read', async () => {
+    const el = await tab(
+      makeHass({
+        'sensor.gym_effective_low': 'unavailable',
+        'sensor.gym_next_band_change': {
+          state: 'unknown',
+          attributes: { low: null, high: null, scheduled: true },
+        },
+      }),
+    );
+    expect(el.shadowRoot!.querySelector('.now-line')).not.toBeNull();
+    expect(nowLine(el)).toBe('');
+    expect(nextChange(el)).not.toBeNull();
+    expect(text(nextChange(el))).toBe('');
+  });
+
+  // With no schedule, there's no next change to say, and no place for it.
+  it('has no next-change line where no schedule sets the range, or it can’t be told', async () => {
+    for (const attributes of [{ scheduled: false }, {}]) {
+      const el = await tab(
+        makeHass({ 'sensor.gym_next_band_change': { state: 'unknown', attributes } }),
+      );
+      expect(nowLine(el)).toBe('Now 17–25°');
+      expect(nextChange(el), JSON.stringify(attributes)).toBeNull();
+      teardown();
+    }
   });
 
   it('marks the change in force, and now on the chart', async () => {
@@ -392,6 +468,7 @@ describe('comfort-band-schedule-tab now', () => {
   it('says nothing about now without the zone’s entities', async () => {
     const el = await tab(makeHass(), null);
     expect(el.shadowRoot!.querySelector('.now-line')).toBeNull();
+    expect(el.shadowRoot!.querySelector('.next-change')).toBeNull();
     expect(el.shadowRoot!.querySelector('li.row.current')).toBeNull();
   });
 
@@ -445,6 +522,13 @@ describe('comfort-band-schedule-tab layout', () => {
 
   it('spaces the toolbar’s buttons apart', () => {
     expect(css()).toMatch(/\.list-toolbar\s*\{[^}]*gap:\s*var\(--cb-gap-sm\)/);
+  });
+
+  // #47: the line's reason and the next change's time come and go with HA's
+  // updates; at two lines each, the chart and list below don't move.
+  it('keeps the now line and the next change two lines tall each', () => {
+    const rule = /\.now-line,\s*\.next-change\s*\{([^}]*)\}/.exec(css())?.[1] ?? '';
+    expect(rule).toMatch(/min-height:\s*3\.2em;\s*min-height:\s*2lh;?\s*$/);
   });
 });
 

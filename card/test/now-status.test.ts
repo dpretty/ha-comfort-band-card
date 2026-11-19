@@ -320,6 +320,17 @@ describe('formatTime', () => {
     locale: { language, time_format },
   });
 
+  // A schedule's times are HA's: 09:00 UTC is 14:30 in Kolkata.
+  it('writes the time in a given time zone, a half-hour one too', () => {
+    const ms = Date.UTC(2026, 9, 22, 9, 0);
+    expect(formatTime(ms, locale('24', 'en-GB'), 'UTC')).toBe('09:00');
+    expect(formatTime(ms, locale('12'), 'Asia/Kolkata')).toBe('2:30 PM');
+    expect(formatTime(Date.UTC(2026, 9, 22, 8, 30), locale('12'), 'Asia/Kolkata')).toBe('2 PM');
+    expect(formatTime(ms, locale('24', 'en-GB'), 'Not/AZone')).toBe(
+      formatTime(ms, locale('24', 'en-GB')),
+    );
+  });
+
   it('leaves the minutes off a whole hour on a 12-hour clock', () => {
     expect(formatTime(at(21, 0), locale('12'))).toBe('9 PM');
     expect(formatTime(at(16, 30), locale('12'))).toBe('4:30 PM');
