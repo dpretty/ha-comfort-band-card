@@ -280,11 +280,12 @@ export class ComfortBandScheduleTab extends LitElement {
       }
       /* Each two lines' height, whether its words take one or two, so a
          reason coming or going, or a time changing, as HA updates doesn't
-         move the chart and list below (#47; as the Now tab's status, #55). */
+         move the chart and list below (#47; as the Now tab's status, #55).
+         Its own line height, so two lines are exactly that in any engine. */
       .now-line,
       .next-change {
-        min-height: 3.2em;
-        min-height: 2lh;
+        line-height: 1.35;
+        min-height: 2.7em;
       }
       .now-line {
         font-size: 14px;

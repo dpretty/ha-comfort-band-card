@@ -528,7 +528,7 @@ describe('comfort-band-schedule-tab layout', () => {
   // updates; at two lines each, the chart and list below don't move.
   it('keeps the now line and the next change two lines tall each', () => {
     const rule = /\.now-line,\s*\.next-change\s*\{([^}]*)\}/.exec(css())?.[1] ?? '';
-    expect(rule).toMatch(/min-height:\s*3\.2em;\s*min-height:\s*2lh;?\s*$/);
+    expect(rule).toMatch(/^\s*line-height:\s*1\.35;\s*min-height:\s*2\.7em;?\s*$/);
   });
 });
 
