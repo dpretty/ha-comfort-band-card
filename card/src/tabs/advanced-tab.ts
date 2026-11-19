@@ -42,6 +42,9 @@ export class ComfortBandAdvancedTab extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
   @property({ type: String }) public zone = '';
   @property({ attribute: false }) public entities?: ZoneEntities;
+  /** Says a refusal to screen readers: the dialog's, handed on to the exact
+   *  range, whose refusals only HA's toast would otherwise tell (#53). */
+  @property({ attribute: false }) public announce?: (words: string) => void;
 
   /** Whether History is open: its chart subscribes to HA's history, so it's
    *  only there while it is. */
@@ -217,6 +220,7 @@ export class ComfortBandAdvancedTab extends LitElement {
             .hass=${this.hass}
             .zone=${this.zone}
             .entities=${this.entities}
+            .announce=${this.announce}
           ></comfort-band-exact-range>`,
       )}
       ${this._section(

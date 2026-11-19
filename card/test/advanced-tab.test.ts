@@ -258,8 +258,17 @@ describe('comfort-band-advanced-tab', () => {
   it('hands each section what it needs', async () => {
     const hass = makeHass();
     const el = await advancedTab(hass);
+    // The dialog's, for the exact range's refusals (#53).
+    const announce = vi.fn();
+    (el as unknown as { announce: (words: string) => void }).announce = announce;
+    await el.updateComplete;
     const entities = (el as unknown as { entities: ZoneEntities }).entities;
-    type Child = HTMLElement & { hass?: HomeAssistant; zone?: string; entities?: ZoneEntities };
+    type Child = HTMLElement & {
+      hass?: HomeAssistant;
+      zone?: string;
+      entities?: ZoneEntities;
+      announce?: (words: string) => void;
+    };
     for (const id of ['comfort', 'automation', 'fan', 'peak', 'schedules']) {
       const child = el.shadowRoot!.querySelector(
         `details[data-section="${id}"] comfort-band-settings-tab`,
@@ -270,6 +279,7 @@ describe('comfort-band-advanced-tab', () => {
       'details[data-section="comfort"] comfort-band-exact-range',
     ) as Child;
     expect([exact.hass, exact.zone, exact.entities]).toEqual([hass, 'gym', entities]);
+    expect(exact.announce).toBe(announce);
     const profiles = el.shadowRoot!.querySelector('comfort-band-profiles-tab') as Child;
     expect(profiles.hass).toBe(hass);
     await setOpen(el, 'history', true);

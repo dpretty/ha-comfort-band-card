@@ -36,7 +36,9 @@
  * picked for it (to re-time an adjustment, or during its taps) goes back to
  * the one before; one picked before the taps began stays. Taps sent to
  * their room on a move to another (#52) put no length back. A refused feedback
- * tap shows "Not sent" on its pill, with HA's toast.
+ * tap shows "Not sent" on its pill, with HA's toast. Screen readers don't
+ * hear that toast while the dialog is open, so each refusal is also handed,
+ * in plain words, to the dialog's `announce`, which says it to them (#53).
  *
  * When the room sensor is offline, a sentence under the status says what that
  * means for the room and what to do.
@@ -55,6 +57,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import type { PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import '../band-gauge.js';
+import { zoneDisplayName } from '../helpers.js';
 import type { ZoneEntities } from '../helpers.js';
 import type { HomeAssistant } from '../types.js';
 import {
@@ -82,6 +85,20 @@ const FEEDBACK_PILLS: ReadonlyArray<{ label: FeedbackLabel; text: string }> = [
   { label: 'just_right', text: 'Just right' },
   { label: 'too_hot', text: 'Too warm' },
 ];
+
+/** What a screen reader hears when HA refuses a change made here (#53),
+ *  in #27's words; for taps sent to the room they were made in after the
+ *  card moved on (#52), naming it. */
+const REFUSED = {
+  adjust: (room?: string) => `Couldn’t adjust ${room ?? 'the room'}. Try again.`,
+  retime: (room?: string) =>
+    `Couldn’t change how long the adjustment${room ? ` in ${room}` : ''} lasts. Try again.`,
+  back: 'Couldn’t go back to the schedule. Try again.',
+  end: 'Couldn’t end the adjustment. Try again.',
+  // Undo isn't offered again after a refusal: nothing to try again.
+  undo: 'Couldn’t undo the change.',
+  feedback: (text: string) => `${text}: not sent. Try again.`,
+};
 
 /** How long the tapped pill says "Thanks!" or "Not sent". */
 const FEEDBACK_CONFIRM_MS = 1500;
@@ -143,6 +160,9 @@ export class ComfortBandNowTab extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
   @property({ type: String }) public zone = '';
   @property({ attribute: false }) public entities?: ZoneEntities;
+  /** Says a refusal to screen readers: the dialog's (#53). Kept when the
+   *  tab is swapped out, so a call answered after that is still said. */
+  @property({ attribute: false }) public announce?: (words: string) => void;
 
   /** The pill briefly highlighted after a successful `record_feedback`. */
   @state() private _feedbackConfirmed: FeedbackLabel | null = null;
@@ -516,12 +536,14 @@ export class ComfortBandNowTab extends LitElement {
   }
 
   /** Runs a call, saying what it's doing meanwhile. A failed call is
-   *  reported by HA's own toast; the status falls back to what is actually
-   *  in force, and a length picked for it goes back to `before` (#27). One
-   *  that went through, while the tab is open on the same room, gets
-   *  `undo`, where given (#25). */
+   *  reported by HA's own toast, and `refused` said to screen readers
+   *  (#53); the status falls back to what is actually in force, and a
+   *  length picked for it goes back to `before` (#27). One that went
+   *  through, while the tab is open on the same room, gets `undo`, where
+   *  given (#25). */
   private async _run(
     doing: string,
+    refused: string,
     call: () => Promise<unknown>,
     before?: PickedLength,
     undo?: Omit<Undo, 'shown'>,
@@ -533,11 +555,13 @@ export class ComfortBandNowTab extends LitElement {
       sent = true;
     } catch {
       // Even if the tab has gone meanwhile: a tab moved in the page comes
-      // back with it, and a closed one is discarded.
+      // back with it, and a closed one is discarded. The dialog decides
+      // whether the words are heard.
       if (before) {
         this._length = before.length;
         this._pickedNext = before.pickedNext;
       }
+      this.announce?.(refused);
     } finally {
       this._busy = null;
     }
@@ -545,12 +569,15 @@ export class ComfortBandNowTab extends LitElement {
     if (sent && undo && this.isConnected && undo.key === this._undoKey()) this._offerUndo(undo);
   }
 
-  /** Adjusts `zone`, by default the tab's room, to `band`. For another
-   *  room (taps held when the tab moved on, #52) the tab doesn't wait for
-   *  the call or put a length back: HA's toast tells of a refusal. */
+  /** Adjusts `zone`, by default the tab's room, to `band`: a new range, or
+   *  the one in force re-timed (`retime`), for the words a refusal is said
+   *  in. For another room (taps held when the tab moved on, #52) the tab
+   *  doesn't wait for the call or put a length back: HA's toast tells of a
+   *  refusal, and the words name the room. */
   private _sendBand(
     band: Band,
     length: Length,
+    kind: 'adjust' | 'retime',
     before?: PickedLength,
     zone = this.zone,
     entities = this.entities,
@@ -562,12 +589,16 @@ export class ComfortBandNowTab extends LitElement {
     const hours = next !== null ? undefined : length === 'next' ? DEFAULT_HOURS : length;
     const call = () => startOverride(hass, { zone, low: band.low, high: band.high, hours, until });
     if (zone !== this.zone) {
-      call().catch(() => undefined);
+      call().catch(() => {
+        const room = entities ? zoneDisplayName(this.hass ?? hass, { zone }, entities) : zone;
+        this.announce?.(REFUSED[kind](room));
+      });
       return;
     }
     const from = this._undoFrom();
     void this._run(
       `Adjusting to ${bandText(band)}`,
+      REFUSED[kind](),
       call,
       before,
       from
@@ -615,7 +646,14 @@ export class ComfortBandNowTab extends LitElement {
     const { zone, entities } = burst;
     const length = this._hours(entities);
     if (burst.steps !== 0) {
-      this._sendBand(shiftBand(burst.base, burst.steps), length, burst.before, zone, entities);
+      this._sendBand(
+        shiftBand(burst.base, burst.steps),
+        length,
+        'adjust',
+        burst.before,
+        zone,
+        entities,
+      );
     } else if (burst.picked) {
       this._retime(length, burst.before, zone, entities);
     }
@@ -654,7 +692,7 @@ export class ComfortBandNowTab extends LitElement {
     const low = this._numericState(entities?.manualLow ?? null);
     const high = this._numericState(entities?.manualHigh ?? null);
     if (!Number.isFinite(low) || !Number.isFinite(high)) return;
-    this._sendBand({ low, high }, length, before, zone, entities);
+    this._sendBand({ low, high }, length, 'retime', before, zone, entities);
   }
 
   private _onBackToSchedule = () => {
@@ -666,10 +704,10 @@ export class ComfortBandNowTab extends LitElement {
     this._dropBurst();
     this._dropUndo();
     const from = this._undoFrom();
-    const doing =
-      this._schedule().scheduled === true ? 'Going back to the schedule' : 'Ending the adjustment';
+    const back = this._schedule().scheduled === true;
     void this._run(
-      doing,
+      back ? 'Going back to the schedule' : 'Ending the adjustment',
+      back ? REFUSED.back : REFUSED.end,
       () => cancelOverride(hass, { zone }),
       undefined,
       // It ends the adjustment and keeps the band.
@@ -686,8 +724,9 @@ export class ComfortBandNowTab extends LitElement {
   /** Puts back what the last change made here replaced: the adjustment
    *  then in force with its own end, or none, with the manual band it had
    *  (#25). An end that has (nearly) passed meanwhile isn't put back: the
-   *  adjustment is ended, as that one would have ended. A refusal is HA's
-   *  to report; nothing else is tried. */
+   *  adjustment is ended, as that one would have ended. A refusal is told
+   *  by HA's toast, and said to screen readers (#53); nothing else is
+   *  tried. */
   private _onUndo = () => {
     const undo = this._undo;
     // No call can be on its way: each change drops Undo before it's sent.
@@ -699,7 +738,7 @@ export class ComfortBandNowTab extends LitElement {
     const { before } = undo;
     const { doing } = this._undoWords(before, plan);
     this._dropUndo();
-    void this._run(doing, () =>
+    void this._run(doing, REFUSED.undo, () =>
       plan === 'restore'
         ? startOverride(hass, {
             zone,
@@ -739,8 +778,12 @@ export class ComfortBandNowTab extends LitElement {
       await recordFeedback(this.hass, { zone: this.zone, label });
     } catch {
       // Service rejected (e.g. integration older than v0.11.0): HA's toast
-      // says so, and the pill says "Not sent" rather than "Thanks!".
+      // says so, and the pill says "Not sent" rather than "Thanks!". Each
+      // refusal is handed on for screen readers, even one a later tap has
+      // taken the pill from (#53).
       ok = false;
+      const text = FEEDBACK_PILLS.find((pill) => pill.label === label)?.text ?? label;
+      this.announce?.(REFUSED.feedback(text));
     }
     // A newer tap superseded this one while the service was in flight — let
     // it own the pill so the flash can't land on the wrong one.
