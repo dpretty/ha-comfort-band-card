@@ -197,9 +197,9 @@ describe('comfort-band-tile', () => {
     expect(gauge.decorative).toBe(true);
     expect(el.shadowRoot!.querySelector('.gauge-wrap')!.getAttribute('aria-hidden')).toBe('true');
     await gauge.updateComplete;
-    const svg = gauge.shadowRoot!.querySelector('svg')!;
-    expect(svg.getAttribute('aria-hidden')).toBe('true');
-    expect(svg.hasAttribute('aria-label')).toBe(false);
+    const drawn = gauge.shadowRoot!.querySelector('.gauge')!;
+    expect(drawn.getAttribute('aria-hidden')).toBe('true');
+    expect(drawn.hasAttribute('aria-label')).toBe(false);
   });
 
   describe('mini variant', () => {

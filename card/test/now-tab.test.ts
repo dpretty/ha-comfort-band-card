@@ -107,7 +107,7 @@ async function gaugeLabel(el: ComfortBandNowTab): Promise<string> {
     updateComplete: Promise<boolean>;
   };
   await gauge.updateComplete;
-  return gauge.shadowRoot!.querySelector('svg')!.getAttribute('aria-label')!;
+  return gauge.shadowRoot!.querySelector('.gauge')!.getAttribute('aria-label')!;
 }
 
 function lengths(el: ComfortBandNowTab): Array<{ text: string; checked: boolean }> {
