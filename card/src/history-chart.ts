@@ -46,7 +46,6 @@ import uPlot from 'uplot';
 import type { AlignedData, Options as UPlotOptions } from 'uplot';
 import type { HomeAssistant } from './types.js';
 import { bandText, degrees, formatTime } from './now-status.js';
-import { formatWhen } from './diagnostics.js';
 import {
   HOURS_TO_SHOW,
   alignSeries,
@@ -711,7 +710,7 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       return typeof v === 'number' && Number.isFinite(v) ? v : null;
     };
     return readoutLine({
-      when: idx === null ? 'Now' : formatWhen(at * 1000, Date.now(), this.hass),
+      when: idx === null ? 'Now' : readoutTime(at * 1000, Date.now(), this.hass),
       room: value('Room'),
       apparent: value('Apparent'),
       low: value('Low band'),
@@ -826,6 +825,24 @@ export function readoutLine(r: {
   return parts.join(' · ');
 }
 
+/** The readout's time: "22:30" today, "Thu 22:30" another day, in HA's
+ *  12/24-hour setting; the weekday, being short, as the time axis's, so
+ *  the readout keeps to its two lines on a narrow phone. */
+export function readoutTime(ms: number, now: number, hass?: Pick<HomeAssistant, 'locale'>): string {
+  const time = formatTime(ms, hass);
+  const d = new Date(ms);
+  const today = new Date(now);
+  if (d.toDateString() === today.toDateString()) return time;
+  return `${weekdayOf(hass).format(d)} ${time}`;
+}
+
+/** Short weekday names, in HA's language where it's an English one, as
+ *  the card's other words are. */
+function weekdayOf(hass?: Pick<HomeAssistant, 'locale'>): Intl.DateTimeFormat {
+  const own = hass?.locale?.language;
+  return new Intl.DateTimeFormat(own?.startsWith('en') ? own : 'en', { weekday: 'short' });
+}
+
 /** Heating or cooling at `at` (unix seconds), from the action's intervals. */
 export function actionAt(
   intervals: ReadonlyArray<{ start: number; end: number; action: 'heating' | 'cooling' }>,
@@ -864,10 +881,8 @@ export function timeLabels(
   spanSeconds: number,
   hass?: Pick<HomeAssistant, 'locale'>,
 ): string[] {
-  const own = hass?.locale?.language;
-  const language = own?.startsWith('en') ? own : 'en';
   // "Sat 21" in any English: Intl's own order for the two varies ("21 Sat").
-  const weekday = new Intl.DateTimeFormat(language, { weekday: 'short' });
+  const weekday = weekdayOf(hass);
   const dayOf = { format: (d: Date) => `${weekday.format(d)} ${d.getDate()}` };
   const long = spanSeconds > 36 * 3600;
   return splits.map((s) => {

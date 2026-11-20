@@ -4,6 +4,7 @@ import {
   actionAt,
   mixColor,
   readoutLine,
+  readoutTime,
   stripRects,
   temperatureUnit,
   timeLabels,
@@ -146,6 +147,23 @@ describe('readoutLine', () => {
     expect(readoutLine({ ...base, room: null, low: null })).toBe(
       '22:30 · Feels like 21.9° · Humidity 45% · Heating',
     );
+  });
+});
+
+describe('readoutTime', () => {
+  const h24 = { locale: { language: 'en-GB', time_format: '24' } } as const;
+  const h12 = { locale: { language: 'en-US', time_format: '12' } } as const;
+  const now = new Date(2026, 10, 20, 16, 0).getTime();
+
+  it('gives the time today, and the weekday with it another day', () => {
+    expect(readoutTime(new Date(2026, 10, 20, 9, 30).getTime(), now, h24)).toBe('09:30');
+    expect(readoutTime(new Date(2026, 10, 19, 22, 30).getTime(), now, h24)).toBe('Thu 22:30');
+    expect(readoutTime(new Date(2026, 10, 14, 6, 0).getTime(), now, h12)).toBe('Sat 6 AM');
+    expect(
+      readoutTime(new Date(2026, 10, 19, 22, 30).getTime(), now, {
+        locale: { language: 'fr', time_format: '24' },
+      } as never),
+    ).toBe('Thu 22:30');
   });
 });
 
@@ -382,11 +400,12 @@ describe('comfort-band-history-chart readout (#34)', () => {
     const { el, now } = await withHistory();
     internals(el)._cursorIdx = 0;
     await el.updateComplete;
-    const at = new Date((now - 7200) * 1000);
-    const hh = String(at.getHours()).padStart(2, '0');
-    const mm = String(at.getMinutes()).padStart(2, '0');
+    // Two hours ago: today's time, or yesterday's with its weekday.
+    const when = readoutTime((now - 7200) * 1000, Date.now(), {
+      locale: { language: 'en-GB', time_format: '24' },
+    } as never);
     expect(readout(el)).toBe(
-      `${hh}:${mm} · Room 20° · Feels like 21.9° · Range 19.5–22.5° · Humidity 45% · Heating`,
+      `${when} · Room 20° · Feels like 21.9° · Range 19.5–22.5° · Humidity 45% · Heating`,
     );
   });
 
