@@ -8,11 +8,13 @@
  * inline confirmation (no more long-press surprise from v0.8.x).
  *
  * **#33**: above the chart, the range in force now, from the integration's
- * entities. While this list is the one in force (the active profile's, not
- * empty, and not while the room follows a shared schedule), a now marker on
- * the chart and its current change marked "Current". A change that repeats
- * the range before it is marked "Same as before". The list reads first:
- * Add, Edit and Delete sit behind "Edit schedule".
+ * entities; **#47**: why it differs from the schedule's, where an entity
+ * shows it, and the schedule's next change. While this list is the one in
+ * force (the active profile's, not empty, and not while the room follows a
+ * shared schedule), a now marker on the chart and its current change marked
+ * "Current". A change that repeats the range before it is marked "Same as
+ * before". The list reads first: Add, Edit and Delete sit behind "Edit
+ * schedule".
  *
  * Workflow:
  *   1. On mount, open a `comfort_band/subscribe_schedule` subscription for
@@ -48,6 +50,7 @@ import {
 import {
   currentIndex,
   minutesOfDay,
+  nextChangeLine,
   nowLine,
   ownScheduleInForce,
   sameAsBefore,
@@ -58,6 +61,7 @@ import { setSchedule, subscribeSchedule } from '../services.js';
 import { bandText, degrees, formatClock } from '../now-status.js';
 import type { HomeAssistant, Transition, UnsubscribeFunc } from '../types.js';
 import { tokens } from '../styles.js';
+import { readRoom } from '../room-status.js';
 
 /** Compare transitions by `at` numerically (minutes-since-midnight) so a
  *  non-zero-padded `at` ever produced by an external integration sorts
@@ -108,6 +112,11 @@ export class ComfortBandScheduleTab extends LitElement {
    *  at each minute. */
   @state() private _now = Date.now();
   private _clock: ReturnType<typeof setTimeout> | null = null;
+  /** Whether a schedule sets this room's range, as last read: kept while
+   *  it can't be (HA leaves the attribute out while the sensor is
+   *  unavailable, as on a reload of the integration), so the next change's
+   *  place stays (#47 review). Null until read for the room shown. */
+  private _scheduled: boolean | null = null;
   /** Which button takes focus once the list's mode has changed. */
   private _focusAfterMode: 'add' | 'edit' | null = null;
 
@@ -275,9 +284,22 @@ export class ComfortBandScheduleTab extends LitElement {
         color: var(--error-color, #b71c1c);
         border-color: var(--divider-color, #cccccc);
       }
+      /* Each two lines' height, whether its words take one or two, so a
+         reason coming or going, or a time changing, as HA updates doesn't
+         move the chart and list below (#47; as the Now tab's status, #55).
+         Its own line height, so two lines are exactly that in any engine. */
+      .now-line,
+      .next-change {
+        line-height: 1.35;
+        min-height: 2.7em;
+      }
       .now-line {
         font-size: 14px;
         color: var(--cb-text-primary);
+      }
+      .next-change {
+        font-size: 13px;
+        color: var(--cb-text-secondary);
       }
       .profile-notice {
         margin-bottom: var(--cb-gap-sm);
@@ -338,6 +360,11 @@ export class ComfortBandScheduleTab extends LitElement {
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has('hass')) this._now = Date.now();
+    if (changed.has('zone')) this._scheduled = null;
+    if (this.hass && this.entities) {
+      const scheduled = readRoom(this.hass, this.entities).scheduled;
+      if (scheduled !== null) this._scheduled = scheduled;
+    }
     // A new change starting puts the last one's notice away.
     const m = changed as Map<PropertyKey, unknown>;
     if (
@@ -815,15 +842,21 @@ export class ComfortBandScheduleTab extends LitElement {
     return !profileManagerExists(this.hass);
   }
 
-  /** The range in force now, from the integration's entities; and whether
-   *  the room follows a shared schedule. */
+  /** The range in force now, from the integration's entities, and why it
+   *  differs from the schedule's where that can be told; the schedule's
+   *  next change, where a schedule sets the range (its place kept while its
+   *  words, or whether a schedule sets the range, can't be read); and
+   *  whether the room follows a shared schedule. */
   private _renderNow() {
     if (!this.hass || !this.entities) return nothing;
-    const line = nowLine(this.hass, this.entities);
+    const line = nowLine(this.hass, this.entities, this._now);
+    const scheduled = this._scheduled === true;
+    const next = scheduled ? nextChangeLine(this.hass, this.entities, this._now) : null;
     const following = ownScheduleInForce(this.hass, this.entities) === false;
     const shared = sharedScheduleName(this.hass, this.entities);
     return html`
-      ${line ? html`<div class="now-line">${line}</div>` : nothing}
+      <div class="now-line">${line ?? nothing}</div>
+      ${scheduled ? html`<div class="next-change">${next ?? nothing}</div>` : nothing}
       ${following
         ? html`<div class="shared-note">
             This room follows ${shared ? `“${shared}”, a shared schedule` : 'a shared schedule'}.

@@ -12,7 +12,8 @@ import type {
 } from '../src/types.js';
 import { mount, teardown } from './_fixture.js';
 
-// #33: what's in force now, and a list that reads first.
+// #33: what's in force now, and a list that reads first. #47: why the
+// range differs from the schedule's, and the schedule's next change.
 
 afterEach(() => {
   teardown();
@@ -33,6 +34,7 @@ const ENTITIES = {
   overrideEnds: 'sensor.gym_override_ends',
   nextBandChange: 'sensor.gym_next_band_change',
   scheduleAssignment: 'select.gym_schedule_assignment',
+  peakSaving: 'sensor.gym_peak_saving',
 };
 
 type Spec = string | { state: string; attributes?: Record<string, unknown> };
@@ -152,9 +154,172 @@ const rows = (el: ComfortBandScheduleTab) =>
   }));
 
 describe('comfort-band-schedule-tab now', () => {
-  it('says the range in force', async () => {
+  const nowLine = (el: ComfortBandScheduleTab) => text(el.shadowRoot!.querySelector('.now-line'));
+  const nextChange = (el: ComfortBandScheduleTab) => el.shadowRoot!.querySelector('.next-change');
+
+  it('says the range in force, and the schedule’s next change', async () => {
     const el = await tab();
-    expect(text(el.shadowRoot!.querySelector('.now-line'))).toBe('Now 17–25°');
+    expect(nowLine(el)).toBe('Now 17–25°');
+    expect(text(nextChange(el))).toBe('The schedule’s next change: 17:30 → 19.5–22.5°');
+  });
+
+  it('says why the range differs from the schedule’s, where it can tell', async () => {
+    const adjusted = await tab(
+      makeHass({
+        'binary_sensor.gym_override_active': 'on',
+        'sensor.gym_override_ends': new Date(Date.UTC(2026, 9, 23, 15, 0)).toISOString(),
+      }),
+    );
+    expect(nowLine(adjusted)).toBe('Now 17–25°, adjusted until 15:00');
+    teardown();
+    const peak = await tab(
+      makeHass({
+        'sensor.gym_peak_saving': {
+          state: 'active',
+          attributes: {
+            low_adjustment: -1,
+            high_adjustment: 1,
+            ends: new Date(Date.UTC(2026, 9, 23, 16, 0)).toISOString(),
+          },
+        },
+      }),
+    );
+    expect(nowLine(peak)).toBe('Now 17–25°, relaxed for a peak until 16:00');
+  });
+
+  it('moves the next change on with the clock', async () => {
+    const el = await tab(
+      makeHass({
+        'sensor.gym_next_band_change': {
+          state: new Date(Date.UTC(2026, 9, 24, 6, 0)).toISOString(),
+          attributes: { low: 19, high: 22, scheduled: true },
+        },
+      }),
+      makeEntities(),
+      Date.UTC(2026, 9, 23, 23, 59),
+    );
+    expect(text(nextChange(el))).toBe('The schedule’s next change: tomorrow 06:00 → 19–22°');
+    vi.advanceTimersByTime(60_000);
+    await el.updateComplete;
+    expect(text(nextChange(el))).toBe('The schedule’s next change: 06:00 → 19–22°');
+  });
+
+  // Their places are kept, so nothing below moves as their words come and go.
+  it('keeps both lines’ places while their words can’t be read', async () => {
+    const el = await tab(
+      makeHass({
+        'sensor.gym_effective_low': 'unavailable',
+        'sensor.gym_next_band_change': {
+          state: 'unknown',
+          attributes: { low: null, high: null, scheduled: true },
+        },
+      }),
+    );
+    expect(el.shadowRoot!.querySelector('.now-line')).not.toBeNull();
+    expect(nowLine(el)).toBe('');
+    expect(nextChange(el)).not.toBeNull();
+    expect(text(nextChange(el))).toBe('');
+  });
+
+  // HA leaves the attributes out while the sensor is unavailable, as while
+  // the integration reloads (#47 review): the place stays.
+  // As the card hands it on: a new `entities` object, the same ids, with
+  // each update from HA.
+  it('keeps the next change’s place while whether a schedule sets the range can’t be read', async () => {
+    const el = await tab();
+    el.hass = makeHass({
+      'sensor.gym_next_band_change': { state: 'unavailable', attributes: {} },
+    });
+    el.entities = makeEntities();
+    await el.updateComplete;
+    expect(nextChange(el)).not.toBeNull();
+    expect(text(nextChange(el))).toBe('');
+    el.hass = makeHass();
+    el.entities = makeEntities();
+    await el.updateComplete;
+    expect(text(nextChange(el))).toBe('The schedule’s next change: 17:30 → 19.5–22.5°');
+  });
+
+  it('drops the next change’s place when a schedule stops setting the range', async () => {
+    const el = await tab();
+    expect(nextChange(el)).not.toBeNull();
+    el.hass = makeHass({
+      'sensor.gym_next_band_change': {
+        state: 'unknown',
+        attributes: { low: null, high: null, scheduled: false },
+      },
+    });
+    el.entities = makeEntities();
+    await el.updateComplete;
+    expect(nextChange(el)).toBeNull();
+  });
+
+  // HA's states hold every room's: another room is usually readable at once.
+  it('has another room’s next change at once where it can be read there', async () => {
+    const el = await tab(
+      makeHass({
+        'sensor.study_next_band_change': {
+          state: new Date(Date.UTC(2026, 9, 23, 18, 0)).toISOString(),
+          attributes: { low: 18, high: 21, scheduled: true },
+        },
+      }),
+    );
+    el.zone = 'study';
+    el.entities = makeEntities({ nextBandChange: 'sensor.study_next_band_change' });
+    await el.updateComplete;
+    expect(text(nextChange(el))).toBe('The schedule’s next change: 18:00 → 18–21°');
+  });
+
+  it('says the range in force, then the next change, then the shared note', async () => {
+    const el = await tab(
+      makeHass({
+        'select.gym_schedule_assignment': {
+          state: 'Bedrooms',
+          attributes: { schedule_id: 'abc', options: ['Own schedule', 'Bedrooms'] },
+        },
+      }),
+    );
+    const order = Array.from(
+      el.shadowRoot!.querySelectorAll(
+        '.now-line, .next-change, .shared-note, comfort-band-schedule-chart',
+      ),
+    ).map((n) => n.className || n.tagName.toLowerCase());
+    expect(order).toEqual([
+      'now-line',
+      'next-change',
+      'shared-note',
+      'comfort-band-schedule-chart',
+    ]);
+  });
+
+  // Another room's isn't known until read.
+  it('keeps no place for another room until it’s read there', async () => {
+    const el = await tab();
+    expect(nextChange(el)).not.toBeNull();
+    el.zone = 'study';
+    el.entities = makeEntities({ nextBandChange: 'sensor.study_next_band_change' });
+    await el.updateComplete;
+    expect(nextChange(el)).toBeNull();
+    el.hass = makeHass({
+      'sensor.study_next_band_change': {
+        state: new Date(Date.UTC(2026, 9, 23, 18, 0)).toISOString(),
+        attributes: { low: 18, high: 21, scheduled: true },
+      },
+    });
+    await el.updateComplete;
+    expect(text(nextChange(el))).toBe('The schedule’s next change: 18:00 → 18–21°');
+  });
+
+  // With no schedule, there's no next change to say, and no place for it.
+  it('has no next-change line where no schedule sets the range, or it can’t be told', async () => {
+    for (const attributes of [{ scheduled: false }, {}]) {
+      const el = await tab(
+        makeHass({ 'sensor.gym_next_band_change': { state: 'unknown', attributes } }),
+      );
+      expect(nowLine(el)).toBe('Now 17–25°');
+      expect(nextChange(el), JSON.stringify(attributes)).toBeNull();
+      teardown();
+    }
   });
 
   it('marks the change in force, and now on the chart', async () => {
@@ -392,6 +557,7 @@ describe('comfort-band-schedule-tab now', () => {
   it('says nothing about now without the zone’s entities', async () => {
     const el = await tab(makeHass(), null);
     expect(el.shadowRoot!.querySelector('.now-line')).toBeNull();
+    expect(el.shadowRoot!.querySelector('.next-change')).toBeNull();
     expect(el.shadowRoot!.querySelector('li.row.current')).toBeNull();
   });
 
@@ -445,6 +611,26 @@ describe('comfort-band-schedule-tab layout', () => {
 
   it('spaces the toolbar’s buttons apart', () => {
     expect(css()).toMatch(/\.list-toolbar\s*\{[^}]*gap:\s*var\(--cb-gap-sm\)/);
+  });
+
+  // #47: the line's reason and the next change's time come and go with HA's
+  // updates; at two lines each, the chart and list below don't move.
+  it('keeps the now line and the next change two lines tall each', () => {
+    const text = css().replace(/\/\*[\s\S]*?\*\//g, '');
+    const decls = (selector: string) =>
+      [...text.matchAll(new RegExp(`(?:^|\\})\\s*${selector}\\s*\\{([^}]*)\\}`, 'g'))]
+        .map((m) => m[1])
+        .join(';')
+        .split(';')
+        .map((d) => d.trim().replace(/\s+/g, ' '))
+        .filter(Boolean);
+    expect(decls('\\.now-line,\\s*\\.next-change')).toEqual([
+      'line-height: 1.35',
+      'min-height: 2.7em',
+    ]);
+    // Nothing of their own overrides it.
+    expect(decls('\\.now-line')).toEqual(['font-size: 14px', 'color: var(--cb-text-primary)']);
+    expect(decls('\\.next-change')).toEqual(['font-size: 13px', 'color: var(--cb-text-secondary)']);
   });
 });
 

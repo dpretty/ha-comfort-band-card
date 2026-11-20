@@ -7,14 +7,14 @@
  * (`effective_low`/`effective_high`), as on the Now tab, not from the list:
  * an adjustment, peak saving or a shared schedule can each make it differ
  * from it. The list's times are HA's local time, so "now" on the chart and
- * in the list is too.
+ * in the list is too, and so are the times the lines say.
  */
 
 import type { ZoneEntities } from './helpers.js';
 import type { HomeAssistant, Transition } from './types.js';
 import { readRoom } from './room-status.js';
 import { bandText } from './now-status.js';
-import { hasSince } from './diagnostics.js';
+import { formatWhen, hasSince, peakShift } from './diagnostics.js';
 import { parseTime } from './schedule-chart.js';
 
 /** Minutes past midnight at `ms`, in HA's time zone where the frontend
@@ -89,14 +89,64 @@ export function sharedScheduleName(hass: HomeAssistant, entities: ZoneEntities):
 }
 
 /**
- * "Now 19.5–22.5°": the range in force, and nothing more. Why it differs from
- * the schedule's, and the schedule's next change, are left out: review
- * found each untrue in some cases (an adjustment that outlasts the change,
- * a peak that moved nothing, the band ramp) (#33). Null while the range in
- * force can't be read.
+ * "Now 19.5–22.5°", and why it differs from the schedule's where an entity
+ * proves it (#47): "adjusted until 5 pm", only while a schedule sets the
+ * range (without one, an adjustment's range is simply the room's);
+ * "relaxed for a peak until 6 pm" or "getting ready for a peak starting 4 pm",
+ * only where peak saving's adjustments say it moved the range. The band
+ * ramp's easing isn't said: nothing tells it. Null while the range in force
+ * can't be read.
  */
-export function nowLine(hass: HomeAssistant, entities: ZoneEntities): string | null {
+export function nowLine(hass: HomeAssistant, entities: ZoneEntities, now: number): string | null {
   const r = readRoom(hass, entities);
   if (!Number.isFinite(r.band.low) || !Number.isFinite(r.band.high)) return null;
-  return `Now ${bandText(r.band)}`;
+  const zone = hass.config?.time_zone;
+  const ahead = (ms: number | null) => ms !== null && ms > now;
+  let why = '';
+  if (r.overrideActive) {
+    if (r.scheduled === true) {
+      why = ahead(r.overrideEnds)
+        ? `, adjusted until ${formatWhen(r.overrideEnds!, now, hass, zone)}`
+        : ', adjusted';
+    }
+  } else {
+    const peak = peakShift(hass, entities);
+    if (peak?.kind === 'relaxed') {
+      why = ahead(peak.at)
+        ? `, relaxed for a peak until ${formatWhen(peak.at!, now, hass, zone)}`
+        : ', relaxed for a peak';
+    } else if (peak?.kind === 'ahead') {
+      why = ahead(peak.at)
+        ? `, getting ready for a peak starting ${formatWhen(peak.at!, now, hass, zone)}`
+        : ', getting ready for a peak';
+    }
+  }
+  return `Now ${bandText(r.band)}${why}`;
+}
+
+/**
+ * "The schedule’s next change: 9 pm → 18–22°": the schedule's own, said as
+ * the schedule's, since the range in force can differ from then (an
+ * adjustment or a peak can outlast it, and the band ramp eases into it)
+ * (#33). It's the schedule in force: "The shared schedule’s" while the
+ * room follows one, as the list below isn't it then. Null where no
+ * schedule sets the range, where its next change can't be read or isn't
+ * ahead, or where the range it sets can't be read.
+ */
+export function nextChangeLine(
+  hass: HomeAssistant,
+  entities: ZoneEntities,
+  now: number,
+): string | null {
+  const r = readRoom(hass, entities);
+  if (r.scheduled !== true || r.nextChange === null || r.nextChange <= now) return null;
+  const id = entities.nextBandChange;
+  const attributes = id !== null ? hass.states[id]?.attributes : undefined;
+  const low = attributes?.low;
+  const high = attributes?.high;
+  if (typeof low !== 'number' || typeof high !== 'number') return null;
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
+  const when = formatWhen(r.nextChange, now, hass, hass.config?.time_zone);
+  const whose = ownScheduleInForce(hass, entities) === false ? 'shared schedule' : 'schedule';
+  return `The ${whose}’s next change: ${when} → ${bandText({ low, high })}`;
 }
