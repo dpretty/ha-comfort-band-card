@@ -628,7 +628,7 @@ function Ca(e, t = !0) {
     const c = e.scheduled === !0 && e.overrideEnds !== null && e.overrideEnds > e.now ? ` until ${e.formatTime(e.overrideEnds)}` : "";
     s = `${e.scheduled === !1 ? "set to" : "adjusted to"} ${zt(e.band)}${c}`;
   } else if (e.peak) {
-    const c = Zu(e), h = c !== null ? ` until ${e.formatTime(c)}` : "", f = t ? e.peak.kind === "relaxed" ? " for a peak" : " ahead of a peak" : "";
+    const c = Zu(e), h = c !== null ? ` until ${e.formatTime(c)}` : "", f = t && e.peak.kind === "relaxed" ? " for a peak" : "";
     s = `${zt(e.band)}${f}${h}`;
   } else {
     const c = e.scheduled === !0 && e.nextChange !== null && e.nextChange > e.now ? ` until ${e.formatTime(e.nextChange)}` : "";

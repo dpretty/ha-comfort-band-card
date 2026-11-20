@@ -434,8 +434,10 @@ describe('statusLine under a peak', () => {
     expect(statusLine(base).kind).toBe('comfortable');
   });
 
-  it('says the range is ahead of a peak, until it starts', () => {
-    expect(line(ahead(NOW + 45 * MIN))).toBe('Comfortable · 17–24° ahead of a peak until T+45m');
+  // Getting ready for a peak: the time it starts, without words, which
+  // wouldn't fit the Now tab's two lines on a narrow phone.
+  it('gives the time a peak starts while getting ready for it', () => {
+    expect(line(ahead(NOW + 45 * MIN))).toBe('Comfortable · 17–24° until T+45m');
   });
 
   it('says until the schedule’s next change where that comes first', () => {
@@ -443,7 +445,7 @@ describe('statusLine under a peak', () => {
       'Comfortable · 17–24° for a peak until T+30m',
     );
     expect(line({ ...ahead(NOW + 45 * MIN), nextChange: NOW + 30 * MIN })).toBe(
-      'Comfortable · 17–24° ahead of a peak until T+30m',
+      'Comfortable · 17–24° until T+30m',
     );
     expect(line({ nextChange: NOW + 60 * MIN })).toBe(
       'Comfortable · 17–24° for a peak until T+60m',
@@ -462,10 +464,15 @@ describe('statusLine under a peak', () => {
   // Not where either can't be told.
   it('says no time where the peak’s time or the schedule can’t be told', () => {
     expect(line(relaxed(null))).toBe('Comfortable · 17–24° for a peak');
-    expect(line(ahead(null))).toBe('Comfortable · 17–24° ahead of a peak');
+    expect(line(ahead(null))).toBe('Comfortable · 17–24°');
     expect(line(relaxed(NOW))).toBe('Comfortable · 17–24° for a peak');
     expect(line(relaxed(NOW - MIN))).toBe('Comfortable · 17–24° for a peak');
     expect(line({ scheduled: null })).toBe('Comfortable · 17–24° for a peak');
+    // As while the next-change sensor is unavailable: nothing read at all.
+    expect(line({ scheduled: null, nextChange: null })).toBe('Comfortable · 17–24° for a peak');
+    expect(line({ ...ahead(NOW + 45 * MIN), scheduled: null, nextChange: null })).toBe(
+      'Comfortable · 17–24°',
+    );
     // A next change that has passed: HA hasn't said the next one yet.
     expect(line({ nextChange: NOW })).toBe('Comfortable · 17–24° for a peak');
     expect(line({ nextChange: NOW - MIN })).toBe('Comfortable · 17–24° for a peak');

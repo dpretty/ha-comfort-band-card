@@ -288,7 +288,62 @@ describe('comfort-band-card', () => {
   });
 
   // #64: where peak saving moved the range, until the range next changes.
-  it('tells the tile a peak moved the range, and until the peak ends', async () => {
+  function withPeak(hass: HomeAssistant, state: string, attributes: Record<string, unknown>) {
+    hass.locale = { language: 'en-GB', time_format: '24' };
+    hass.states['sensor.gym_next_band_change'] = {
+      entity_id: 'sensor.gym_next_band_change',
+      state: new Date(2026, 9, 22, 17, 0).toISOString(),
+      attributes: { scheduled: true },
+      last_changed: '',
+      last_updated: '',
+    };
+    hass.entities['sensor.gym_peak_saving'] = {
+      entity_id: 'sensor.gym_peak_saving',
+      platform: 'comfort_band',
+      device_id: 'dev-gym',
+      area_id: null,
+      hidden: false,
+      entity_category: null,
+      translation_key: 'peak_saving',
+      name: null,
+    };
+    hass.states['sensor.gym_peak_saving'] = {
+      entity_id: 'sensor.gym_peak_saving',
+      state,
+      attributes,
+      last_changed: '',
+      last_updated: '',
+    };
+    return hass;
+  }
+
+  it('tells the tile a peak relaxed the range, until it ends, whatever the room is doing', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 22, 10, 0));
+    try {
+      const relaxed = {
+        low_adjustment: -1,
+        high_adjustment: 1,
+        ends: new Date(2026, 9, 22, 16, 0).toISOString(),
+      };
+      const hass = withPeak(makeHass('gym'), 'active', relaxed);
+      hass.states['sensor.gym_current_action'].state = 'heating';
+      const el = await card('gym', hass);
+      expect(tileOf(el).statusText).toBe('Heating · 19.5–22.5° for a peak until 16:00');
+      // Led by the sensor, the peak's time without its reason.
+      const standIn = withPeak(makeHass('gym'), 'active', relaxed);
+      standIn.states['binary_sensor.gym_room_sensor_unavailable'].state = 'on';
+      standIn.states['sensor.gym_room_temperature'].attributes = { source: 'climate' };
+      const offline = await card('gym', standIn);
+      expect(tileOf(offline).statusText).toBe(
+        'Room sensor offline · Comfortable · 19.5–22.5° until 16:00',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('tells the tile when a range moved ahead of a peak next changes: when it starts', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 9, 22, 10, 0));
     try {
@@ -323,7 +378,7 @@ describe('comfort-band-card', () => {
         last_updated: '',
       };
       const el = await card('gym', hass);
-      expect(tileOf(el).statusText).toBe('Comfortable · 19.5–22.5° ahead of a peak until 15:30');
+      expect(tileOf(el).statusText).toBe('Comfortable · 19.5–22.5° until 15:30');
     } finally {
       vi.useRealTimers();
     }
