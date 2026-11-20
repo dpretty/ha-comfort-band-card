@@ -268,15 +268,18 @@ describe('nowLine', () => {
   it('says the range was moved ahead of a peak, and when it starts', () => {
     expect(
       line({ 'sensor.gym_peak_saving': peak('preconditioning', 1, 0, { next_start: at(16) }) }),
-    ).toBe('Now 19.5–22.5°, getting ready for a peak at 16:00');
+    ).toBe('Now 19.5–22.5°, getting ready for a peak starting 16:00');
     expect(
       line({
         'sensor.gym_peak_saving': peak('preconditioning', 0, -1, { next_start: at(16, 0, 1) }),
       }),
-    ).toBe('Now 19.5–22.5°, getting ready for a peak at tomorrow 16:00');
+    ).toBe('Now 19.5–22.5°, getting ready for a peak starting tomorrow 16:00');
     expect(line({ 'sensor.gym_peak_saving': peak('preconditioning', 1, 0) })).toBe(
       'Now 19.5–22.5°, getting ready for a peak',
     );
+    expect(
+      line({ 'sensor.gym_peak_saving': peak('preconditioning', 1, 0, { next_start: at(11) }) }),
+    ).toBe('Now 19.5–22.5°, getting ready for a peak');
   });
 
   // An offset of 0, the climate's limits or a narrow band move nothing,
@@ -309,15 +312,30 @@ describe('nowLine', () => {
   });
 
   it('says its times in HA’s time zone', () => {
-    const hass = makeHass({
-      'binary_sensor.gym_override_active': 'on',
-      'sensor.gym_override_ends': '2026-10-23T04:00:00Z',
-    });
-    hass.config = { time_zone: 'Pacific/Auckland' } as HomeAssistant['config'];
-    // 17:00 in Auckland (UTC+13), the morning before in UTC.
-    expect(nowLine(hass, makeEntities(), Date.parse('2026-10-22T23:00:00Z'))).toBe(
-      'Now 19.5–22.5°, adjusted until 17:00',
-    );
+    // 17:00 in Auckland (UTC+13) is 04:00 UTC; now is 12:00 there.
+    const inAuckland = (overrides: Record<string, Spec>) => {
+      const hass = makeHass(overrides);
+      hass.config = { time_zone: 'Pacific/Auckland' } as HomeAssistant['config'];
+      return nowLine(hass, makeEntities(), Date.parse('2026-10-22T23:00:00Z'));
+    };
+    expect(
+      inAuckland({
+        'binary_sensor.gym_override_active': 'on',
+        'sensor.gym_override_ends': '2026-10-23T04:00:00Z',
+      }),
+    ).toBe('Now 19.5–22.5°, adjusted until 17:00');
+    expect(
+      inAuckland({
+        'sensor.gym_peak_saving': peak('active', -1, 1, { ends: '2026-10-23T04:00:00Z' }),
+      }),
+    ).toBe('Now 19.5–22.5°, relaxed for a peak until 17:00');
+    expect(
+      inAuckland({
+        'sensor.gym_peak_saving': peak('preconditioning', 1, 0, {
+          next_start: '2026-10-23T04:00:00Z',
+        }),
+      }),
+    ).toBe('Now 19.5–22.5°, getting ready for a peak starting 17:00');
   });
 });
 

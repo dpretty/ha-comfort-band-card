@@ -9,8 +9,9 @@
  *
  * **#33**: above the chart, the range in force now, from the integration's
  * entities; **#47**: why it differs from the schedule's, where an entity
- * shows it, and the schedule's next change. While this list is the one in force (the active profile's, not
- * empty, and not while the room follows a shared schedule), a now marker on
+ * shows it, and the schedule's next change. While this list is the one in
+ * force (the active profile's, not empty, and not while the room follows a
+ * shared schedule), a now marker on
  * the chart and its current change marked "Current". A change that repeats
  * the range before it is marked "Same as before". The list reads first:
  * Add, Edit and Delete sit behind "Edit schedule".
@@ -111,6 +112,11 @@ export class ComfortBandScheduleTab extends LitElement {
    *  at each minute. */
   @state() private _now = Date.now();
   private _clock: ReturnType<typeof setTimeout> | null = null;
+  /** Whether a schedule sets this room's range, as last read: kept while
+   *  it can't be (HA leaves the attribute out while the sensor is
+   *  unavailable, as on a reload of the integration), so the next change's
+   *  place stays (#47 review). Null until read for the room shown. */
+  private _scheduled: boolean | null = null;
   /** Which button takes focus once the list's mode has changed. */
   private _focusAfterMode: 'add' | 'edit' | null = null;
 
@@ -354,6 +360,11 @@ export class ComfortBandScheduleTab extends LitElement {
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has('hass')) this._now = Date.now();
+    if (changed.has('zone')) this._scheduled = null;
+    if (this.hass && this.entities) {
+      const scheduled = readRoom(this.hass, this.entities).scheduled;
+      if (scheduled !== null) this._scheduled = scheduled;
+    }
     // A new change starting puts the last one's notice away.
     const m = changed as Map<PropertyKey, unknown>;
     if (
@@ -833,12 +844,13 @@ export class ComfortBandScheduleTab extends LitElement {
 
   /** The range in force now, from the integration's entities, and why it
    *  differs from the schedule's where that can be told; the schedule's
-   *  next change, where a schedule sets the range (its place kept while it
-   *  can't be read); and whether the room follows a shared schedule. */
+   *  next change, where a schedule sets the range (its place kept while its
+   *  words, or whether a schedule sets the range, can't be read); and
+   *  whether the room follows a shared schedule. */
   private _renderNow() {
     if (!this.hass || !this.entities) return nothing;
     const line = nowLine(this.hass, this.entities, this._now);
-    const scheduled = readRoom(this.hass, this.entities).scheduled === true;
+    const scheduled = this._scheduled === true;
     const next = scheduled ? nextChangeLine(this.hass, this.entities, this._now) : null;
     const following = ownScheduleInForce(this.hass, this.entities) === false;
     const shared = sharedScheduleName(this.hass, this.entities);

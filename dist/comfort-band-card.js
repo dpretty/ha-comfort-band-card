@@ -2840,7 +2840,7 @@ function Bh(e, t, n) {
     i.scheduled === !0 && (r = s(i.overrideEnds) ? `, adjusted until ${In(i.overrideEnds, n, e, o)}` : ", adjusted");
   else {
     const c = Lh(e, t);
-    c?.kind === "relaxed" ? r = s(c.at) ? `, relaxed for a peak until ${In(c.at, n, e, o)}` : ", relaxed for a peak" : c?.kind === "ahead" && (r = s(c.at) ? `, getting ready for a peak at ${In(c.at, n, e, o)}` : ", getting ready for a peak");
+    c?.kind === "relaxed" ? r = s(c.at) ? `, relaxed for a peak until ${In(c.at, n, e, o)}` : ", relaxed for a peak" : c?.kind === "ahead" && (r = s(c.at) ? `, getting ready for a peak starting ${In(c.at, n, e, o)}` : ", getting ready for a peak");
   }
   return `Now ${qt(i.band)}${r}`;
 }
@@ -2876,7 +2876,7 @@ function Ha(e) {
 }
 let Be = class extends Te {
   constructor() {
-    super(...arguments), this.zone = "", this._editingList = !1, this._now = Date.now(), this._clock = null, this._focusAfterMode = null, this._profile = "", this._listProfile = "", this._listZone = "", this._profileNotice = null, this._focusNotice = !1, this._transitions = [], this._loading = !1, this._error = null, this._mode = "list", this._editing = null, this._confirmingDeleteAt = null, this._adding = null, this._focusTrigger = null, this._subscribeGen = 0, this._onEditSchedule = () => {
+    super(...arguments), this.zone = "", this._editingList = !1, this._now = Date.now(), this._clock = null, this._scheduled = null, this._focusAfterMode = null, this._profile = "", this._listProfile = "", this._listZone = "", this._profileNotice = null, this._focusNotice = !1, this._transitions = [], this._loading = !1, this._error = null, this._mode = "list", this._editing = null, this._confirmingDeleteAt = null, this._adding = null, this._focusTrigger = null, this._subscribeGen = 0, this._onEditSchedule = () => {
       this._editingList = !0, this._focusAfterMode = "add";
     }, this._onDoneEditing = () => {
       this._editingList = !1, this._confirmingDeleteAt = null, this._focusAfterMode = "edit";
@@ -2932,7 +2932,10 @@ let Be = class extends Te {
     };
   }
   willUpdate(e) {
-    e.has("hass") && (this._now = Date.now());
+    if (e.has("hass") && (this._now = Date.now()), e.has("zone") && (this._scheduled = null), this.hass && this.entities) {
+      const n = Oi(this.hass, this.entities).scheduled;
+      n !== null && (this._scheduled = n);
+    }
     const t = e;
     (t.has("_mode") && this._mode !== "list" || t.has("_confirmingDeleteAt") && this._confirmingDeleteAt !== null) && (this._profileNotice = null), e.has("hass") && this.hass && this._profile === "" && (this._profile = Ra(this.hass) ?? "home", this._subscribe()), e.has("_transitions") && this._confirmingDeleteAt !== null && !this._transitions.some((n) => n.at === this._confirmingDeleteAt) && (this._confirmingDeleteAt = null);
   }
@@ -3107,11 +3110,12 @@ let Be = class extends Te {
   }
   /** The range in force now, from the integration's entities, and why it
    *  differs from the schedule's where that can be told; the schedule's
-   *  next change, where a schedule sets the range (its place kept while it
-   *  can't be read); and whether the room follows a shared schedule. */
+   *  next change, where a schedule sets the range (its place kept while its
+   *  words, or whether a schedule sets the range, can't be read); and
+   *  whether the room follows a shared schedule. */
   _renderNow() {
     if (!this.hass || !this.entities) return k;
-    const e = Bh(this.hass, this.entities, this._now), t = Oi(this.hass, this.entities).scheduled === !0, n = t ? Ih(this.hass, this.entities, this._now) : null, i = Io(this.hass, this.entities) === !1, o = Uh(this.hass, this.entities);
+    const e = Bh(this.hass, this.entities, this._now), t = this._scheduled === !0, n = t ? Ih(this.hass, this.entities, this._now) : null, i = Io(this.hass, this.entities) === !1, o = Uh(this.hass, this.entities);
     return v`
       <div class="now-line">${e ?? k}</div>
       ${t ? v`<div class="next-change">${n ?? k}</div>` : k}

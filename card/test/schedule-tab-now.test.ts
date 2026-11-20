@@ -221,6 +221,40 @@ describe('comfort-band-schedule-tab now', () => {
     expect(text(nextChange(el))).toBe('');
   });
 
+  // HA leaves the attributes out while the sensor is unavailable, as while
+  // the integration reloads (#47 review): the place stays.
+  it('keeps the next change’s place while whether a schedule sets the range can’t be read', async () => {
+    const el = await tab();
+    const unavailable = makeHass({
+      'sensor.gym_next_band_change': { state: 'unavailable', attributes: {} },
+    });
+    el.hass = unavailable;
+    await el.updateComplete;
+    expect(nextChange(el)).not.toBeNull();
+    expect(text(nextChange(el))).toBe('');
+    el.hass = makeHass();
+    await el.updateComplete;
+    expect(text(nextChange(el))).toBe('The schedule’s next change: 17:30 → 19.5–22.5°');
+  });
+
+  // Another room's isn't known until read.
+  it('keeps no place for another room until it’s read there', async () => {
+    const el = await tab();
+    expect(nextChange(el)).not.toBeNull();
+    el.zone = 'study';
+    el.entities = makeEntities({ nextBandChange: 'sensor.study_next_band_change' });
+    await el.updateComplete;
+    expect(nextChange(el)).toBeNull();
+    el.hass = makeHass({
+      'sensor.study_next_band_change': {
+        state: new Date(Date.UTC(2026, 9, 23, 18, 0)).toISOString(),
+        attributes: { low: 18, high: 21, scheduled: true },
+      },
+    });
+    await el.updateComplete;
+    expect(text(nextChange(el))).toBe('The schedule’s next change: 18:00 → 18–21°');
+  });
+
   // With no schedule, there's no next change to say, and no place for it.
   it('has no next-change line where no schedule sets the range, or it can’t be told', async () => {
     for (const attributes of [{ scheduled: false }, {}]) {
@@ -527,8 +561,21 @@ describe('comfort-band-schedule-tab layout', () => {
   // #47: the line's reason and the next change's time come and go with HA's
   // updates; at two lines each, the chart and list below don't move.
   it('keeps the now line and the next change two lines tall each', () => {
-    const rule = /\.now-line,\s*\.next-change\s*\{([^}]*)\}/.exec(css())?.[1] ?? '';
-    expect(rule).toMatch(/^\s*line-height:\s*1\.35;\s*min-height:\s*2\.7em;?\s*$/);
+    const text = css().replace(/\/\*[\s\S]*?\*\//g, '');
+    const decls = (selector: string) =>
+      [...text.matchAll(new RegExp(`(?:^|\\})\\s*${selector}\\s*\\{([^}]*)\\}`, 'g'))]
+        .map((m) => m[1])
+        .join(';')
+        .split(';')
+        .map((d) => d.trim().replace(/\s+/g, ' '))
+        .filter(Boolean);
+    expect(decls('\\.now-line,\\s*\\.next-change')).toEqual([
+      'line-height: 1.35',
+      'min-height: 2.7em',
+    ]);
+    // Nothing of their own overrides it.
+    expect(decls('\\.now-line')).toEqual(['font-size: 14px', 'color: var(--cb-text-primary)']);
+    expect(decls('\\.next-change')).toEqual(['font-size: 13px', 'color: var(--cb-text-secondary)']);
   });
 });
 

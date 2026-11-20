@@ -92,7 +92,7 @@ export function sharedScheduleName(hass: HomeAssistant, entities: ZoneEntities):
  * "Now 19.5–22.5°", and why it differs from the schedule's where an entity
  * proves it (#47): "adjusted until 5 pm", only while a schedule sets the
  * range (without one, an adjustment's range is simply the room's);
- * "relaxed for a peak until 6 pm" or "getting ready for a peak at 4 pm",
+ * "relaxed for a peak until 6 pm" or "getting ready for a peak starting 4 pm",
  * only where peak saving's adjustments say it moved the range. The band
  * ramp's easing isn't said: nothing tells it. Null while the range in force
  * can't be read.
@@ -117,7 +117,7 @@ export function nowLine(hass: HomeAssistant, entities: ZoneEntities, now: number
         : ', relaxed for a peak';
     } else if (peak?.kind === 'ahead') {
       why = ahead(peak.at)
-        ? `, getting ready for a peak at ${formatWhen(peak.at!, now, hass, zone)}`
+        ? `, getting ready for a peak starting ${formatWhen(peak.at!, now, hass, zone)}`
         : ', getting ready for a peak';
     }
   }
