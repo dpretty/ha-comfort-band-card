@@ -8,8 +8,8 @@
  * a v0.9.x-style instant transition does linear show a tiny diagonal
  * over one sample interval instead of a vertical step, which is a fair
  * visual trade for accurate ramp rendering on v0.10.0 zones), and
- * `current_action` as translucent shaded bars behind everything
- * (heating = red, cooling = blue, idle = blank).
+ * `current_action` as a strip under the plot (heating, cooling; idle
+ * blank).
  *
  * Conditionally renders (when the entity props are set):
  *   - apparent temperature (dashed, in the room colour — visual cue
@@ -25,18 +25,28 @@
  * lines overlaid is the only way to read that off the screen.
  *
  * Data comes from HA's `history/stream` websocket subscription (v0.8.1).
- * The initial event carries the 24h window; subsequent events stream
+ * The initial event carries the window; subsequent events stream
  * incremental state changes as they arrive. `subscribeHistory` merges
  * deltas into a running snapshot; the renderer is unchanged across the
  * initial dump and the live tail.
+ *
+ * #34: the last 6 h, 24 h (the default) or 7 d, picked above the chart;
+ * a readout line over the plot with the time and each value where the
+ * pointer (or a tap) is, the latest otherwise; heating and cooling as a
+ * strip under the plot, in their colours mixed towards the text so they
+ * stand out in either theme, not faint shading across it; the time axis
+ * in HA's 12/24-hour setting, the temperature axis with its unit, and
+ * room for the humidity axis's "100%".
  */
 
 import { html, css, unsafeCSS, nothing } from 'lit';
 import type { PropertyValues, TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import uPlot from 'uplot';
-import type { Options as UPlotOptions } from 'uplot';
+import type { AlignedData, Options as UPlotOptions } from 'uplot';
 import type { HomeAssistant } from './types.js';
+import { bandText, degrees, formatTime } from './now-status.js';
+import { formatWhen } from './diagnostics.js';
 import {
   HOURS_TO_SHOW,
   alignSeries,
@@ -57,6 +67,19 @@ interface ActionInterval {
  *  the uPlot options, the ResizeObserver setSize call, AND the CSS
  *  `.chart-host` rule (interpolated via `unsafeCSS` below). */
 const CHART_HEIGHT = 260;
+
+/** The ranges offered (#34); 24 hours to start with. */
+export const RANGES = [
+  { hours: 6, label: '6 h', words: '6 hours' },
+  { hours: 24, label: '24 h', words: '24 hours' },
+  { hours: 168, label: '7 d', words: '7 days' },
+] as const;
+
+/** The heating/cooling strip under the plot (#34): its height, and the
+ *  room above it (from the plot) and below it (to the time labels), in
+ *  CSS pixels. */
+const STRIP = 6;
+const STRIP_GAP = 3;
 
 /** Count of always-present series: room, low, high. Named so
  *  `expectedSeriesCount` reads intentionally; if a future series is
@@ -85,6 +108,19 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
   /** Latest action intervals (kept on the instance so the uPlot draw
    *  hook can read them every frame without rebinding). */
   private _intervals: ActionInterval[] = [];
+  /** The data last plotted, for the readout (#34). */
+  private _data: AlignedData | null = null;
+  /** The strip's colours, as last drawn, for the legend's swatches. */
+  private _stripColors = { heating: '', cooling: '' };
+
+  /** How many hours back the chart shows (#34). */
+  @state() private _hours: number = HOURS_TO_SHOW;
+  /** A range picked while a chart is drawn: it stays until the new one's
+   *  history arrives, the readout saying it's loading. */
+  @state() private _switching = false;
+  /** The data point the pointer (or a tap) is on, from uPlot's cursor;
+   *  null for none, when the readout gives the latest. */
+  @state() private _cursorIdx: number | null = null;
 
   /** Overlay-presence getters used by `_renderPlot`, `_buildOpts`, and
    *  `render`. Single source of truth so the three branches can't
@@ -116,6 +152,40 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     css`
       .chart-host {
         height: ${unsafeCSS(CHART_HEIGHT)}px;
+      }
+      .ranges {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--cb-gap-xs);
+      }
+      .ranges button {
+        font: inherit;
+        font-size: 12px;
+        min-height: 32px;
+        padding: 0 12px;
+        border-radius: 16px;
+        border: 1px solid var(--cb-track-bg);
+        background: transparent;
+        color: var(--cb-text-secondary);
+        cursor: pointer;
+      }
+      .ranges button[aria-pressed='true'] {
+        background: var(--cb-track-bg);
+        color: var(--cb-text-primary);
+      }
+      .ranges button:focus-visible {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 2px;
+      }
+      /* Two lines' height whatever its words take, so the chart under it
+         doesn't move as the pointer does (#34). */
+      .readout {
+        font-size: 12px;
+        line-height: 1.35;
+        min-height: 2.7em;
+        padding: var(--cb-gap-xs) 0;
+        color: var(--cb-text-primary);
+        font-variant-numeric: tabular-nums;
       }
       /* "Dashed" swatch mirrors the dashed apparent stroke in the chart.
          Picks up the legend item's inline color (set to roomColor) via
@@ -169,7 +239,8 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       changed.has('highEntity') ||
       changed.has('actionEntity') ||
       changed.has('apparentEntity') ||
-      changed.has('humidityEntity')
+      changed.has('humidityEntity') ||
+      (changed as Map<PropertyKey, unknown>).has('_hours')
     ) {
       void this._subscribe();
     }
@@ -206,7 +277,10 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     }
 
     const gen = ++this._fetchGen;
-    this._loading = true;
+    // With a chart drawn (another range picked), it stays until the new
+    // history arrives; the first time, a loading message.
+    if (this._plot) this._switching = true;
+    else this._loading = true;
     this._error = null;
     this._empty = false;
 
@@ -218,14 +292,17 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       this.apparentEntity,
       this.humidityEntity,
     ].filter((e): e is string => Boolean(e));
+    // The pointer's point belongs to the data being replaced.
+    this._cursorIdx = null;
 
     try {
-      const unsub = await subscribeHistory(this.hass, entityIds, HOURS_TO_SHOW, (response) => {
+      const unsub = await subscribeHistory(this.hass, entityIds, this._hours, (response) => {
         // Stale-generation guard: a later `_subscribe()` may have
         // started while events from this one are still arriving.
         if (gen !== this._fetchGen) return;
         this._renderPlot(response);
         this._loading = false;
+        this._switching = false;
       });
       // A newer subscribe may have started while this one was awaiting
       // the WS round-trip — drop this one's handle in favour of the
@@ -246,6 +323,8 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       // depending on `_unsubscribe` being null.
       this._error = err instanceof Error ? err.message : 'Failed to load history.';
       this._loading = false;
+      this._switching = false;
+      this._data = null;
       this._destroyPlot();
     }
   }
@@ -316,7 +395,8 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
   }
 
   /** Convert the action history into [{start, end, action}] intervals,
-   *  filtering out idle/unknown so we only paint heating/cooling. */
+   *  filtering out idle/unknown so we only paint heating/cooling. A run of
+   *  the same action reported again is one interval (#34: drawn as one). */
   private _actionIntervals(points: HistoryPoint[] | undefined, nowSec: number): ActionInterval[] {
     if (!points) return [];
     const sorted = [...points].sort((a, b) => a.lu - b.lu);
@@ -326,7 +406,9 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       const end = sorted[i + 1]?.lu ?? nowSec;
       const action = sorted[i].s;
       if (action === 'heating' || action === 'cooling') {
-        out.push({ start, end, action });
+        const last = out[out.length - 1];
+        if (last && last.action === action && last.end === start) last.end = end;
+        else out.push({ start, end, action });
       }
     }
     return out;
@@ -362,6 +444,7 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       this._intervals.length === 0
     ) {
       this._destroyPlot();
+      this._data = null;
       this._empty = true;
       return;
     }
@@ -375,6 +458,7 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     if (this._hasApparent) seriesData.push(apparent);
     if (this._hasHumidity) seriesData.push(humidity);
     const data = alignSeries(seriesData, nowSec);
+    this._data = data;
     const opts: UPlotOptions = this._buildOpts(this._host.clientWidth || 400);
 
     if (this._plot) {
@@ -405,6 +489,15 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     // a hex fallback for the unset case.
     const secondaryText = this._resolveColor('--secondary-text-color', '#727272');
     const gridStroke = this._resolveColor('--divider-color', '#e0e0e0');
+    // The strip's colours: the action's, 30% of the way to the text's, as
+    // the band gauge's (#22), so they stand out from the card in either
+    // theme (#34). Kept for the legend's swatches.
+    const primaryText = this._resolveColor('--primary-text-color', '#212121');
+    this._stripColors = {
+      heating: mixColor(heatColor, primaryText, 0.3),
+      cooling: mixColor(coolColor, primaryText, 0.3),
+    };
+    const unit = temperatureUnit(this.hass, this.roomEntity);
 
     // Build the series array conditionally so the slot count stays in
     // lockstep with `_renderPlot`'s data array. Apparent uses the room
@@ -469,22 +562,32 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     // only appears when humidity is wired — empty axes are visual
     // noise. `grid: { show: false }` on y2 avoids two overlapping grid
     // sets when both axes have a grid.
+    // The time axis in HA's 12/24-hour setting, with room under the plot
+    // for the heating/cooling strip (no tick marks there); the
+    // temperature axis with its unit; the humidity axis wide enough for
+    // "100%" (#34).
     const axes: NonNullable<UPlotOptions['axes']> = [
       {
         stroke: secondaryText,
         grid: { stroke: gridStroke },
+        ticks: { show: false },
+        gap: STRIP_GAP * 2 + STRIP + 2,
+        size: 50 + STRIP_GAP * 2 + STRIP,
+        values: (u: uPlot, splits: number[]) =>
+          timeLabels(splits, (u.scales.x.max ?? 0) - (u.scales.x.min ?? 0), this.hass),
       },
       {
         stroke: secondaryText,
         grid: { stroke: gridStroke },
-        size: 38,
+        size: 48,
+        values: (_u: uPlot, vs: number[]) => vs.map((v) => `${degrees(v)}${unit}`),
       },
     ];
     if (this._hasHumidity) {
       axes.push({
         scale: 'y2',
         side: 1,
-        size: 38,
+        size: 46,
         stroke: secondaryText,
         grid: { show: false },
         values: (_u: uPlot, vs: number[]) => vs.map((v) => `${v.toFixed(0)}%`),
@@ -510,24 +613,32 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       axes,
       series,
       hooks: {
+        // Heating and cooling as a strip under the plot, clear of the
+        // lines (#34): short cycles read as ticks, not stripes across it.
         draw: [
           (u: uPlot): void => {
             const ctx = u.ctx;
             if (!ctx) return;
-            const top = u.bbox.top;
-            const height = u.bbox.height;
+            const ratio = uPlot.pxRatio || 1;
+            const top = u.bbox.top + u.bbox.height + STRIP_GAP * ratio;
+            const rects = stripRects(
+              this._intervals,
+              (v) => u.valToPos(v, 'x', true),
+              u.bbox.left,
+              u.bbox.left + u.bbox.width,
+            );
             ctx.save();
-            for (const interval of this._intervals) {
-              const x0 = u.valToPos(interval.start, 'x', true);
-              const x1 = u.valToPos(interval.end, 'x', true);
-              if (x1 <= x0) continue;
-              ctx.fillStyle =
-                interval.action === 'heating'
-                  ? withAlpha(heatColor, 0.18)
-                  : withAlpha(coolColor, 0.18);
-              ctx.fillRect(x0, top, x1 - x0, height);
+            for (const r of rects) {
+              ctx.fillStyle = this._stripColors[r.action];
+              ctx.fillRect(r.x, top, r.w, STRIP * ratio);
             }
             ctx.restore();
+          },
+        ],
+        // The readout follows the pointer, or a tap (#34).
+        setCursor: [
+          (u: uPlot): void => {
+            this._cursorIdx = u.cursor.idx ?? null;
           },
         ],
       },
@@ -544,15 +655,29 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     const idle = this._loading || this._error !== null || this._empty;
     // Reflect what's actually plotted so screen-reader users get the
     // same disclosure sighted users get from the legend.
+    const words = rangeWords(this._hours);
     const ariaLabel = [
       'Room temperature',
       this._hasApparent ? ', apparent temperature' : '',
       ', effective band edges',
       this._hasHumidity ? ', humidity' : '',
-      ' and heating/cooling shading — last 24 hours',
+      ` and heating/cooling — last ${words}`,
     ].join('');
     return html`
-      ${this._loading ? html`<div class="status">Loading 24 h history…</div>` : nothing}
+      <div class="ranges" role="group" aria-label="Show the last">
+        ${RANGES.map(
+          (r) =>
+            html`<button
+              type="button"
+              aria-pressed=${this._hours === r.hours ? 'true' : 'false'}
+              @click=${() => this._pickRange(r.hours)}
+            >
+              ${r.label}
+            </button>`,
+        )}
+      </div>
+      <div class="readout">${idle ? nothing : this._readout()}</div>
+      ${this._loading ? html`<div class="status">Loading ${words} of history…</div>` : nothing}
       ${this._error ? html`<div class="status">${this._error}</div>` : nothing}
       ${this._empty
         ? html`<div class="status">
@@ -562,6 +687,38 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       <div class="chart-host ${idle ? 'idle' : ''}" role="img" aria-label=${ariaLabel}></div>
       ${idle ? nothing : this._renderLegend()}
     `;
+  }
+
+  /** Shows the last `hours` (#34): a new subscription for that window. */
+  private _pickRange(hours: number): void {
+    if (hours === this._hours) return;
+    this._hours = hours;
+  }
+
+  /** The readout line (#34): the time and each shown series' value at the
+   *  pointer's point, or the latest ("Now"), and heating or cooling then. */
+  private _readout(): string {
+    if (this._switching) return `Loading ${rangeWords(this._hours)} of history…`;
+    const data = this._data;
+    const xs = data?.[0];
+    if (!data || !xs || xs.length === 0) return '';
+    const idx = this._cursorIdx !== null && this._cursorIdx < xs.length ? this._cursorIdx : null;
+    const at = xs[idx ?? xs.length - 1];
+    const value = (label: string): number | null => {
+      if (this._hiddenLabels.has(label)) return null;
+      const i = this._seriesIndexForLabel(label);
+      const v = i < 0 ? null : (data[i]?.[idx ?? xs.length - 1] ?? null);
+      return typeof v === 'number' && Number.isFinite(v) ? v : null;
+    };
+    return readoutLine({
+      when: idx === null ? 'Now' : formatWhen(at * 1000, Date.now(), this.hass),
+      room: value('Room'),
+      apparent: value('Apparent'),
+      low: value('Low band'),
+      high: value('High band'),
+      humidity: value('Humidity'),
+      action: actionAt(this._intervals, at),
+    });
   }
 
   /** Custom legend with per-series toggles (v0.8.3+). Each line-series
@@ -601,11 +758,17 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
           )
         : nothing}
       <span
-        ><span class="swatch" style="background:var(--cb-action-heating);opacity:0.18"></span>
+        ><span
+          class="swatch"
+          style="background:${this._stripColors.heating || 'var(--cb-action-heating)'}"
+        ></span>
         Heating</span
       >
       <span
-        ><span class="swatch" style="background:var(--cb-action-cooling);opacity:0.18"></span>
+        ><span
+          class="swatch"
+          style="background:${this._stripColors.cooling || 'var(--cb-action-cooling)'}"
+        ></span>
         Cooling</span
       >
     </div>`;
@@ -636,26 +799,113 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
   }
 }
 
-/** Convert any CSS colour (hex, rgb, var-resolved) to an `rgba(...)` with
- *  the given alpha. Falls back to the original colour if parsing fails. */
-function withAlpha(color: string, alpha: number): string {
+/** "24 hours": a range in words. */
+function rangeWords(hours: number): string {
+  return RANGES.find((r) => r.hours === hours)?.words ?? `${hours} hours`;
+}
+
+/** The readout's words (#34): "22:30 · Room 21.3° · Feels like 21.9° ·
+ *  Range 19.5–22.5° · Humidity 45% · Heating", leaving out what isn't
+ *  there (a series not shown, or a value not read). */
+export function readoutLine(r: {
+  when: string;
+  room: number | null;
+  apparent: number | null;
+  low: number | null;
+  high: number | null;
+  humidity: number | null;
+  action: 'heating' | 'cooling' | null;
+}): string {
+  const parts = [r.when];
+  if (r.room !== null) parts.push(`Room ${degrees(r.room)}°`);
+  if (r.apparent !== null) parts.push(`Feels like ${degrees(r.apparent)}°`);
+  if (r.low !== null && r.high !== null)
+    parts.push(`Range ${bandText({ low: r.low, high: r.high })}`);
+  if (r.humidity !== null) parts.push(`Humidity ${Math.round(r.humidity)}%`);
+  if (r.action) parts.push(r.action === 'heating' ? 'Heating' : 'Cooling');
+  return parts.join(' · ');
+}
+
+/** Heating or cooling at `at` (unix seconds), from the action's intervals. */
+export function actionAt(
+  intervals: ReadonlyArray<{ start: number; end: number; action: 'heating' | 'cooling' }>,
+  at: number,
+): 'heating' | 'cooling' | null {
+  return intervals.find((i) => i.start <= at && at < i.end)?.action ?? null;
+}
+
+/** Where to draw each heating or cooling interval in the strip: its left
+ *  edge and width in whole canvas pixels (no blurred edges), kept within
+ *  the plot (`left`–`right`), at least a pixel wide so a short cycle
+ *  still shows. */
+export function stripRects(
+  intervals: ReadonlyArray<{ start: number; end: number; action: 'heating' | 'cooling' }>,
+  toX: (seconds: number) => number,
+  left: number,
+  right: number,
+): Array<{ x: number; w: number; action: 'heating' | 'cooling' }> {
+  const out: Array<{ x: number; w: number; action: 'heating' | 'cooling' }> = [];
+  for (const i of intervals) {
+    const x0 = Math.max(left, toX(i.start));
+    const x1 = Math.min(right, toX(i.end));
+    // Outside the plot (clamped past each other, or onto its edge).
+    if (x1 < x0 || (x1 === x0 && (x0 <= left || x1 >= right))) continue;
+    const x = Math.round(x0);
+    out.push({ x, w: Math.max(1, Math.round(x1) - x), action: i.action });
+  }
+  return out;
+}
+
+/** The time axis's labels in HA's 12/24-hour setting (#34): times, with
+ *  the day under midnight; over more than a day and a half, the day alone
+ *  at midnight. */
+export function timeLabels(
+  splits: number[],
+  spanSeconds: number,
+  hass?: Pick<HomeAssistant, 'locale'>,
+): string[] {
+  const own = hass?.locale?.language;
+  const language = own?.startsWith('en') ? own : 'en';
+  // "Sat 21" in any English: Intl's own order for the two varies ("21 Sat").
+  const weekday = new Intl.DateTimeFormat(language, { weekday: 'short' });
+  const dayOf = { format: (d: Date) => `${weekday.format(d)} ${d.getDate()}` };
+  const long = spanSeconds > 36 * 3600;
+  return splits.map((s) => {
+    const d = new Date(s * 1000);
+    const time = formatTime(s * 1000, hass);
+    if (d.getHours() !== 0 || d.getMinutes() !== 0) return time;
+    const day = dayOf.format(d);
+    return long ? day : `${time}\n${day}`;
+  });
+}
+
+/** The room temperature's unit ("°C"), or "°" where HA doesn't give one. */
+export function temperatureUnit(hass: HomeAssistant | undefined, entityId: string): string {
+  const unit = hass?.states[entityId]?.attributes.unit_of_measurement;
+  return typeof unit === 'string' && unit.trim() ? unit.trim() : '°';
+}
+
+/** A colour `share` of the way to another (hex or rgb(), as resolved from
+ *  the theme), as `rgb(…)`; the first as given where either can't be read. */
+export function mixColor(color: string, toward: string, share: number): string {
+  const a = parseColor(color);
+  const b = parseColor(toward);
+  if (!a || !b) return color.trim();
+  const mix = a.map((v, i) => Math.round(v + (b[i] - v) * share));
+  return `rgb(${mix[0]}, ${mix[1]}, ${mix[2]})`;
+}
+
+function parseColor(color: string): [number, number, number] | null {
   const trimmed = color.trim();
-  // Hex form
-  const hexMatch = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(trimmed);
-  if (hexMatch) {
-    let hex = hexMatch[1];
-    if (hex.length === 3) hex = hex.replace(/(.)/g, '$1$1');
-    const r = parseInt(hex.slice(0, 2), 16);
-    const g = parseInt(hex.slice(2, 4), 16);
-    const b = parseInt(hex.slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(trimmed);
+  if (hex) {
+    let h = hex[1];
+    if (h.length === 3) h = h.replace(/(.)/g, '$1$1');
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
   }
-  // rgb()/rgba()
-  const rgbMatch = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(trimmed);
-  if (rgbMatch) {
-    return `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${alpha})`;
-  }
-  return trimmed;
+  const rgb = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i.exec(trimmed);
+  if (rgb) return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+  return null;
 }
 
 declare global {
