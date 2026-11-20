@@ -145,6 +145,10 @@ export interface StatusInput {
   scheduled: boolean | null;
   /** When the schedule next changes the band, in ms, or null. */
   nextChange: number | null;
+  /** Where peak saving has moved the range in force (`peakShift`): relaxed
+   *  in a peak, or moved ahead of one, with when the peak ends or starts;
+   *  null otherwise (#64). */
+  peak: { kind: 'relaxed' | 'ahead'; at: number | null } | null;
   /** What a change made on the card is doing, until it has gone through. */
   doing: string | null;
   now: number;
@@ -155,7 +159,15 @@ export interface StatusInput {
  * The status line, in words. "until" is said only when it is true: for a
  * schedule, its next change; for an adjustment, when it ends, and only when a
  * schedule sets the zone's band. Without one, an adjustment's band is the
- * zone's band from then on, so it doesn't end.
+ * zone's band from then on, so it doesn't end. Where peak saving has moved
+ * the range, "until" is when the range is next due to change: the peak's
+ * end (or, getting ready for one, its start), or the schedule's next change
+ * if that comes first; not said where either can't be told (#64). A peak's
+ * wider range says so ("for a peak"); getting ready for one, or led by
+ * "Room sensor offline", the line gives the time alone, to keep it short:
+ * the words took the Now tab's status past its two lines on a narrow phone
+ * (#55). (In a room with no schedule, the time itself is new, and below
+ * 320 px can still take it to three.)
  *
  * While a stand-in reading drives control, the line leads with "Room sensor
  * offline" and goes on as usual; with no reading at all, control is on hold.
@@ -169,15 +181,16 @@ export function statusLine(s: StatusInput): { kind: StatusKind; text: string } {
   if (s.sensor === 'no-reading') {
     return { kind: 'sensor', text: 'On hold: no room temperature reading' };
   }
-  const line = inForce(s);
-  if (s.sensor === 'stand-in')
-    return { kind: 'sensor', text: `Room sensor offline · ${line.text}` };
-  return line;
+  if (s.sensor === 'stand-in') {
+    return { kind: 'sensor', text: `Room sensor offline · ${inForce(s, false).text}` };
+  }
+  return inForce(s);
 }
 
 /** The status of a room being controlled from a reading: what it's doing,
- *  the range in force, and until when. */
-function inForce(s: StatusInput): { kind: StatusKind; text: string } {
+ *  the range in force, and until when; and, with `why`, that a peak's
+ *  wider range is for a peak. */
+function inForce(s: StatusInput, why = true): { kind: StatusKind; text: string } {
   if (!Number.isFinite(s.band.low) || !Number.isFinite(s.band.high)) {
     return { kind: 'none', text: "Can't read this room's range" };
   }
@@ -202,6 +215,11 @@ function inForce(s: StatusInput): { kind: StatusKind; text: string } {
         ? ` until ${s.formatTime(s.overrideEnds)}`
         : '';
     rest = `${s.scheduled === false ? 'set to' : 'adjusted to'} ${bandText(s.band)}${until}`;
+  } else if (s.peak) {
+    const ends = peakRangeEnds(s);
+    const until = ends !== null ? ` until ${s.formatTime(ends)}` : '';
+    const reason = why && s.peak.kind === 'relaxed' ? ' for a peak' : '';
+    rest = `${bandText(s.band)}${reason}${until}`;
   } else {
     const until =
       s.scheduled === true && s.nextChange !== null && s.nextChange > s.now
@@ -211,6 +229,24 @@ function inForce(s: StatusInput): { kind: StatusKind; text: string } {
   }
   const text = word ? `${word} · ${rest}` : rest.charAt(0).toUpperCase() + rest.slice(1);
   return { kind, text };
+}
+
+/**
+ * When a range peak saving has moved next changes: the peak's end (or, ahead
+ * of one, its start), or the schedule's next change if that comes first.
+ * Null where that can't be told: the peak's time unreadable or passed, a
+ * schedule's next change that has passed (not yet updated), or no word on
+ * whether a schedule sets the range. A schedule that sets it with no next
+ * change (one that never changes the range) doesn't come first.
+ */
+function peakRangeEnds(s: StatusInput): number | null {
+  const at = s.peak?.at ?? null;
+  if (at === null || at <= s.now) return null;
+  if (s.scheduled === false) return at;
+  if (s.scheduled !== true) return null;
+  if (s.nextChange === null) return at;
+  if (s.nextChange <= s.now) return null;
+  return Math.min(at, s.nextChange);
 }
 
 /** A time zone Intl knows, or undefined (the browser's). */

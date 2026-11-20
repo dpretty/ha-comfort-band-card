@@ -353,6 +353,77 @@ describe('comfort-band-now-tab', () => {
       expect(statusText(el)).toBe(`Comfortable · 19.5–22.5° until ${formatTime(NOW + 5 * HOUR)}`);
     });
 
+    // #64: the range peak saving moved, and when it next changes.
+    it('says a peak relaxed the range, and until the peak ends, with or without a schedule', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(NOW);
+      const hass = makeHass(
+        {
+          'sensor.gym_next_band_change': new Date(NOW + 5 * HOUR).toISOString(),
+          'sensor.gym_peak_saving': 'active',
+        },
+        {
+          'sensor.gym_next_band_change': { scheduled: true, low: 17, high: 24 },
+          'sensor.gym_peak_saving': {
+            low_adjustment: -1,
+            high_adjustment: 1,
+            ends: new Date(NOW + 2 * HOUR).toISOString(),
+          },
+        },
+      );
+      const el = await nowTab(hass, { ...makeEntities(), peakSaving: 'sensor.gym_peak_saving' });
+      expect(statusText(el)).toBe(
+        `Comfortable · 19.5–22.5° for a peak until ${formatTime(NOW + 2 * HOUR)}`,
+      );
+      // No schedule: no next change to come first.
+      hass.states['sensor.gym_next_band_change'] = {
+        ...hass.states['sensor.gym_next_band_change'],
+        state: 'unknown',
+        attributes: { scheduled: false },
+      };
+      const unscheduled = await nowTab(hass, {
+        ...makeEntities(),
+        peakSaving: 'sensor.gym_peak_saving',
+      });
+      expect(statusText(unscheduled)).toBe(
+        `Comfortable · 19.5–22.5° for a peak until ${formatTime(NOW + 2 * HOUR)}`,
+      );
+    });
+
+    it('says when a range moved ahead of a peak next changes, whatever the room is doing', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(NOW);
+      const peaked = (standIn: boolean) =>
+        makeHass(
+          {
+            'sensor.gym_next_band_change': new Date(NOW + 5 * HOUR).toISOString(),
+            'sensor.gym_peak_saving': 'preconditioning',
+            'sensor.gym_current_action': 'cooling',
+          },
+          {
+            'sensor.gym_next_band_change': { scheduled: true, low: 17, high: 24 },
+            'sensor.gym_peak_saving': {
+              low_adjustment: 0,
+              high_adjustment: -1,
+              next_start: new Date(NOW + HOUR).toISOString(),
+            },
+            // A stand-in's reading says where it's from.
+            ...(standIn ? { 'sensor.gym_room_temperature': { source: 'climate' } } : {}),
+          },
+        );
+      const entities = { ...makeEntities(), peakSaving: 'sensor.gym_peak_saving' };
+      const el = await nowTab(peaked(false), entities);
+      expect(statusText(el)).toBe(`Cooling · 19.5–22.5° until ${formatTime(NOW + HOUR)}`);
+      const heating = peaked(false);
+      heating.states['sensor.gym_current_action'].state = 'heating';
+      const warming = await nowTab(heating, entities);
+      expect(statusText(warming)).toBe(`Heating · 19.5–22.5° until ${formatTime(NOW + HOUR)}`);
+      const offline = await nowTab(peaked(true), entities);
+      expect(statusText(offline)).toBe(
+        `Room sensor offline · Cooling · 19.5–22.5° until ${formatTime(NOW + HOUR)}`,
+      );
+    });
+
     it('says what the room is doing when it is heating or cooling', async () => {
       const heating = await nowTab(scheduledHass(null, { 'sensor.gym_current_action': 'heating' }));
       expect(statusText(heating)).toBe('Heating · 19.5–22.5°');
