@@ -164,9 +164,10 @@ export interface StatusInput {
  * end (or, getting ready for one, its start), or the schedule's next change
  * if that comes first; not said where either can't be told (#64). A peak's
  * wider range says so ("for a peak"); getting ready for one, or led by
- * "Room sensor offline", the line gives the time alone, so it's no longer
- * than the same line on integrations before peak saving: the words took
- * the Now tab's status past its two lines on a narrow phone (#55).
+ * "Room sensor offline", the line gives the time alone, to keep it short:
+ * the words took the Now tab's status past its two lines on a narrow phone
+ * (#55). (In a room with no schedule, the time itself is new, and below
+ * 320 px can still take it to three.)
  *
  * While a stand-in reading drives control, the line leads with "Room sensor
  * offline" and goes on as usual; with no reading at all, control is on hold.
