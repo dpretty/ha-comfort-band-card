@@ -163,7 +163,8 @@ export interface StatusInput {
  * the range, it says so ("for a peak", "ahead of a peak"), and "until" is
  * when the range next changes: the peak's end (or start), or the schedule's
  * next change if that comes first; not said where either can't be told
- * (#64).
+ * (#64). Led by "Room sensor offline", it keeps that time but not the
+ * reason, so the line still fits the Now tab's two lines on a narrow phone.
  *
  * While a stand-in reading drives control, the line leads with "Room sensor
  * offline" and goes on as usual; with no reading at all, control is on hold.
@@ -177,15 +178,16 @@ export function statusLine(s: StatusInput): { kind: StatusKind; text: string } {
   if (s.sensor === 'no-reading') {
     return { kind: 'sensor', text: 'On hold: no room temperature reading' };
   }
-  const line = inForce(s);
-  if (s.sensor === 'stand-in')
-    return { kind: 'sensor', text: `Room sensor offline · ${line.text}` };
-  return line;
+  if (s.sensor === 'stand-in') {
+    return { kind: 'sensor', text: `Room sensor offline · ${inForce(s, false).text}` };
+  }
+  return inForce(s);
 }
 
 /** The status of a room being controlled from a reading: what it's doing,
- *  the range in force, and until when. */
-function inForce(s: StatusInput): { kind: StatusKind; text: string } {
+ *  the range in force, and until when; and, with `why`, that a peak moved
+ *  it. */
+function inForce(s: StatusInput, why = true): { kind: StatusKind; text: string } {
   if (!Number.isFinite(s.band.low) || !Number.isFinite(s.band.high)) {
     return { kind: 'none', text: "Can't read this room's range" };
   }
@@ -213,8 +215,8 @@ function inForce(s: StatusInput): { kind: StatusKind; text: string } {
   } else if (s.peak) {
     const ends = peakRangeEnds(s);
     const until = ends !== null ? ` until ${s.formatTime(ends)}` : '';
-    const why = s.peak.kind === 'relaxed' ? 'for a peak' : 'ahead of a peak';
-    rest = `${bandText(s.band)} ${why}${until}`;
+    const reason = !why ? '' : s.peak.kind === 'relaxed' ? ' for a peak' : ' ahead of a peak';
+    rest = `${bandText(s.band)}${reason}${until}`;
   } else {
     const until =
       s.scheduled === true && s.nextChange !== null && s.nextChange > s.now

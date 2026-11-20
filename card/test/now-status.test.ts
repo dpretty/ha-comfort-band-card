@@ -475,8 +475,13 @@ describe('statusLine under a peak', () => {
     expect(line({ action: 'heating' })).toBe('Heating · 17–24° for a peak until T+60m');
     expect(line({ temperature: 25 })).toBe('A bit warm · 17–24° for a peak until T+60m');
     expect(line({ action: 'unknown' })).toBe('17–24° for a peak until T+60m');
+    // Led by the sensor, the time without the reason: the line still fits
+    // the Now tab's two lines at 320 px.
     expect(line({ sensor: 'stand-in' })).toBe(
-      'Room sensor offline · Comfortable · 17–24° for a peak until T+60m',
+      'Room sensor offline · Comfortable · 17–24° until T+60m',
+    );
+    expect(line({ sensor: 'stand-in', ...ahead(NOW + 45 * MIN) })).toBe(
+      'Room sensor offline · Comfortable · 17–24° until T+45m',
     );
   });
 
