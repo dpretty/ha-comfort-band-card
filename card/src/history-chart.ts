@@ -35,8 +35,7 @@
  * pointer (or a tap) is, the latest otherwise; heating and cooling as a
  * strip under the plot, in their colours mixed towards the text so they
  * stand out in either theme, not faint shading across it; the time axis
- * in HA's 12/24-hour setting, the temperature axis with its unit, and
- * room for the humidity axis's "100%".
+ * in HA's 12/24-hour setting, and the value axes as wide as their labels.
  */
 
 import { html, css, unsafeCSS, nothing } from 'lit';
@@ -244,6 +243,9 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       changed.has('humidityEntity') ||
       (changed as Map<PropertyKey, unknown>).has('_hours')
     ) {
+      // Only a range pick keeps the chart drawn while loading: a change of
+      // entities after one, before it loaded, is another room's (#34 review).
+      if (!(changed as Map<PropertyKey, unknown>).has('_hours')) this._switching = false;
       void this._subscribe();
     }
   }
@@ -280,7 +282,9 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
 
     const gen = ++this._fetchGen;
     // Another range picked with a chart drawn: it stays until the new
-    // history arrives. Otherwise a loading message.
+    // history arrives. With none to keep (the first load, an error, no
+    // history, or back on the page), the loading message.
+    if (!this._plot) this._switching = false;
     if (!this._switching) this._loading = true;
     this._error = null;
     this._empty = false;
@@ -324,7 +328,6 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       // depending on `_unsubscribe` being null.
       this._error = err instanceof Error ? err.message : 'Failed to load history.';
       this._loading = false;
-      this._switching = false;
       this._data = null;
       this._destroyPlot();
     }
@@ -511,7 +514,6 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       heating: mixColor(heatColor, primaryText, 0.3),
       cooling: mixColor(coolColor, primaryText, 0.3),
     };
-    const unit = temperatureUnit(this.hass, this.roomEntity);
 
     // Build the series array conditionally so the slot count stays in
     // lockstep with `_renderPlot`'s data array. Apparent uses the room
@@ -577,9 +579,8 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     // noise. `grid: { show: false }` on y2 avoids two overlapping grid
     // sets when both axes have a grid.
     // The time axis in HA's 12/24-hour setting, with room under the plot
-    // for the heating/cooling strip (no tick marks there); the
-    // temperature axis with its unit; the humidity axis wide enough for
-    // "100%" (#34).
+    // for the heating/cooling strip (no tick marks there); the value axes
+    // as wide as their labels (#34).
     const axes: NonNullable<UPlotOptions['axes']> = [
       {
         stroke: secondaryText,
@@ -590,11 +591,13 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
         values: (u: uPlot, splits: number[]) =>
           timeLabels(splits, (u.scales.x.max ?? 0) - (u.scales.x.min ?? 0), this.hass),
       },
+      // The temperature axis's numbers as uPlot writes them, to whatever
+      // step it takes (#34 review: a unit after them, rounded, got steps
+      // like 0.025 wrong twice, so they're as on main).
       {
         stroke: secondaryText,
         grid: { stroke: gridStroke },
         size: fitAxis,
-        values: (_u: uPlot, vs: number[]) => vs.map((v) => `${tickNumber(v)}${unit}`),
       },
     ];
     if (this._hasHumidity) {
@@ -674,7 +677,7 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     const words = rangeWords(this._hours);
     const ariaLabel = [
       'Room temperature',
-      this._hasApparent ? ', apparent temperature' : '',
+      this._hasApparent ? ', feels like' : '',
       ', effective band edges',
       this._hasHumidity ? ', humidity' : '',
       ` and heating/cooling — last ${words}`,
@@ -709,7 +712,7 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
   /** Shows the last `hours` (#34): a new subscription for that window. */
   private _pickRange(hours: number): void {
     if (hours === this._hours) return;
-    this._switching = this._plot !== null;
+    this._switching = true;
     this._hours = hours;
   }
 
@@ -853,9 +856,9 @@ export function readoutLine(r: {
 }
 
 /** The readout's time: "22:30" today, "Thu 22:30" another day this week,
- *  "Fri 13 22:30" six days back or more (today's weekday a week ago), in
- *  HA's 12/24-hour setting; the weekday, being short, as the time axis's,
- *  so the readout keeps to its two lines on a narrow phone. */
+ *  and "Fri 13 22:30" a week back, where the weekday is today's; in HA's
+ *  12/24-hour setting. The weekday, being short (as the time axis's),
+ *  keeps the readout shorter on a narrow phone. By calendar day. */
 export function readoutTime(ms: number, now: number, hass?: Pick<HomeAssistant, 'locale'>): string {
   const time = formatTime(ms, hass);
   const d = new Date(ms);
@@ -863,19 +866,13 @@ export function readoutTime(ms: number, now: number, hass?: Pick<HomeAssistant, 
   const days = Math.round((midnight(new Date(now)) - midnight(d)) / 86_400_000);
   if (days === 0) return time;
   const weekday = weekdayOf(hass).format(d);
-  return days >= 6 ? `${weekday} ${d.getDate()} ${time}` : `${weekday} ${time}`;
+  return days >= 7 ? `${weekday} ${d.getDate()} ${time}` : `${weekday} ${time}`;
 }
 
-/** A temperature axis's number as uPlot steps it: whole, or to the 0.5,
- *  0.25 or 0.05 its steps fall on (#34 review: tenths repeated them). */
-export function tickNumber(v: number): string {
-  const rounded = Math.round(v * 100) / 100;
-  return Number.isInteger(rounded) ? rounded.toFixed(0) : String(rounded);
-}
-
-/** An axis as wide as its widest label, measured in its font, so none is
- *  cut ("21.5°C", "100%"; #34 review): uPlot's own pattern, plus a pixel's
- *  room either side. */
+/** An axis as wide as its widest label, each measured in its font, so
+ *  none is cut ("21.25", "100%"; #34 review): uPlot's own pattern (which
+ *  measures the longest string; digits' widths differ in some fonts), plus
+ *  a pixel's room either side. */
 export function fitAxis(
   u: uPlot,
   values: string[] | null,
@@ -885,10 +882,11 @@ export function fitAxis(
   const axis = u.axes[axisIdx] as uPlot.Axis & { _size?: number; font?: [string, number] };
   if (cycleNum > 1 && axis._size !== undefined) return axis._size;
   let size = (axis.ticks?.size ?? 10) + (axis.gap ?? 5);
-  const longest = (values ?? []).reduce((a, v) => (v.length > a.length ? v : a), '');
-  if (longest && u.ctx) {
-    if (axis.font) u.ctx.font = axis.font[0];
-    size += u.ctx.measureText(longest).width / (uPlot.pxRatio || 1);
+  if (values && values.length > 0 && u.ctx) {
+    const ctx = u.ctx;
+    if (axis.font) ctx.font = axis.font[0];
+    const widest = Math.max(...values.map((v) => ctx.measureText(v).width));
+    size += widest / (uPlot.pxRatio || 1);
   }
   return Math.ceil(size) + 2;
 }
@@ -949,12 +947,6 @@ export function timeLabels(
     const day = dayOf.format(d);
     return long ? day : `${time}\n${day}`;
   });
-}
-
-/** The room temperature's unit ("°C"), or "°" where HA doesn't give one. */
-export function temperatureUnit(hass: HomeAssistant | undefined, entityId: string): string {
-  const unit = hass?.states[entityId]?.attributes.unit_of_measurement;
-  return typeof unit === 'string' && unit.trim() ? unit.trim() : '°';
 }
 
 /** A colour `share` of the way to another (hex or rgb(), as resolved from

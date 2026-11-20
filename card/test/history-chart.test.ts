@@ -367,7 +367,7 @@ describe('comfort-band-history-chart', () => {
     const elWith = await chart({ hass: makeHass(sub.connection), ...FULL_PROPS_WITH_OVERLAYS });
     await new Promise((r) => setTimeout(r, 0));
     const labelWith = elWith.shadowRoot!.querySelector('.chart-host')!.getAttribute('aria-label');
-    expect(labelWith).toContain('apparent temperature');
+    expect(labelWith).toContain('feels like');
     expect(labelWith).toContain('humidity');
 
     const elWithout = await chart({
@@ -378,7 +378,7 @@ describe('comfort-band-history-chart', () => {
     const labelWithout = elWithout
       .shadowRoot!.querySelector('.chart-host')!
       .getAttribute('aria-label');
-    expect(labelWithout).not.toContain('apparent temperature');
+    expect(labelWithout).not.toContain('feels like');
     expect(labelWithout).not.toContain('humidity');
   });
 

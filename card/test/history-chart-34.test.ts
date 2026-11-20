@@ -8,8 +8,6 @@ import {
   readoutLine,
   readoutTime,
   stripRects,
-  temperatureUnit,
-  tickNumber,
   timeLabels,
 } from '../src/history-chart.js';
 import type { ComfortBandHistoryChart } from '../src/history-chart.js';
@@ -106,6 +104,13 @@ async function chart(
   return { el, sub };
 }
 
+/** A room's history: one reading of each, a minute ago. */
+const ROOM = (now: number) => ({
+  'sensor.gym_room_temperature': [{ s: '21.0', lu: now - 60 }],
+  'sensor.gym_effective_low': [{ s: '19.5', lu: now - 60 }],
+  'sensor.gym_effective_high': [{ s: '22.5', lu: now - 60 }],
+});
+
 const root = (el: ComfortBandHistoryChart) => el.shadowRoot!;
 const readout = (el: ComfortBandHistoryChart) =>
   root(el).querySelector('.readout')!.textContent!.replace(/\s+/g, ' ').trim();
@@ -172,8 +177,9 @@ describe('readoutTime', () => {
     expect(readoutTime(new Date(2026, 10, 20, 9, 30).getTime(), now, h24)).toBe('09:30');
     expect(readoutTime(new Date(2026, 10, 19, 22, 30).getTime(), now, h24)).toBe('Thu 22:30');
     expect(readoutTime(new Date(2026, 10, 15, 6, 0).getTime(), now, h12)).toBe('Sun 6 AM');
-    // Six days back or more: today's weekday a week ago, so the date too.
-    expect(readoutTime(new Date(2026, 10, 14, 6, 0).getTime(), now, h12)).toBe('Sat 14 6 AM');
+    // Six days back: still the weekday alone.
+    expect(readoutTime(new Date(2026, 10, 14, 6, 0).getTime(), now, h12)).toBe('Sat 6 AM');
+    // A week back: today's weekday, so the date too.
     expect(readoutTime(new Date(2026, 10, 13, 22, 0).getTime(), now, h24)).toBe('Fri 13 22:00');
     // By the calendar day, not 24 hours: last night is another day.
     expect(
@@ -195,6 +201,22 @@ describe('readoutTime', () => {
         locale: { language: 'fr', time_format: '24' },
       } as never),
     ).toBe('Thu 22:30');
+  });
+
+  // A day with a clock change has 23 or 25 hours: still one day (#34 review).
+  it('counts calendar days across a clock change', () => {
+    vi.stubEnv('TZ', 'Europe/Berlin');
+    try {
+      const at = (m: number, d: number, h: number) => new Date(2026, m - 1, d, h, 0).getTime();
+      // Clocks forward on Sunday 29 March: a 23-hour day.
+      expect(readoutTime(at(3, 29, 10), at(3, 30, 12), h24)).toBe('Sun 10:00');
+      expect(readoutTime(at(3, 23, 10), at(3, 30, 12), h24)).toBe('Mon 23 10:00');
+      // Back on Sunday 25 October: a 25-hour day.
+      expect(readoutTime(at(10, 25, 10), at(10, 31, 12), h24)).toBe('Sun 10:00');
+      expect(readoutTime(at(10, 24, 10), at(10, 31, 12), h24)).toBe('Sat 24 10:00');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 
@@ -293,21 +315,7 @@ describe('timeLabels', () => {
   });
 });
 
-describe('temperatureUnit and mixColor', () => {
-  it('takes the room temperature’s unit, or "°"', () => {
-    const states = (attributes: Record<string, unknown>) =>
-      ({
-        states: {
-          'sensor.x': { entity_id: 'sensor.x', state: '1', attributes },
-        },
-      }) as unknown as HomeAssistant;
-    expect(temperatureUnit(states({ unit_of_measurement: '°F' }), 'sensor.x')).toBe('°F');
-    expect(temperatureUnit(states({ unit_of_measurement: ' °C ' }), 'sensor.x')).toBe('°C');
-    expect(temperatureUnit(states({ unit_of_measurement: ' ' }), 'sensor.x')).toBe('°');
-    expect(temperatureUnit(states({}), 'sensor.x')).toBe('°');
-    expect(temperatureUnit(undefined, 'sensor.x')).toBe('°');
-  });
-
+describe('mixColor', () => {
   it('mixes a colour part of the way to another', () => {
     expect(mixColor('#ff6f22', '#141414', 0.3)).toBe('rgb(185, 84, 30)');
     expect(mixColor('#f00', 'rgb(0, 0, 255)', 0.5)).toBe('rgb(128, 0, 128)');
@@ -318,16 +326,7 @@ describe('temperatureUnit and mixColor', () => {
   });
 });
 
-describe('tickNumber and fitAxis', () => {
-  it('writes a temperature axis number as uPlot steps it', () => {
-    expect(tickNumber(20)).toBe('20');
-    expect(tickNumber(20.5)).toBe('20.5');
-    expect(tickNumber(20.25)).toBe('20.25');
-    expect(tickNumber(21.35)).toBe('21.35');
-    expect(tickNumber(21.299999999)).toBe('21.3');
-    expect(tickNumber(-0.5)).toBe('-0.5');
-  });
-
+describe('fitAxis', () => {
   it('makes an axis as wide as its widest label, and a pixel either side', () => {
     const measured: string[] = [];
     const u = {
@@ -340,8 +339,19 @@ describe('tickNumber and fitAxis', () => {
         },
       },
     } as unknown as uPlot;
-    expect(fitAxis(u, ['20°C', '20.5°C', '21°C'], 1, 0)).toBe(10 + 5 + 42 + 2);
-    expect(measured).toEqual(['12px test|20.5°C']);
+    expect(fitAxis(u, ['20', '20.5', '21'], 1, 0)).toBe(10 + 5 + 28 + 2);
+    // Each label measured: digits' widths differ in some fonts, so the
+    // longest string needn't be the widest.
+    expect(measured).toEqual(['12px test|20', '12px test|20.5', '12px test|21']);
+    const narrowOnes = {
+      ...u,
+      ctx: {
+        font: '',
+        measureText: (t: string) => ({ width: t === '11.5' ? 20 : t === '24' ? 23.3 : 10 }),
+      },
+    } as unknown as uPlot;
+    // The widest, though shorter; rounded up.
+    expect(fitAxis(narrowOnes, ['11.5', '24'], 1, 0)).toBe(Math.ceil(10 + 5 + 23.3) + 2);
     // The canvas's font is in device pixels: the width comes back in CSS.
     const ratio = Object.getOwnPropertyDescriptor(uPlot, 'pxRatio');
     Object.defineProperty(uPlot, 'pxRatio', { value: 2, configurable: true, writable: true });
@@ -350,12 +360,15 @@ describe('tickNumber and fitAxis', () => {
         ...u,
         ctx: { font: '', measureText: (t: string) => ({ width: t.length * 14 }) },
       };
-      expect(fitAxis(hi as unknown as uPlot, ['20.5°C'], 1, 0)).toBe(10 + 5 + 42 + 2);
+      expect(fitAxis(hi as unknown as uPlot, ['20.5'], 1, 0)).toBe(10 + 5 + 28 + 2);
     } finally {
       if (ratio) Object.defineProperty(uPlot, 'pxRatio', ratio);
     }
-    // uPlot asks again once laid out: the size it settled on.
-    expect(fitAxis(u, ['20°C', '20.5°C'], 1, 2)).toBe(33);
+    // uPlot's first measured call is its cycle 1: measured, not the size
+    // it started with (both axes collapsed to 17 px otherwise).
+    expect(fitAxis(u, ['20', '20.5'], 1, 1)).toBe(10 + 5 + 28 + 2);
+    // Asked again once laid out: the size it settled on.
+    expect(fitAxis(u, ['20', '20.5'], 1, 2)).toBe(33);
     expect(fitAxis(u, null, 1, 0)).toBe(17);
   });
 });
@@ -403,12 +416,18 @@ describe('comfort-band-history-chart ranges (#34)', () => {
     expect(Date.now() - six).toBeGreaterThanOrEqual(6 * 3600_000 - 1000);
   });
 
-  it('asks nothing new for the range already shown', async () => {
+  it('asks nothing new for the range already shown, leaving its chart as it is', async () => {
     const { el, sub } = await chart(FULL);
+    const now = Math.floor(Date.now() / 1000);
+    internals(el)._plot = fakePlot(3);
+    sub.emit({ states: ROOM(now) });
+    await el.updateComplete;
     rangeButtons(el)[1].click();
     await el.updateComplete;
     await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
     expect(sub.callCount).toBe(1);
+    expect(readout(el)).toBe('Now · Room 21° · Range 19.5–22.5°');
   });
 
   // With a chart drawn, it stays until the new range's history arrives.
@@ -440,6 +459,79 @@ describe('comfort-band-history-chart ranges (#34)', () => {
     });
     await el.updateComplete;
     expect(readout(el)).toBe('Now · Room 20° · Range 19–22°');
+  });
+});
+
+// With no chart to keep, a range picked shows the loading message (#34 review).
+describe('comfort-band-history-chart: a range picked with no chart drawn (#34 review)', () => {
+  const loadingWeek = (el: ComfortBandHistoryChart) => {
+    expect(root(el).querySelector('.status')!.textContent).toContain('Loading 7 days of history…');
+    expect(root(el).querySelector('.chart-host')!.classList.contains('idle')).toBe(true);
+    expect(readout(el)).toBe('');
+  };
+  const pickWeek = async (el: ComfortBandHistoryChart) => {
+    rangeButtons(el)[2].click();
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+  };
+
+  it('shows the loading message after no history', async () => {
+    const { el, sub } = await chart(FULL);
+    internals(el)._plot = fakePlot(3);
+    sub.emit({ states: { 'sensor.gym_room_temperature': [] } });
+    await el.updateComplete;
+    expect(root(el).querySelector('.status')!.textContent).toContain('No history available');
+    await pickWeek(el);
+    loadingWeek(el);
+  });
+
+  it('shows the loading message after an error', async () => {
+    const sub = captureSubscription();
+    sub.subscribeMessage.mockRejectedValueOnce(new Error('Connection lost'));
+    const el = await mount('comfort-band-history-chart', {
+      hass: makeHass(sub.connection),
+      ...FULL,
+    } as Partial<ComfortBandHistoryChart>);
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+    expect(root(el).querySelector('.status')!.textContent).toContain('Connection lost');
+    await pickWeek(el);
+    loadingWeek(el);
+  });
+
+  // Taken off the page, the chart goes; back on, it's loading.
+  it('shows the loading message when put back on the page while a range loads', async () => {
+    const { el, sub } = await chart(FULL);
+    const now = Math.floor(Date.now() / 1000);
+    internals(el)._plot = fakePlot(3);
+    sub.emit({ states: ROOM(now) });
+    await el.updateComplete;
+    await pickWeek(el);
+    expect(readout(el)).toBe('Loading 7 days of history…');
+    el.remove();
+    document.body.appendChild(el);
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+    loadingWeek(el);
+  });
+
+  // A change of entities after a range pick, before it loaded, is another
+  // room's: its chart goes.
+  it('shows the loading message for another room picked while a range loads', async () => {
+    const { el, sub } = await chart(FULL);
+    const now = Math.floor(Date.now() / 1000);
+    internals(el)._plot = fakePlot(3);
+    sub.emit({ states: ROOM(now) });
+    await el.updateComplete;
+    await pickWeek(el);
+    expect(readout(el)).toBe('Loading 7 days of history…');
+    el.roomEntity = 'sensor.study_room_temperature';
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+    loadingWeek(el);
   });
 });
 
@@ -611,6 +703,19 @@ describe('comfort-band-history-chart readout (#34)', () => {
     toggle.click();
     await el.updateComplete;
     expect(readout(el)).toBe('Now · Room 21.3° · Feels like 21.9° · Range 19.5–22.5°');
+  });
+
+  // The last point is now's.
+  it('gives the last point as "Now"', async () => {
+    const { el } = await withHistory();
+    internals(el)._cursorIdx = internals(el)._data![0].length - 1;
+    await el.updateComplete;
+    expect(readout(el)).toBe(
+      'Now · Room 21.3° · Feels like 21.9° · Range 19.5–22.5° · Humidity 45%',
+    );
+    internals(el)._cursorIdx = internals(el)._data![0].length - 2;
+    await el.updateComplete;
+    expect(readout(el)).not.toMatch(/^Now/);
   });
 
   it('follows uPlot’s cursor, back to the latest when it leaves', async () => {
@@ -787,10 +892,12 @@ describe('comfort-band-history-chart strip and axes (#34)', () => {
     ]);
   });
 
-  it('writes the temperature axis with its unit, both axes as wide as their labels', async () => {
+  // uPlot writes the temperature axis's numbers, to whatever step it takes
+  // (round 2: a unit and rounding of our own got 0.025 steps wrong).
+  it('leaves the temperature axis’s numbers to uPlot, both value axes as wide as their labels', async () => {
     const { el } = await chart(OVERLAYS);
     const axes = internals(el)._buildOpts(400).axes;
-    expect(axes[1].values!({}, [18, 19.5, 20.25])).toEqual(['18°C', '19.5°C', '20.25°C']);
+    expect(axes[1].values).toBeUndefined();
     expect(axes[1].size).toBe(fitAxis);
     expect(axes[2].size).toBe(fitAxis);
     expect(axes[2].values!({}, [100])).toEqual(['100%']);
@@ -805,14 +912,5 @@ describe('comfort-band-history-chart strip and axes (#34)', () => {
     });
     expect(x.values!(span(24), [midnight])).toEqual(['00:00\nSat 21']);
     expect(x.values!(span(168), [midnight])).toEqual(['Sat 21']);
-  });
-
-  it('writes "°" alone where HA gives no unit', async () => {
-    const sub = captureSubscription();
-    const el = await mount('comfort-band-history-chart', {
-      hass: makeHass(sub.connection, null),
-      ...FULL,
-    } as Partial<ComfortBandHistoryChart>);
-    expect(internals(el)._buildOpts(400).axes[1].values!({}, [20])).toEqual(['20°']);
   });
 });
