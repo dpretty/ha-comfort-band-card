@@ -404,9 +404,10 @@ describe('formatClock', () => {
   });
 });
 
-// #64: where peak saving has moved the range, the line says so, and "until"
-// is when the range next changes: the peak's end (or start), or the
-// schedule's next change if that comes first.
+// #64: where peak saving has moved the range, "until" is when the range
+// next changes: the peak's end (or start), or the schedule's next change if
+// that comes first. A peak's wider range says so ("for a peak"); getting
+// ready for one, or after "Room sensor offline", the time alone.
 describe('statusLine under a peak', () => {
   const NOW = Date.parse('2026-10-22T10:00:00Z');
   const MIN = 60_000;
@@ -480,6 +481,7 @@ describe('statusLine under a peak', () => {
 
   it('says what the room is doing first, as ever', () => {
     expect(line({ action: 'heating' })).toBe('Heating · 17–24° for a peak until T+60m');
+    expect(line({ action: 'cooling' })).toBe('Cooling · 17–24° for a peak until T+60m');
     expect(line({ temperature: 25 })).toBe('A bit warm · 17–24° for a peak until T+60m');
     expect(line({ action: 'unknown' })).toBe('17–24° for a peak until T+60m');
     // Led by the sensor, the time without the reason: the line still fits

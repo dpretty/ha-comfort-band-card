@@ -338,6 +338,15 @@ describe('comfort-band-card', () => {
       expect(tileOf(offline).statusText).toBe(
         'Room sensor offline · Comfortable · 19.5–22.5° until 16:00',
       );
+      // A room with no schedule: until the peak ends.
+      const unscheduled = withPeak(makeHass('gym'), 'active', relaxed);
+      unscheduled.states['sensor.gym_next_band_change'] = {
+        ...unscheduled.states['sensor.gym_next_band_change'],
+        state: 'unknown',
+        attributes: { scheduled: false },
+      };
+      const noSchedule = await card('gym', unscheduled);
+      expect(tileOf(noSchedule).statusText).toBe('Comfortable · 19.5–22.5° for a peak until 16:00');
     } finally {
       vi.useRealTimers();
     }
@@ -347,38 +356,14 @@ describe('comfort-band-card', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 9, 22, 10, 0));
     try {
-      const hass = makeHass('gym');
-      hass.locale = { language: 'en-GB', time_format: '24' };
-      hass.states['sensor.gym_next_band_change'] = {
-        entity_id: 'sensor.gym_next_band_change',
-        state: new Date(2026, 9, 22, 17, 0).toISOString(),
-        attributes: { scheduled: true },
-        last_changed: '',
-        last_updated: '',
-      };
-      hass.entities['sensor.gym_peak_saving'] = {
-        entity_id: 'sensor.gym_peak_saving',
-        platform: 'comfort_band',
-        device_id: 'dev-gym',
-        area_id: null,
-        hidden: false,
-        entity_category: null,
-        translation_key: 'peak_saving',
-        name: null,
-      };
-      hass.states['sensor.gym_peak_saving'] = {
-        entity_id: 'sensor.gym_peak_saving',
-        state: 'preconditioning',
-        attributes: {
-          low_adjustment: 0,
-          high_adjustment: -1,
-          next_start: new Date(2026, 9, 22, 15, 30).toISOString(),
-        },
-        last_changed: '',
-        last_updated: '',
-      };
+      const hass = withPeak(makeHass('gym'), 'preconditioning', {
+        low_adjustment: 0,
+        high_adjustment: -1,
+        next_start: new Date(2026, 9, 22, 15, 30).toISOString(),
+      });
+      hass.states['sensor.gym_current_action'].state = 'cooling';
       const el = await card('gym', hass);
-      expect(tileOf(el).statusText).toBe('Comfortable · 19.5–22.5° until 15:30');
+      expect(tileOf(el).statusText).toBe('Cooling · 19.5–22.5° until 15:30');
     } finally {
       vi.useRealTimers();
     }

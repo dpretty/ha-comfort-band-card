@@ -354,7 +354,7 @@ describe('comfort-band-now-tab', () => {
     });
 
     // #64: the range peak saving moved, and when it next changes.
-    it('says a peak moved the range, and until the peak ends', async () => {
+    it('says a peak relaxed the range, and until the peak ends, with or without a schedule', async () => {
       vi.useFakeTimers({ toFake: ['Date'] });
       vi.setSystemTime(NOW);
       const hass = makeHass(
@@ -373,6 +373,19 @@ describe('comfort-band-now-tab', () => {
       );
       const el = await nowTab(hass, { ...makeEntities(), peakSaving: 'sensor.gym_peak_saving' });
       expect(statusText(el)).toBe(
+        `Comfortable · 19.5–22.5° for a peak until ${formatTime(NOW + 2 * HOUR)}`,
+      );
+      // No schedule: no next change to come first.
+      hass.states['sensor.gym_next_band_change'] = {
+        ...hass.states['sensor.gym_next_band_change'],
+        state: 'unknown',
+        attributes: { scheduled: false },
+      };
+      const unscheduled = await nowTab(hass, {
+        ...makeEntities(),
+        peakSaving: 'sensor.gym_peak_saving',
+      });
+      expect(statusText(unscheduled)).toBe(
         `Comfortable · 19.5–22.5° for a peak until ${formatTime(NOW + 2 * HOUR)}`,
       );
     });
@@ -401,6 +414,10 @@ describe('comfort-band-now-tab', () => {
       const entities = { ...makeEntities(), peakSaving: 'sensor.gym_peak_saving' };
       const el = await nowTab(peaked(false), entities);
       expect(statusText(el)).toBe(`Cooling · 19.5–22.5° until ${formatTime(NOW + HOUR)}`);
+      const heating = peaked(false);
+      heating.states['sensor.gym_current_action'].state = 'heating';
+      const warming = await nowTab(heating, entities);
+      expect(statusText(warming)).toBe(`Heating · 19.5–22.5° until ${formatTime(NOW + HOUR)}`);
       const offline = await nowTab(peaked(true), entities);
       expect(statusText(offline)).toBe(
         `Room sensor offline · Cooling · 19.5–22.5° until ${formatTime(NOW + HOUR)}`,
