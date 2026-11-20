@@ -12,7 +12,9 @@
  *   - `attributes.descriptions`    — per-profile description map
  *
  * Affordances:
- *   - Tap a row → set active.
+ *   - Tap a row → set active. If HA refuses, its own toast says so, and
+ *     screen readers, which don't hear that toast while the dialog is
+ *     open, are told through the dialog's `announce` (#63, as #53).
  *   - Header "+ New profile" → create dialog.
  *   - Per-row overflow `⋮` menu → Clone / Rename / Delete.
  *     Delete is disabled for the default profile.
@@ -55,6 +57,10 @@ type DialogSaveEvent = CustomEvent<{ name: string; description: string }>;
 @customElement('comfort-band-profiles-tab')
 export class ComfortBandProfilesTab extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
+  /** Says a refusal to screen readers: the dialog's, handed on by the
+   *  Advanced tab (#63). Kept when the tab is swapped out, so a call
+   *  answered after that is still said. */
+  @property({ attribute: false }) public announce?: (words: string) => void;
 
   @state() private _mode: Mode = 'list';
   /** Profile being acted on (rename / clone / delete target). */
@@ -377,7 +383,10 @@ export class ComfortBandProfilesTab extends LitElement {
 
   private _onSelect(profile: string): void {
     if (!this.hass) return;
-    void setProfile(this.hass, { profile });
+    // HA's own toast says a refusal; screen readers hear the words.
+    setProfile(this.hass, { profile }).catch(() =>
+      this.announce?.(`Couldn’t switch to “${profile}”. Try again.`),
+    );
   }
 
   private _toggleMenu(profile: string, e: Event): void {

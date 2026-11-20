@@ -43,7 +43,8 @@ export class ComfortBandAdvancedTab extends LitElement {
   @property({ type: String }) public zone = '';
   @property({ attribute: false }) public entities?: ZoneEntities;
   /** Says a refusal to screen readers: the dialog's, handed on to the exact
-   *  range, whose refusals only HA's toast would otherwise tell (#53). */
+   *  range (#53) and the profile list's picks (#63), whose refusals only
+   *  HA's toast would otherwise tell. */
   @property({ attribute: false }) public announce?: (words: string) => void;
 
   /** Whether History is open: its chart subscribes to HA's history, so it's
@@ -263,7 +264,10 @@ export class ComfortBandAdvancedTab extends LitElement {
             .entities=${this.entities}
           ></comfort-band-settings-tab>
           <h3 class="subhead">Profiles</h3>
-          <comfort-band-profiles-tab .hass=${this.hass}></comfort-band-profiles-tab>`,
+          <comfort-band-profiles-tab
+            .hass=${this.hass}
+            .announce=${this.announce}
+          ></comfort-band-profiles-tab>`,
       )}
       ${this._section(
         'diagnostics',

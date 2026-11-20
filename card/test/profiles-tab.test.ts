@@ -738,3 +738,91 @@ describe('comfort-band-profiles-tab', () => {
     expect(el.shadowRoot!.querySelector('.overflow')).toBeNull();
   });
 });
+
+// #63: a refused pick is told by HA's own toast, which screen readers don't
+// hear while the card's dialog is open; the list hands the dialog the words.
+describe('comfort-band-profiles-tab: a refused pick said to screen readers', () => {
+  const refusing = (opts: Parameters<typeof makeHass>[0] = {}) => {
+    const hass = makeHass({ options: ['home', 'away'], active: 'home', ...opts });
+    (hass.callService as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('refused'));
+    return hass;
+  };
+  const settle = async () => {
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+  };
+  const row = (el: ComfortBandProfilesTab, name: string) =>
+    Array.from(el.shadowRoot!.querySelectorAll<HTMLLIElement>('li')).find(
+      (li) => li.querySelector('.name')!.textContent!.trim() === name,
+    )!;
+
+  it('says a refused pick by the profile’s name, leaving HA’s toast as it was', async () => {
+    const announce = vi.fn();
+    const hass = refusing();
+    const el = await mount('comfort-band-profiles-tab', { hass, announce });
+    row(el, 'away').click();
+    await settle();
+    expect(announce.mock.calls).toEqual([['Couldn’t switch to “away”. Try again.']]);
+    // HA's own toast still says it, to the eye: the call isn't made quiet.
+    expect((hass.callService as ReturnType<typeof vi.fn>).mock.calls[0]).toHaveLength(3);
+  });
+
+  it('says one picked from the keyboard too, by its name as typed', async () => {
+    const announce = vi.fn();
+    const hass = refusing({ options: ['home', 'night "quiet"'] });
+    const el = await mount('comfort-band-profiles-tab', { hass, announce });
+    row(el, 'night "quiet"').dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+    await settle();
+    expect(announce.mock.calls).toEqual([['Couldn’t switch to “night "quiet"”. Try again.']]);
+  });
+
+  it('says nothing for a pick that goes through', async () => {
+    const announce = vi.fn();
+    const hass = makeHass({ options: ['home', 'away'], active: 'home' });
+    const el = await mount('comfort-band-profiles-tab', { hass, announce });
+    row(el, 'away').click();
+    await settle();
+    expect(hass.callService).toHaveBeenCalledTimes(1);
+    expect(announce).not.toHaveBeenCalled();
+  });
+
+  // Its tab swapped out before HA answers, the dialog may still be open.
+  it('says a refusal answered after the list was taken off the page', async () => {
+    const announce = vi.fn();
+    const hass = makeHass({ options: ['home', 'away'], active: 'home' });
+    let reject: (e: Error) => void = () => {};
+    (hass.callService as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      () => new Promise((_, rej) => (reject = rej)),
+    );
+    const el = await mount('comfort-band-profiles-tab', { hass, announce });
+    row(el, 'away').click();
+    el.remove();
+    reject(new Error('refused'));
+    await settle();
+    expect(announce.mock.calls).toEqual([['Couldn’t switch to “away”. Try again.']]);
+  });
+
+  // Nothing is left unhandled, with or without a dialog to say it.
+  it('leaves no rejection unhandled where no dialog hands it `announce`', async () => {
+    const unhandled = vi.fn();
+    const proc = (
+      globalThis as unknown as {
+        process: {
+          on(event: string, listener: (...args: unknown[]) => void): void;
+          off(event: string, listener: (...args: unknown[]) => void): void;
+        };
+      }
+    ).process;
+    proc.on('unhandledRejection', unhandled);
+    try {
+      const el = await profilesTab(refusing());
+      row(el, 'away').click();
+      await new Promise((r) => setTimeout(r, 0));
+      await settle();
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      proc.off('unhandledRejection', unhandled);
+    }
+  });
+});
