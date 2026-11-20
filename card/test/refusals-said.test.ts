@@ -866,4 +866,51 @@ describe('a refusal said from the dialog, end to end (#53)', () => {
       expect(said(el), press).toBe('Couldn’t set the range. Try again.');
     }
   });
+
+  // #63: a refused pick in Advanced › Schedules, said from the dialog too.
+  it('says a refused profile pick', async () => {
+    const { hass, refuse } = setup();
+    hass.devices = {
+      'dev-pm': {
+        id: 'dev-pm',
+        identifiers: [['comfort_band', 'profile_manager']],
+        name: 'Comfort Band Profiles',
+        name_by_user: null,
+        area_id: null,
+      },
+    } as HomeAssistant['devices'];
+    hass.entities = {
+      'select.comfort_band_profiles_active_profile': {
+        entity_id: 'select.comfort_band_profiles_active_profile',
+        platform: 'comfort_band',
+        device_id: 'dev-pm',
+        area_id: null,
+        hidden: false,
+        entity_category: null,
+        translation_key: 'active_profile',
+        name: null,
+      },
+    } as HomeAssistant['entities'];
+    hass.states['select.comfort_band_profiles_active_profile'] = {
+      entity_id: 'select.comfort_band_profiles_active_profile',
+      state: 'home',
+      attributes: { options: ['home', 'away'], default_profile: 'home', descriptions: {} },
+      last_changed: '',
+      last_updated: '',
+    };
+    const el = await openModal(hass);
+    el.selectTab('advanced');
+    await flush(el);
+    const advanced = el.shadowRoot!.querySelector('comfort-band-advanced-tab')!;
+    await (advanced as unknown as { updateComplete: Promise<boolean> }).updateComplete;
+    const profiles = advanced.shadowRoot!.querySelector('comfort-band-profiles-tab')!;
+    await (profiles as unknown as { updateComplete: Promise<boolean> }).updateComplete;
+    const away = Array.from(profiles.shadowRoot!.querySelectorAll<HTMLLIElement>('li')).find(
+      (li) => li.querySelector('.name')!.textContent!.trim() === 'away',
+    )!;
+    refuse();
+    away.click();
+    await flush(el);
+    expect(said(el)).toBe('Couldn’t switch to “away”. Try again.');
+  });
 });

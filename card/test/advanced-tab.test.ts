@@ -282,6 +282,7 @@ describe('comfort-band-advanced-tab', () => {
     expect(exact.announce).toBe(announce);
     const profiles = el.shadowRoot!.querySelector('comfort-band-profiles-tab') as Child;
     expect(profiles.hass).toBe(hass);
+    expect(profiles.announce).toBe(announce);
     await setOpen(el, 'history', true);
     const charts = el.shadowRoot!.querySelector('comfort-band-insights-tab') as Child;
     expect([charts.hass, charts.entities]).toEqual([hass, entities]);
