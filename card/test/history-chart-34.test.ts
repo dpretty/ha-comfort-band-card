@@ -342,6 +342,18 @@ describe('tickNumber and fitAxis', () => {
     } as unknown as uPlot;
     expect(fitAxis(u, ['20°C', '20.5°C', '21°C'], 1, 0)).toBe(10 + 5 + 42 + 2);
     expect(measured).toEqual(['12px test|20.5°C']);
+    // The canvas's font is in device pixels: the width comes back in CSS.
+    const ratio = Object.getOwnPropertyDescriptor(uPlot, 'pxRatio');
+    Object.defineProperty(uPlot, 'pxRatio', { value: 2, configurable: true, writable: true });
+    try {
+      const hi = {
+        ...u,
+        ctx: { font: '', measureText: (t: string) => ({ width: t.length * 14 }) },
+      };
+      expect(fitAxis(hi as unknown as uPlot, ['20.5°C'], 1, 0)).toBe(10 + 5 + 42 + 2);
+    } finally {
+      if (ratio) Object.defineProperty(uPlot, 'pxRatio', ratio);
+    }
     // uPlot asks again once laid out: the size it settled on.
     expect(fitAxis(u, ['20°C', '20.5°C'], 1, 2)).toBe(33);
     expect(fitAxis(u, null, 1, 0)).toBe(17);
@@ -619,6 +631,25 @@ describe('comfort-band-history-chart readout (#34)', () => {
     await el.updateComplete;
     await new Promise((r) => setTimeout(r, 0));
     expect(internals(el)._cursorIdx).toBeNull();
+  });
+
+  // As the card's other controls: 44 px to tap (WCAG 2.5.5).
+  it('makes the range buttons 44 px tall, the one shown marked by more than colour', () => {
+    const css = (
+      customElements.get('comfort-band-history-chart') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((s) => s.cssText)
+      .join('\n');
+    const rule = (sel: string) =>
+      new RegExp(`${sel.replace(/[[\]'=]/g, (c) => `\\${c}`)}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ??
+      '';
+    expect(rule('.ranges button')).toMatch(/min-height:\s*44px/);
+    const pressedRule = rule(".ranges button[aria-pressed='true']");
+    expect(pressedRule).toMatch(/border-color:\s*var\(--cb-text-secondary\)/);
+    expect(pressedRule).toMatch(/font-weight:\s*500/);
   });
 
   it('is two lines tall whatever its words take', () => {

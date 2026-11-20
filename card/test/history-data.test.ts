@@ -290,6 +290,22 @@ describe('history-data: subscribeHistory', () => {
       { s: '1', lu: 100 },
       { s: '3', lu: 150 },
     ]);
+    // The latest before the cutoff is the one in force, whatever the order.
+    expect(
+      keepWindow(
+        [
+          { s: 'b', lu: 80 },
+          { s: 'later', lu: 150 },
+          { s: 'a', lu: 50 },
+          { s: 'first', lu: 120 },
+        ],
+        100,
+      ),
+    ).toEqual([
+      { s: 'b', lu: 100 },
+      { s: 'first', lu: 120 },
+      { s: 'later', lu: 150 },
+    ]);
     expect(keepWindow([], 100)).toEqual([]);
     expect(keepWindow([{ s: '1', lu: 50 }], 100)).toEqual([{ s: '1', lu: 100 }]);
   });
