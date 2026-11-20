@@ -13,7 +13,8 @@
  *   - Diagnostics: who decides heating and cooling now, what each controller
  *     would do, what learning has learned, and recent feedback, loaded only
  *     while open.
- *   - History: the last 24 hours' chart, loaded only while open.
+ *   - History: a chart of the last 6 hours, 24 hours or 7 days, loaded only
+ *     while open.
  *
  * Comfort, Automation and Peak saving also say what the integration is doing
  * beside the settings it explains: the room reading's source, whether
@@ -285,7 +286,8 @@ export class ComfortBandAdvancedTab extends LitElement {
       ${this._section(
         'history',
         'History',
-        'Last 24 hours',
+        // Not a range: the chart offers 6 h, 24 h and 7 d (#34).
+        '6 hours to 7 days',
         this._historyOpen
           ? html`<comfort-band-insights-tab
               .hass=${this.hass}

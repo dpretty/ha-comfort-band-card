@@ -99,9 +99,9 @@ export async function subscribeHistory(
       const cutoff = (Date.now() - hours * 60 * 60 * 1000) / 1000;
       for (const [entityId, points] of Object.entries(states)) {
         const existing = merged[entityId] ?? [];
-        // Append the delta. Filter by cutoff so the dataset stays
-        // bounded as the subscription runs for hours.
-        merged[entityId] = [...existing, ...points].filter((p) => p.lu >= cutoff);
+        // Append the delta, and drop what's older than the window so the
+        // dataset stays bounded as the subscription runs for hours.
+        merged[entityId] = keepWindow([...existing, ...points], cutoff);
       }
       callback(merged);
     },
@@ -118,6 +118,25 @@ export async function subscribeHistory(
       significant_changes_only: false,
     },
   );
+}
+
+/**
+ * The points at or after `cutoff` (unix seconds), led by the state in force
+ * then: the last point before it, moved to `cutoff`. HA's first event gives
+ * each entity's state at the window's start stamped with that start, which
+ * is just before a cutoff worked out a moment later; dropping it lost a
+ * range or an action that hadn't changed in the window (#34 review). In
+ * time order.
+ */
+export function keepWindow(points: HistoryPoint[], cutoff: number): HistoryPoint[] {
+  const sorted = [...points].sort((a, b) => a.lu - b.lu);
+  const kept = sorted.filter((p) => p.lu >= cutoff);
+  const before = sorted.filter((p) => p.lu < cutoff);
+  const inForce = before[before.length - 1];
+  if (inForce && (kept.length === 0 || kept[0].lu > cutoff)) {
+    kept.unshift({ ...inForce, lu: cutoff });
+  }
+  return kept;
 }
 
 /**

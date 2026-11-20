@@ -6,7 +6,8 @@
  * effective low/high band edges (linear, so v0.10.0 backend band-ramp
  * smoothing displays as the smooth curve it actually is — for non-ramp
  * zones the values are constant between transitions so the rendering
- * is visually equivalent to stepped), heating/cooling shading,
+ * is visually equivalent to stepped), heating/cooling as a strip under
+ * it, a range picker and a readout of the values at the pointer (#34),
  * plus an optional apparent-temperature overlay AND optional humidity
  * overlay on a right-side y2 axis. v0.8.2 folded the separate
  * `<comfort-band-apparent-chart>` into the unified chart — stacking

@@ -130,7 +130,7 @@ describe('comfort-band-advanced-tab', () => {
       { id: 'peak', name: 'Peak saving', summary: 'Peak saving off', open: false },
       { id: 'schedules', name: 'Schedules', summary: 'No profiles set up', open: false },
       { id: 'diagnostics', name: 'Diagnostics', summary: 'Basic control deciding', open: false },
-      { id: 'history', name: 'History', summary: 'Last 24 hours', open: false },
+      { id: 'history', name: 'History', summary: '6 hours to 7 days', open: false },
     ]);
   });
 
@@ -154,7 +154,7 @@ describe('comfort-band-advanced-tab', () => {
       'Peak saving on',
       'Profile: home',
       'Paused',
-      'Last 24 hours',
+      '6 hours to 7 days',
     ]);
   });
 
@@ -219,7 +219,7 @@ describe('comfort-band-advanced-tab', () => {
       null,
       'Not available right now',
       null,
-      'Last 24 hours',
+      '6 hours to 7 days',
     ]);
   });
 
