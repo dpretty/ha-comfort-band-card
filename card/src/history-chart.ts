@@ -114,8 +114,9 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
 
   /** How many hours back the chart shows (#34). */
   @state() private _hours: number = HOURS_TO_SHOW;
-  /** A range picked while a chart is drawn: it stays until the new one's
-   *  history arrives, the readout saying it's loading. */
+  /** A range picked while a chart is drawn: it stays until the new
+   *  range's history arrives, the readout saying it's loading. Not for a
+   *  change of entities (another room), whose chart goes, as on main. */
   @state() private _switching = false;
   /** The data point the pointer (or a tap) is on, from uPlot's cursor;
    *  null for none, when the readout gives the latest. */
@@ -134,7 +135,7 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
   /** Labels (e.g. "Room", "Apparent") the user has clicked to hide in
    *  the legend. v0.8.3 added per-series toggles so a busy chart can
    *  be focused on a subset of lines without losing the rest of the
-   *  context (band edges + action shading stay visible by default).
+   *  context (band edges + the action strip stay visible by default).
    *
    *  In-session only — re-mounting the chart (zone switch, dialog
    *  close-and-reopen, HA restart) returns all series to visible.
@@ -160,7 +161,7 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       .ranges button {
         font: inherit;
         font-size: 12px;
-        min-height: 32px;
+        min-height: 44px;
         padding: 0 12px;
         border-radius: 16px;
         border: 1px solid var(--cb-track-bg);
@@ -170,7 +171,9 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       }
       .ranges button[aria-pressed='true'] {
         background: var(--cb-track-bg);
+        border-color: var(--cb-text-secondary);
         color: var(--cb-text-primary);
+        font-weight: 500;
       }
       .ranges button:focus-visible {
         outline: 2px solid var(--primary-color);
@@ -229,9 +232,9 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       return;
     }
     // After the initial subscribe, resubscribe only when the entity
-    // wiring actually changes — every `hass` tick fires `updated()` but
-    // the open subscription already streams live data, so re-subscribing
-    // would just churn the stream.
+    // wiring or the range (#34) changes — every `hass` tick fires
+    // `updated()` but the open subscription already streams live data, so
+    // re-subscribing would just churn the stream.
     if (
       changed.has('roomEntity') ||
       changed.has('lowEntity') ||
@@ -276,10 +279,9 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     }
 
     const gen = ++this._fetchGen;
-    // With a chart drawn (another range picked), it stays until the new
-    // history arrives; the first time, a loading message.
-    if (this._plot) this._switching = true;
-    else this._loading = true;
+    // Another range picked with a chart drawn: it stays until the new
+    // history arrives. Otherwise a loading message.
+    if (!this._switching) this._loading = true;
     this._error = null;
     this._empty = false;
 
@@ -395,14 +397,16 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
 
   /** Convert the action history into [{start, end, action}] intervals,
    *  filtering out idle/unknown so we only paint heating/cooling. A run of
-   *  the same action reported again is one interval (#34: drawn as one). */
-  private _actionIntervals(points: HistoryPoint[] | undefined, nowSec: number): ActionInterval[] {
+   *  the same action reported again is one interval (#34: drawn as one).
+   *  The one in force now runs on (its end Infinity): the readout's "Now"
+   *  is in it, and the strip draws it to the plot's edge. */
+  private _actionIntervals(points: HistoryPoint[] | undefined): ActionInterval[] {
     if (!points) return [];
     const sorted = [...points].sort((a, b) => a.lu - b.lu);
     const out: ActionInterval[] = [];
     for (let i = 0; i < sorted.length; i++) {
       const start = sorted[i].lu;
-      const end = sorted[i + 1]?.lu ?? nowSec;
+      const end = sorted[i + 1]?.lu ?? Infinity;
       const action = sorted[i].s;
       if (action === 'heating' || action === 'cooling') {
         const last = out[out.length - 1];
@@ -426,10 +430,10 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     // shape for zones without a humidity sensor.
     const apparent = this._hasApparent ? numericSeries(response[this.apparentEntity]) : [];
     const humidity = this._hasHumidity ? numericSeries(response[this.humidityEntity]) : [];
-    this._intervals = this._actionIntervals(response[this.actionEntity], nowSec);
+    this._intervals = this._actionIntervals(response[this.actionEntity]);
 
-    // Empty-state: nothing to plot AND no action intervals to shade.
-    // Action shading is informative on its own (heating/cooling events
+    // Empty-state: nothing to plot AND no action intervals to draw.
+    // The action strip is informative on its own (heating/cooling events
     // are visible even if temperature history is missing), so a zone
     // with action data but empty series shouldn't drop into the empty
     // state. Pre-v0.8.2 the conjunction omitted action; the merge is
@@ -456,8 +460,19 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     const seriesData: Array<Array<[number, number]>> = [room, low, high];
     if (this._hasApparent) seriesData.push(apparent);
     if (this._hasHumidity) seriesData.push(humidity);
-    const data = alignSeries(seriesData, nowSec);
+    // The time axis also takes in each heating/cooling change, so the
+    // pointer can rest on one (a short cycle between two readings), and
+    // now, so the chart runs to now and its last point is now's (#34
+    // review). They're aligned as one more series, then dropped.
+    const marks: Array<[number, number]> = [
+      ...this._intervals.flatMap((i) => [i.start, i.end]).filter((t) => Number.isFinite(t)),
+      nowSec,
+    ].map((t) => [t, 0]);
+    const aligned = alignSeries([...seriesData, marks], nowSec);
+    const data = aligned.slice(0, -1) as unknown as AlignedData;
     this._data = data;
+    // The readout reads `_data`: a live update must redraw it too.
+    this.requestUpdate();
     const opts: UPlotOptions = this._buildOpts(this._host.clientWidth || 400);
 
     if (this._plot) {
@@ -578,15 +593,15 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       {
         stroke: secondaryText,
         grid: { stroke: gridStroke },
-        size: 48,
-        values: (_u: uPlot, vs: number[]) => vs.map((v) => `${degrees(v)}${unit}`),
+        size: fitAxis,
+        values: (_u: uPlot, vs: number[]) => vs.map((v) => `${tickNumber(v)}${unit}`),
       },
     ];
     if (this._hasHumidity) {
       axes.push({
         scale: 'y2',
         side: 1,
-        size: 46,
+        size: fitAxis,
         stroke: secondaryText,
         grid: { show: false },
         values: (_u: uPlot, vs: number[]) => vs.map((v) => `${v.toFixed(0)}%`),
@@ -619,7 +634,9 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
             const ctx = u.ctx;
             if (!ctx) return;
             const ratio = uPlot.pxRatio || 1;
-            const top = u.bbox.top + u.bbox.height + STRIP_GAP * ratio;
+            // Whole device pixels, so its edges stay sharp at any ratio.
+            const top = Math.round(u.bbox.top + u.bbox.height + STRIP_GAP * ratio);
+            const height = Math.round(STRIP * ratio);
             const rects = stripRects(
               this._intervals,
               (v) => u.valToPos(v, 'x', true),
@@ -629,7 +646,7 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
             ctx.save();
             for (const r of rects) {
               ctx.fillStyle = this._stripColors[r.action];
-              ctx.fillRect(r.x, top, r.w, STRIP * ratio);
+              ctx.fillRect(r.x, top, r.w, height);
             }
             ctx.restore();
           },
@@ -668,6 +685,7 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
           (r) =>
             html`<button
               type="button"
+              aria-label=${r.words}
               aria-pressed=${this._hours === r.hours ? 'true' : 'false'}
               @click=${() => this._pickRange(r.hours)}
             >
@@ -691,17 +709,20 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
   /** Shows the last `hours` (#34): a new subscription for that window. */
   private _pickRange(hours: number): void {
     if (hours === this._hours) return;
+    this._switching = this._plot !== null;
     this._hours = hours;
   }
 
   /** The readout line (#34): the time and each shown series' value at the
-   *  pointer's point, or the latest ("Now"), and heating or cooling then. */
+   *  pointer's point, or now's (the last point is now: "Now"), and heating
+   *  or cooling then. */
   private _readout(): string {
     if (this._switching) return `Loading ${rangeWords(this._hours)} of history…`;
     const data = this._data;
     const xs = data?.[0];
     if (!data || !xs || xs.length === 0) return '';
-    const idx = this._cursorIdx !== null && this._cursorIdx < xs.length ? this._cursorIdx : null;
+    const idx =
+      this._cursorIdx !== null && this._cursorIdx < xs.length - 1 ? this._cursorIdx : null;
     const at = xs[idx ?? xs.length - 1];
     const value = (label: string): number | null => {
       if (this._hiddenLabels.has(label)) return null;
@@ -724,11 +745,11 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
    *  swatch is a button — click / Enter / Space flips that series'
    *  `_hiddenLabels` membership, uPlot's setSeries hides / shows the
    *  line immediately, and the toggle's visual reflects the new state.
-   *  Heating / Cooling shading items are non-interactive in v0.8.3
+   *  Heating / Cooling (the strip, #34) are non-interactive in v0.8.3
    *  because they live in a `draw` hook rather than as uPlot series;
    *  toggling them needs a different code path. Marked with
    *  `aria-pressed="false"` only on the toggleable items so screen
-   *  readers don't announce the shading swatches as buttons. */
+   *  readers don't announce the strip's swatches as buttons. */
   private _renderLegend() {
     return html`<div class="legend">
       ${this._toggleItem(
@@ -739,6 +760,7 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
         ? this._toggleItem(
             'Apparent',
             html`<span class="swatch dashed" style="color:var(--primary-color)"></span>`,
+            'Feels like',
           )
         : nothing}
       ${this._toggleItem(
@@ -818,22 +840,57 @@ export function readoutLine(r: {
   const parts = [r.when];
   if (r.room !== null) parts.push(`Room ${degrees(r.room)}°`);
   if (r.apparent !== null) parts.push(`Feels like ${degrees(r.apparent)}°`);
-  if (r.low !== null && r.high !== null)
+  if (r.low !== null && r.high !== null) {
     parts.push(`Range ${bandText({ low: r.low, high: r.high })}`);
+  } else if (r.low !== null) {
+    parts.push(`Low ${degrees(r.low)}°`);
+  } else if (r.high !== null) {
+    parts.push(`High ${degrees(r.high)}°`);
+  }
   if (r.humidity !== null) parts.push(`Humidity ${Math.round(r.humidity)}%`);
   if (r.action) parts.push(r.action === 'heating' ? 'Heating' : 'Cooling');
   return parts.join(' · ');
 }
 
-/** The readout's time: "22:30" today, "Thu 22:30" another day, in HA's
- *  12/24-hour setting; the weekday, being short, as the time axis's, so
- *  the readout keeps to its two lines on a narrow phone. */
+/** The readout's time: "22:30" today, "Thu 22:30" another day this week,
+ *  "Fri 13 22:30" six days back or more (today's weekday a week ago), in
+ *  HA's 12/24-hour setting; the weekday, being short, as the time axis's,
+ *  so the readout keeps to its two lines on a narrow phone. */
 export function readoutTime(ms: number, now: number, hass?: Pick<HomeAssistant, 'locale'>): string {
   const time = formatTime(ms, hass);
   const d = new Date(ms);
-  const today = new Date(now);
-  if (d.toDateString() === today.toDateString()) return time;
-  return `${weekdayOf(hass).format(d)} ${time}`;
+  const midnight = (t: Date) => new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
+  const days = Math.round((midnight(new Date(now)) - midnight(d)) / 86_400_000);
+  if (days === 0) return time;
+  const weekday = weekdayOf(hass).format(d);
+  return days >= 6 ? `${weekday} ${d.getDate()} ${time}` : `${weekday} ${time}`;
+}
+
+/** A temperature axis's number as uPlot steps it: whole, or to the 0.5,
+ *  0.25 or 0.05 its steps fall on (#34 review: tenths repeated them). */
+export function tickNumber(v: number): string {
+  const rounded = Math.round(v * 100) / 100;
+  return Number.isInteger(rounded) ? rounded.toFixed(0) : String(rounded);
+}
+
+/** An axis as wide as its widest label, measured in its font, so none is
+ *  cut ("21.5°C", "100%"; #34 review): uPlot's own pattern, plus a pixel's
+ *  room either side. */
+export function fitAxis(
+  u: uPlot,
+  values: string[] | null,
+  axisIdx: number,
+  cycleNum: number,
+): number {
+  const axis = u.axes[axisIdx] as uPlot.Axis & { _size?: number; font?: [string, number] };
+  if (cycleNum > 1 && axis._size !== undefined) return axis._size;
+  let size = (axis.ticks?.size ?? 10) + (axis.gap ?? 5);
+  const longest = (values ?? []).reduce((a, v) => (v.length > a.length ? v : a), '');
+  if (longest && u.ctx) {
+    if (axis.font) u.ctx.font = axis.font[0];
+    size += u.ctx.measureText(longest).width / (uPlot.pxRatio || 1);
+  }
+  return Math.ceil(size) + 2;
 }
 
 /** Short weekday names, in HA's language where it's an English one, as

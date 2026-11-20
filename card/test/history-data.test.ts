@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   HOURS_TO_SHOW,
+  keepWindow,
   alignSeries,
   fetchHistory,
   numericSeries,
@@ -210,26 +211,87 @@ describe('history-data: subscribeHistory', () => {
     ]);
   });
 
-  it('evicts points older than the window cutoff on merge', async () => {
+  it('drops points older than the window, keeping the state in force at its start', async () => {
     // As the subscription runs for hours, points that fall out of the
-    // configured window must be dropped — otherwise the merged
-    // snapshot grows unboundedly. Setting hours=1, then injecting
-    // points from 2h ago, asserts the cutoff fires.
-    const sub = captureSubscription();
-    const seen: Array<Record<string, Array<{ s: string; lu: number }>>> = [];
-    await subscribeHistory(makeHass(sub.connection), ['sensor.a'], 1, (resp) => {
-      seen.push(structuredClone(resp));
-    });
-    const now = Math.floor(Date.now() / 1000);
-    sub.emit({
-      states: {
-        'sensor.a': [
-          { s: '20.0', lu: now - 7200 }, // 2h ago — older than 1h cutoff
-          { s: '21.0', lu: now - 1800 }, // 30min ago — kept
+    // window must be dropped, or the merged snapshot grows without end;
+    // but the one in force at the window's start is kept there, or a
+    // value that didn't change in the window would vanish (#34 review).
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.UTC(2026, 10, 20, 12, 0));
+    try {
+      const sub = captureSubscription();
+      const seen: Array<Record<string, Array<{ s: string; lu: number }>>> = [];
+      await subscribeHistory(makeHass(sub.connection), ['sensor.a'], 1, (resp) => {
+        seen.push(structuredClone(resp));
+      });
+      const now = Date.now() / 1000;
+      sub.emit({
+        states: {
+          'sensor.a': [
+            { s: '19.0', lu: now - 9000 },
+            { s: '20.0', lu: now - 7200 }, // in force an hour ago
+            { s: '21.0', lu: now - 1800 },
+          ],
+        },
+      });
+      expect(seen[0]['sensor.a']).toEqual([
+        { s: '20.0', lu: now - 3600 },
+        { s: '21.0', lu: now - 1800 },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // HA's first event stamps each entity's state at the window's start with
+  // that start: a moment before the cutoff worked out when it arrives.
+  it('keeps the state HA gives for the window’s start', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.UTC(2026, 10, 20, 12, 0));
+    try {
+      const sub = captureSubscription();
+      const seen: Array<Record<string, Array<{ s: string; lu: number }>>> = [];
+      await subscribeHistory(makeHass(sub.connection), ['sensor.band'], 6, (resp) => {
+        seen.push(structuredClone(resp));
+      });
+      const start = Date.parse(sub.subscriptions[0].message.start_time as string) / 1000;
+      vi.setSystemTime(Date.UTC(2026, 10, 20, 12, 0, 1));
+      sub.emit({ states: { 'sensor.band': [{ s: '19.5', lu: start }] } });
+      expect(seen[0]['sensor.band']).toEqual([{ s: '19.5', lu: start + 1 }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('adds no point at the window’s start where one is there already', () => {
+    expect(
+      keepWindow(
+        [
+          { s: '1', lu: 50 },
+          { s: '2', lu: 100 },
+          { s: '3', lu: 150 },
         ],
-      },
-    });
-    expect(seen[0]['sensor.a']).toEqual([{ s: '21.0', lu: now - 1800 }]);
+        100,
+      ),
+    ).toEqual([
+      { s: '2', lu: 100 },
+      { s: '3', lu: 150 },
+    ]);
+    // Out of order, as deltas can arrive: sorted first.
+    expect(
+      keepWindow(
+        [
+          { s: '3', lu: 150 },
+          { s: '1', lu: 50 },
+        ],
+        100,
+      ),
+    ).toEqual([
+      { s: '1', lu: 100 },
+      { s: '3', lu: 150 },
+    ]);
+    expect(keepWindow([], 100)).toEqual([]);
+    expect(keepWindow([{ s: '1', lu: 50 }], 100)).toEqual([{ s: '1', lu: 100 }]);
   });
 
   it('notifies the callback on an empty batch after data has accumulated', async () => {

@@ -1,12 +1,15 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import '../src/history-chart.js';
+import uPlot from 'uplot';
 import {
   actionAt,
+  fitAxis,
   mixColor,
   readoutLine,
   readoutTime,
   stripRects,
   temperatureUnit,
+  tickNumber,
   timeLabels,
 } from '../src/history-chart.js';
 import type { ComfortBandHistoryChart } from '../src/history-chart.js';
@@ -73,8 +76,9 @@ type Internals = {
   };
   _actionIntervals: (
     points: Array<{ s: string; lu: number }>,
-    now: number,
   ) => Array<{ start: number; end: number; action: string }>;
+  _data: Array<Array<number | null>> | null;
+  _toggleLabel: (label: string) => void;
 };
 const internals = (el: ComfortBandHistoryChart) => el as unknown as Internals;
 
@@ -132,6 +136,15 @@ describe('readoutLine', () => {
     );
   });
 
+  it('gives one edge of the range alone where the other is hidden', () => {
+    expect(readoutLine({ ...base, low: null })).toBe(
+      '22:30 · Room 21.3° · Feels like 21.9° · High 22.5° · Humidity 45% · Heating',
+    );
+    expect(readoutLine({ ...base, high: null })).toBe(
+      '22:30 · Room 21.3° · Feels like 21.9° · Low 19.5° · Humidity 45% · Heating',
+    );
+  });
+
   it('leaves out what isn’t there', () => {
     expect(
       readoutLine({
@@ -143,9 +156,9 @@ describe('readoutLine', () => {
         humidity: null,
         action: null,
       }),
-    ).toBe('Now · Room 21.3°');
-    expect(readoutLine({ ...base, room: null, low: null })).toBe(
-      '22:30 · Feels like 21.9° · Humidity 45% · Heating',
+    ).toBe('Now · Room 21.3° · Low 19.5°');
+    expect(readoutLine({ ...base, room: null, apparent: null, low: null, high: null })).toBe(
+      '22:30 · Humidity 45% · Heating',
     );
   });
 });
@@ -158,7 +171,25 @@ describe('readoutTime', () => {
   it('gives the time today, and the weekday with it another day', () => {
     expect(readoutTime(new Date(2026, 10, 20, 9, 30).getTime(), now, h24)).toBe('09:30');
     expect(readoutTime(new Date(2026, 10, 19, 22, 30).getTime(), now, h24)).toBe('Thu 22:30');
-    expect(readoutTime(new Date(2026, 10, 14, 6, 0).getTime(), now, h12)).toBe('Sat 6 AM');
+    expect(readoutTime(new Date(2026, 10, 15, 6, 0).getTime(), now, h12)).toBe('Sun 6 AM');
+    // Six days back or more: today's weekday a week ago, so the date too.
+    expect(readoutTime(new Date(2026, 10, 14, 6, 0).getTime(), now, h12)).toBe('Sat 14 6 AM');
+    expect(readoutTime(new Date(2026, 10, 13, 22, 0).getTime(), now, h24)).toBe('Fri 13 22:00');
+    // By the calendar day, not 24 hours: last night is another day.
+    expect(
+      readoutTime(
+        new Date(2026, 10, 20, 0, 30).getTime(),
+        new Date(2026, 10, 20, 23, 0).getTime(),
+        h24,
+      ),
+    ).toBe('00:30');
+    expect(
+      readoutTime(
+        new Date(2026, 10, 19, 23, 30).getTime(),
+        new Date(2026, 10, 20, 0, 30).getTime(),
+        h24,
+      ),
+    ).toBe('Thu 23:30');
     expect(
       readoutTime(new Date(2026, 10, 19, 22, 30).getTime(), now, {
         locale: { language: 'fr', time_format: '24' },
@@ -249,6 +280,8 @@ describe('timeLabels', () => {
       '12:00',
     ]);
     expect(timeLabels([at(0, 0, 14)], 36 * 3600, h24)).toEqual(['00:00\nSat 14']);
+    // Only midnight itself gets the day.
+    expect(timeLabels([at(0, 30, 14)], 24 * 3600, h24)).toEqual(['00:30']);
   });
 
   it('names days in English where HA’s language isn’t', () => {
@@ -285,10 +318,46 @@ describe('temperatureUnit and mixColor', () => {
   });
 });
 
+describe('tickNumber and fitAxis', () => {
+  it('writes a temperature axis number as uPlot steps it', () => {
+    expect(tickNumber(20)).toBe('20');
+    expect(tickNumber(20.5)).toBe('20.5');
+    expect(tickNumber(20.25)).toBe('20.25');
+    expect(tickNumber(21.35)).toBe('21.35');
+    expect(tickNumber(21.299999999)).toBe('21.3');
+    expect(tickNumber(-0.5)).toBe('-0.5');
+  });
+
+  it('makes an axis as wide as its widest label, and a pixel either side', () => {
+    const measured: string[] = [];
+    const u = {
+      axes: [{}, { ticks: { size: 10 }, gap: 5, font: ['12px test', 12], _size: 33 }],
+      ctx: {
+        font: '',
+        measureText(text: string) {
+          measured.push(`${this.font}|${text}`);
+          return { width: text.length * 7 };
+        },
+      },
+    } as unknown as uPlot;
+    expect(fitAxis(u, ['20°C', '20.5°C', '21°C'], 1, 0)).toBe(10 + 5 + 42 + 2);
+    expect(measured).toEqual(['12px test|20.5°C']);
+    // uPlot asks again once laid out: the size it settled on.
+    expect(fitAxis(u, ['20°C', '20.5°C'], 1, 2)).toBe(33);
+    expect(fitAxis(u, null, 1, 0)).toBe(17);
+  });
+});
+
 describe('comfort-band-history-chart ranges (#34)', () => {
   it('offers 6 h, 24 h and 7 d, showing 24 h to start with', async () => {
     const { el, sub } = await chart(FULL);
     expect(rangeButtons(el).map((b) => b.textContent!.trim())).toEqual(['6 h', '24 h', '7 d']);
+    expect(rangeButtons(el).map((b) => b.getAttribute('aria-label'))).toEqual([
+      '6 hours',
+      '24 hours',
+      '7 days',
+    ]);
+    expect(root(el).querySelector('.ranges')!.getAttribute('role')).toBe('group');
     expect(pressed(el)).toEqual(['24 h']);
     expect(root(el).querySelector('.ranges')!.getAttribute('aria-label')).toBe('Show the last');
     const start = Date.parse(sub.subscriptions[0].message.start_time as string);
@@ -362,6 +431,30 @@ describe('comfort-band-history-chart ranges (#34)', () => {
   });
 });
 
+describe('comfort-band-history-chart: another room (#34 review)', () => {
+  // Only a range pick keeps the chart drawn while the new history loads.
+  it('shows the loading message, not the old room’s chart, for another room', async () => {
+    const { el, sub } = await chart(FULL);
+    const now = Math.floor(Date.now() / 1000);
+    internals(el)._plot = fakePlot(3);
+    sub.emit({
+      states: {
+        'sensor.gym_room_temperature': [{ s: '21.0', lu: now - 60 }],
+        'sensor.gym_effective_low': [{ s: '19.5', lu: now - 60 }],
+        'sensor.gym_effective_high': [{ s: '22.5', lu: now - 60 }],
+      },
+    });
+    await el.updateComplete;
+    el.roomEntity = 'sensor.study_room_temperature';
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+    expect(root(el).querySelector('.status')!.textContent).toContain('Loading');
+    expect(root(el).querySelector('.chart-host')!.classList.contains('idle')).toBe(true);
+    expect(readout(el)).toBe('');
+  });
+});
+
 describe('comfort-band-history-chart readout (#34)', () => {
   /** A chart with history delivered: a stand-in for uPlot drawn. */
   async function withHistory(props = OVERLAYS) {
@@ -388,6 +481,95 @@ describe('comfort-band-history-chart readout (#34)', () => {
     await el.updateComplete;
     return { el, now };
   }
+
+  // The action's changes come at their own times, after a reading as often
+  // as not: "Now" is now's (#34 review).
+  it('gives now’s heating or cooling as "Now", whenever the last reading was', async () => {
+    const { el, sub } = await chart(FULL);
+    const now = Math.floor(Date.now() / 1000);
+    internals(el)._plot = fakePlot(3);
+    const room = {
+      'sensor.gym_room_temperature': [{ s: '19.4', lu: now - 900 }],
+      'sensor.gym_effective_low': [{ s: '19.5', lu: now - 7200 }],
+      'sensor.gym_effective_high': [{ s: '22.5', lu: now - 7200 }],
+    };
+    sub.emit({
+      states: {
+        ...room,
+        'sensor.gym_current_action': [
+          { s: 'idle', lu: now - 7200 },
+          { s: 'heating', lu: now - 300 },
+        ],
+      },
+    });
+    await el.updateComplete;
+    expect(readout(el)).toBe('Now · Room 19.4° · Range 19.5–22.5° · Heating');
+    sub.emit({ states: { 'sensor.gym_current_action': [{ s: 'idle', lu: now - 60 }] } });
+    await el.updateComplete;
+    expect(readout(el)).toBe('Now · Room 19.4° · Range 19.5–22.5°');
+  });
+
+  it('runs the chart to now, with each heating or cooling change on its time axis', async () => {
+    const { el, sub } = await chart(FULL);
+    const now = Math.floor(Date.now() / 1000);
+    internals(el)._plot = fakePlot(3);
+    sub.emit({
+      states: {
+        'sensor.gym_room_temperature': [
+          { s: '23.0', lu: now - 3600 },
+          { s: '22.8', lu: now - 1800 },
+        ],
+        'sensor.gym_effective_low': [{ s: '19.5', lu: now - 3600 }],
+        'sensor.gym_effective_high': [{ s: '22.5', lu: now - 3600 }],
+        // A short cycle between two readings.
+        'sensor.gym_current_action': [
+          { s: 'idle', lu: now - 3600 },
+          { s: 'cooling', lu: now - 3000 },
+          { s: 'idle', lu: now - 2880 },
+        ],
+      },
+    });
+    await el.updateComplete;
+    const xs = internals(el)._data![0] as number[];
+    expect(xs).toEqual([now - 3600, now - 3000, now - 2880, now - 1800, now]);
+    // The pointer on the cycle's start.
+    internals(el)._cursorIdx = 1;
+    await el.updateComplete;
+    expect(readout(el)).toMatch(/· Room 23° · Range 19\.5–22\.5° · Cooling$/);
+    internals(el)._cursorIdx = 2;
+    await el.updateComplete;
+    expect(readout(el)).not.toContain('Cooling');
+    // A point past the data (stale) reads as now.
+    internals(el)._cursorIdx = 999;
+    await el.updateComplete;
+    expect(readout(el)).toBe('Now · Room 22.8° · Range 19.5–22.5°');
+  });
+
+  // The stream's updates change nothing else the readout would redraw for.
+  it('gives a live update’s values at once', async () => {
+    const { el, sub } = await chart(FULL);
+    const now = Math.floor(Date.now() / 1000);
+    internals(el)._plot = fakePlot(3);
+    sub.emit({
+      states: {
+        'sensor.gym_room_temperature': [{ s: '21.0', lu: now - 600 }],
+        'sensor.gym_effective_low': [{ s: '19.5', lu: now - 600 }],
+        'sensor.gym_effective_high': [{ s: '22.5', lu: now - 600 }],
+      },
+    });
+    await el.updateComplete;
+    expect(readout(el)).toBe('Now · Room 21° · Range 19.5–22.5°');
+    sub.emit({ states: { 'sensor.gym_room_temperature': [{ s: '21.6', lu: now - 10 }] } });
+    await el.updateComplete;
+    expect(readout(el)).toBe('Now · Room 21.6° · Range 19.5–22.5°');
+  });
+
+  it('gives the other edge alone when one is hidden in the legend', async () => {
+    const { el } = await withHistory();
+    internals(el)._toggleLabel('Low band');
+    await el.updateComplete;
+    expect(readout(el)).toBe('Now · Room 21.3° · Feels like 21.9° · High 22.5° · Humidity 45%');
+  });
 
   it('gives the latest values as "Now" without a pointer', async () => {
     const { el } = await withHistory();
@@ -477,8 +659,10 @@ describe('comfort-band-history-chart strip and axes (#34)', () => {
       valToPos: (v: number) => v,
     });
     const { heating, cooling } = internals(el)._stripColors;
-    expect(heating).toMatch(/^rgb\(/);
-    expect(cooling).toMatch(/^rgb\(/);
+    // The action's colour 30% of the way to the text's (the theme's, or
+    // these fallbacks where it gives none).
+    expect(heating).toBe(mixColor('#d9603f', '#212121', 0.3));
+    expect(cooling).toBe(mixColor('#2f7fcc', '#212121', 0.3));
     // 3 px under the plot, 6 px tall.
     expect(fills).toEqual([
       { style: heating, args: [20, 58, 20, 6] },
@@ -486,23 +670,62 @@ describe('comfort-band-history-chart strip and axes (#34)', () => {
     ]);
   });
 
-  it('draws a run of the same action as one interval', async () => {
+  it('draws the strip in whole device pixels at a phone’s ratio, cut at the plot’s right', async () => {
     const { el } = await chart(FULL);
-    const runs = internals(el)._actionIntervals(
-      [
+    const opts = internals(el)._buildOpts(400);
+    internals(el)._intervals = [{ start: 100, end: 150, action: 'heating' }];
+    const fills: number[][] = [];
+    const ctx = {
+      fillStyle: '',
+      save: vi.fn(),
+      restore: vi.fn(),
+      fillRect: (...args: number[]) => fills.push(args),
+    };
+    const ratio = Object.getOwnPropertyDescriptor(uPlot, 'pxRatio');
+    Object.defineProperty(uPlot, 'pxRatio', { value: 1.5, configurable: true, writable: true });
+    try {
+      opts.hooks.draw[0]({
+        ctx,
+        bbox: { left: 10, top: 5, width: 100, height: 50 },
+        valToPos: (v: number) => v,
+      });
+    } finally {
+      if (ratio) Object.defineProperty(uPlot, 'pxRatio', ratio);
+    }
+    // Top 55 + 4.5 → 60, height 9; to the plot's right edge, 110.
+    expect(fills).toEqual([[100, 60, 10, 9]]);
+  });
+
+  it('keeps two runs of heating with idle between them apart', async () => {
+    const { el } = await chart(FULL);
+    expect(
+      internals(el)._actionIntervals([
         { s: 'heating', lu: 0 },
-        { s: 'heating', lu: 60 },
+        { s: 'idle', lu: 60 },
         { s: 'heating', lu: 120 },
         { s: 'idle', lu: 180 },
-        { s: 'cooling', lu: 240 },
-        { s: 'heating', lu: 300 },
-      ],
-      400,
-    );
+      ]),
+    ).toEqual([
+      { start: 0, end: 60, action: 'heating' },
+      { start: 120, end: 180, action: 'heating' },
+    ]);
+  });
+
+  it('draws a run of the same action as one interval', async () => {
+    const { el } = await chart(FULL);
+    const runs = internals(el)._actionIntervals([
+      { s: 'heating', lu: 0 },
+      { s: 'heating', lu: 60 },
+      { s: 'heating', lu: 120 },
+      { s: 'idle', lu: 180 },
+      { s: 'cooling', lu: 240 },
+      { s: 'heating', lu: 300 },
+    ]);
     expect(runs).toEqual([
       { start: 0, end: 180, action: 'heating' },
       { start: 240, end: 300, action: 'cooling' },
-      { start: 300, end: 400, action: 'heating' },
+      // The one in force now runs on.
+      { start: 300, end: Infinity, action: 'heating' },
     ]);
   });
 
@@ -533,13 +756,24 @@ describe('comfort-band-history-chart strip and axes (#34)', () => {
     ]);
   });
 
-  it('writes the temperature axis with its unit, and "100%" with room', async () => {
+  it('writes the temperature axis with its unit, both axes as wide as their labels', async () => {
     const { el } = await chart(OVERLAYS);
     const axes = internals(el)._buildOpts(400).axes;
-    expect(axes[1].values!({}, [18, 19.5])).toEqual(['18°C', '19.5°C']);
-    expect(axes[1].size).toBe(48);
-    expect(axes[2].size).toBe(46);
+    expect(axes[1].values!({}, [18, 19.5, 20.25])).toEqual(['18°C', '19.5°C', '20.25°C']);
+    expect(axes[1].size).toBe(fitAxis);
+    expect(axes[2].size).toBe(fitAxis);
     expect(axes[2].values!({}, [100])).toEqual(['100%']);
+  });
+
+  it('labels the time axis by the span shown', async () => {
+    const { el } = await chart(FULL);
+    const x = internals(el)._buildOpts(400).axes[0];
+    const midnight = new Date(2026, 10, 21, 0, 0).getTime() / 1000;
+    const span = (hours: number) => ({
+      scales: { x: { min: midnight - hours * 3600, max: midnight } },
+    });
+    expect(x.values!(span(24), [midnight])).toEqual(['00:00\nSat 21']);
+    expect(x.values!(span(168), [midnight])).toEqual(['Sat 21']);
   });
 
   it('writes "°" alone where HA gives no unit', async () => {

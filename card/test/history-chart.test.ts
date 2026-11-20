@@ -343,7 +343,8 @@ describe('comfort-band-history-chart', () => {
     (el as unknown as { _loading: boolean })._loading = false;
     await el.updateComplete;
     const legendText = el.shadowRoot!.querySelector('.legend')!.textContent ?? '';
-    expect(legendText).toContain('Apparent');
+    // Named as the readout names it (#34): "Feels like".
+    expect(legendText).toContain('Feels like');
     expect(legendText).toContain('Humidity');
   });
 
@@ -354,7 +355,7 @@ describe('comfort-band-history-chart', () => {
     (el as unknown as { _loading: boolean })._loading = false;
     await el.updateComplete;
     const legendText = el.shadowRoot!.querySelector('.legend')!.textContent ?? '';
-    expect(legendText).not.toContain('Apparent');
+    expect(legendText).not.toContain('Feels like');
     expect(legendText).not.toContain('Humidity');
   });
 
@@ -396,7 +397,7 @@ describe('comfort-band-history-chart', () => {
     await el.updateComplete;
 
     const toggles = Array.from(el.shadowRoot!.querySelectorAll<HTMLElement>('.legend .toggle'));
-    const apparent = toggles.find((t) => t.textContent?.includes('Apparent'));
+    const apparent = toggles.find((t) => t.textContent?.includes('Feels like'));
     expect(apparent).toBeDefined();
     expect(apparent!.classList.contains('hidden')).toBe(false);
     expect(apparent!.getAttribute('aria-pressed')).toBe('false');
@@ -409,7 +410,7 @@ describe('comfort-band-history-chart', () => {
     );
     const apparentAfter = Array.from(
       el.shadowRoot!.querySelectorAll<HTMLElement>('.legend .toggle'),
-    ).find((t) => t.textContent?.includes('Apparent'));
+    ).find((t) => t.textContent?.includes('Feels like'));
     expect(apparentAfter!.classList.contains('hidden')).toBe(true);
     expect(apparentAfter!.getAttribute('aria-pressed')).toBe('true');
   });
@@ -473,7 +474,7 @@ describe('comfort-band-history-chart', () => {
     // Hide Apparent via the public toggle path.
     const findApparent = () =>
       Array.from(el.shadowRoot!.querySelectorAll<HTMLElement>('.legend .toggle')).find((t) =>
-        t.textContent?.includes('Apparent'),
+        t.textContent?.includes('Feels like'),
       )!;
     findApparent().click();
     await el.updateComplete;
