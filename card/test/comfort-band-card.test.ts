@@ -287,6 +287,48 @@ describe('comfort-band-card', () => {
     }
   });
 
+  // #64: where peak saving moved the range, until the range next changes.
+  it('tells the tile a peak moved the range, and until the peak ends', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 22, 10, 0));
+    try {
+      const hass = makeHass('gym');
+      hass.locale = { language: 'en-GB', time_format: '24' };
+      hass.states['sensor.gym_next_band_change'] = {
+        entity_id: 'sensor.gym_next_band_change',
+        state: new Date(2026, 9, 22, 17, 0).toISOString(),
+        attributes: { scheduled: true },
+        last_changed: '',
+        last_updated: '',
+      };
+      hass.entities['sensor.gym_peak_saving'] = {
+        entity_id: 'sensor.gym_peak_saving',
+        platform: 'comfort_band',
+        device_id: 'dev-gym',
+        area_id: null,
+        hidden: false,
+        entity_category: null,
+        translation_key: 'peak_saving',
+        name: null,
+      };
+      hass.states['sensor.gym_peak_saving'] = {
+        entity_id: 'sensor.gym_peak_saving',
+        state: 'preconditioning',
+        attributes: {
+          low_adjustment: 0,
+          high_adjustment: -1,
+          next_start: new Date(2026, 9, 22, 15, 30).toISOString(),
+        },
+        last_changed: '',
+        last_updated: '',
+      };
+      const el = await card('gym', hass);
+      expect(tileOf(el).statusText).toBe('Comfortable · 19.5–22.5° ahead of a peak until 15:30');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('promises no end once the next change has passed', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 9, 22, 18, 0));

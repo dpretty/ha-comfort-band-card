@@ -353,6 +353,30 @@ describe('comfort-band-now-tab', () => {
       expect(statusText(el)).toBe(`Comfortable · 19.5–22.5° until ${formatTime(NOW + 5 * HOUR)}`);
     });
 
+    // #64: the range peak saving moved, and when it next changes.
+    it('says a peak moved the range, and until the peak ends', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(NOW);
+      const hass = makeHass(
+        {
+          'sensor.gym_next_band_change': new Date(NOW + 5 * HOUR).toISOString(),
+          'sensor.gym_peak_saving': 'active',
+        },
+        {
+          'sensor.gym_next_band_change': { scheduled: true, low: 17, high: 24 },
+          'sensor.gym_peak_saving': {
+            low_adjustment: -1,
+            high_adjustment: 1,
+            ends: new Date(NOW + 2 * HOUR).toISOString(),
+          },
+        },
+      );
+      const el = await nowTab(hass, { ...makeEntities(), peakSaving: 'sensor.gym_peak_saving' });
+      expect(statusText(el)).toBe(
+        `Comfortable · 19.5–22.5° for a peak until ${formatTime(NOW + 2 * HOUR)}`,
+      );
+    });
+
     it('says what the room is doing when it is heating or cooling', async () => {
       const heating = await nowTab(scheduledHass(null, { 'sensor.gym_current_action': 'heating' }));
       expect(statusText(heating)).toBe('Heating · 19.5–22.5°');

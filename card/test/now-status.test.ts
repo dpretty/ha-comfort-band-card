@@ -122,6 +122,7 @@ describe('statusLine', () => {
     overrideEnds: null,
     scheduled: true,
     nextChange: NOW + 3_600_000,
+    peak: null,
     doing: null,
     now: NOW,
     formatTime: (ms) => `T+${(ms - NOW) / 60_000}m`,
@@ -400,5 +401,96 @@ describe('formatClock', () => {
     expect(formatClock('07:00:00', locale('12'))).toBe('07:00:00');
     expect(formatClock('at 07:00', locale('12'))).toBe('at 07:00');
     expect(formatClock('', locale('12'))).toBe('');
+  });
+});
+
+// #64: where peak saving has moved the range, the line says so, and "until"
+// is when the range next changes: the peak's end (or start), or the
+// schedule's next change if that comes first.
+describe('statusLine under a peak', () => {
+  const NOW = Date.parse('2026-10-22T10:00:00Z');
+  const MIN = 60_000;
+  const base: StatusInput = {
+    enabled: true,
+    sensor: 'ok',
+    action: 'idle',
+    temperature: 20,
+    band: { low: 17, high: 24 },
+    overrideActive: false,
+    overrideEnds: null,
+    scheduled: true,
+    nextChange: NOW + 180 * MIN,
+    peak: { kind: 'relaxed', at: NOW + 60 * MIN },
+    doing: null,
+    now: NOW,
+    formatTime: (ms) => `T+${(ms - NOW) / MIN}m`,
+  };
+  const line = (patch: Partial<StatusInput>) => statusLine({ ...base, ...patch }).text;
+  const relaxed = (at: number | null) => ({ peak: { kind: 'relaxed' as const, at } });
+  const ahead = (at: number | null) => ({ peak: { kind: 'ahead' as const, at } });
+
+  it('says the range is for a peak, until the peak ends', () => {
+    expect(line({})).toBe('Comfortable · 17–24° for a peak until T+60m');
+    expect(statusLine(base).kind).toBe('comfortable');
+  });
+
+  it('says the range is ahead of a peak, until it starts', () => {
+    expect(line(ahead(NOW + 45 * MIN))).toBe('Comfortable · 17–24° ahead of a peak until T+45m');
+  });
+
+  it('says until the schedule’s next change where that comes first', () => {
+    expect(line({ nextChange: NOW + 30 * MIN })).toBe(
+      'Comfortable · 17–24° for a peak until T+30m',
+    );
+    expect(line({ ...ahead(NOW + 45 * MIN), nextChange: NOW + 30 * MIN })).toBe(
+      'Comfortable · 17–24° ahead of a peak until T+30m',
+    );
+    expect(line({ nextChange: NOW + 60 * MIN })).toBe(
+      'Comfortable · 17–24° for a peak until T+60m',
+    );
+  });
+
+  it('says until the peak’s end where no schedule sets the range, or the schedule never changes it', () => {
+    expect(line({ scheduled: false, nextChange: null })).toBe(
+      'Comfortable · 17–24° for a peak until T+60m',
+    );
+    expect(line({ scheduled: true, nextChange: null })).toBe(
+      'Comfortable · 17–24° for a peak until T+60m',
+    );
+  });
+
+  // Not where either can't be told.
+  it('says no time where the peak’s time or the schedule can’t be told', () => {
+    expect(line(relaxed(null))).toBe('Comfortable · 17–24° for a peak');
+    expect(line(ahead(null))).toBe('Comfortable · 17–24° ahead of a peak');
+    expect(line(relaxed(NOW))).toBe('Comfortable · 17–24° for a peak');
+    expect(line(relaxed(NOW - MIN))).toBe('Comfortable · 17–24° for a peak');
+    expect(line({ scheduled: null })).toBe('Comfortable · 17–24° for a peak');
+    // A next change that has passed: HA hasn't said the next one yet.
+    expect(line({ nextChange: NOW })).toBe('Comfortable · 17–24° for a peak');
+    expect(line({ nextChange: NOW - MIN })).toBe('Comfortable · 17–24° for a peak');
+  });
+
+  it('says what the room is doing first, as ever', () => {
+    expect(line({ action: 'heating' })).toBe('Heating · 17–24° for a peak until T+60m');
+    expect(line({ temperature: 25 })).toBe('A bit warm · 17–24° for a peak until T+60m');
+    expect(line({ action: 'unknown' })).toBe('17–24° for a peak until T+60m');
+    expect(line({ sensor: 'stand-in' })).toBe(
+      'Room sensor offline · Comfortable · 17–24° for a peak until T+60m',
+    );
+  });
+
+  // Peak saving stands aside while an adjustment runs.
+  it('says the adjustment, not the peak, while one runs', () => {
+    expect(line({ overrideActive: true, overrideEnds: NOW + 90 * MIN })).toBe(
+      'Comfortable · adjusted to 17–24° until T+90m',
+    );
+  });
+
+  it('leaves the rest of the line as it was', () => {
+    expect(line({ doing: 'Adjusting to 18–25°' })).toBe('Adjusting to 18–25°');
+    expect(line({ enabled: false })).toBe('Paused: not controlling this room');
+    expect(line({ band: { low: NaN, high: 24 } })).toBe("Can't read this room's range");
+    expect(line({ peak: null })).toBe('Comfortable · 17–24° until T+180m');
   });
 });
