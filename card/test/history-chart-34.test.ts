@@ -141,6 +141,22 @@ describe('readoutLine', () => {
     );
   });
 
+  // HA's states carry more decimals than the readout gives (#34 review).
+  it('gives temperatures to the tenth and humidity whole', () => {
+    expect(
+      readoutLine({
+        ...base,
+        room: 21.37,
+        apparent: 21.94,
+        low: 19.8333,
+        high: 22.46,
+        humidity: 45.6,
+      }),
+    ).toBe('22:30 · Room 21.4° · Feels like 21.9° · Range 19.8–22.5° · Humidity 46% · Heating');
+    expect(readoutLine({ ...base, low: 19.8333, high: null })).toMatch(/· Low 19\.8° ·/);
+    expect(readoutLine({ ...base, low: null, high: 22.46 })).toMatch(/· High 22\.5° ·/);
+  });
+
   it('gives one edge of the range alone where the other is hidden', () => {
     expect(readoutLine({ ...base, low: null })).toBe(
       '22:30 · Room 21.3° · Feels like 21.9° · High 22.5° · Humidity 45% · Heating',
@@ -319,6 +335,8 @@ describe('mixColor', () => {
   it('mixes a colour part of the way to another', () => {
     expect(mixColor('#ff6f22', '#141414', 0.3)).toBe('rgb(185, 84, 30)');
     expect(mixColor('#f00', 'rgb(0, 0, 255)', 0.5)).toBe('rgb(128, 0, 128)');
+    // A theme's colour as written, in capitals.
+    expect(mixColor('#FF9800', '#FFF', 0.5)).toBe('rgb(255, 204, 128)');
     expect(mixColor('rgba(0, 0, 0, 0.5)', '#ffffff', 0.25)).toBe('rgb(64, 64, 64)');
     // Unreadable: as given.
     expect(mixColor(' red ', '#000', 0.3)).toBe('red');
@@ -327,7 +345,7 @@ describe('mixColor', () => {
 });
 
 describe('fitAxis', () => {
-  it('makes an axis as wide as its widest label, and a pixel either side', () => {
+  it('makes an axis as wide as its widest label, and 2 px more', () => {
     const measured: string[] = [];
     const u = {
       axes: [{}, { ticks: { size: 10 }, gap: 5, font: ['12px test', 12], _size: 33 }],
@@ -370,6 +388,7 @@ describe('fitAxis', () => {
     // Asked again once laid out: the size it settled on.
     expect(fitAxis(u, ['20', '20.5'], 1, 2)).toBe(33);
     expect(fitAxis(u, null, 1, 0)).toBe(17);
+    expect(fitAxis(u, [], 1, 0)).toBe(17);
   });
 });
 
@@ -518,7 +537,7 @@ describe('comfort-band-history-chart: a range picked with no chart drawn (#34 re
   });
 
   // A change of entities after a range pick, before it loaded, is another
-  // room's: its chart goes.
+  // room's: the loading message, as for any change of entities.
   it('shows the loading message for another room picked while a range loads', async () => {
     const { el, sub } = await chart(FULL);
     const now = Math.floor(Date.now() / 1000);
@@ -533,11 +552,26 @@ describe('comfort-band-history-chart: a range picked with no chart drawn (#34 re
     await el.updateComplete;
     loadingWeek(el);
   });
+
+  // Whichever entity changes, not the room's alone.
+  it('shows the loading message for another band edge picked while a range loads', async () => {
+    const { el, sub } = await chart(FULL);
+    const now = Math.floor(Date.now() / 1000);
+    internals(el)._plot = fakePlot(3);
+    sub.emit({ states: ROOM(now) });
+    await el.updateComplete;
+    await pickWeek(el);
+    el.lowEntity = 'sensor.study_effective_low';
+    await el.updateComplete;
+    await new Promise((r) => setTimeout(r, 0));
+    await el.updateComplete;
+    loadingWeek(el);
+  });
 });
 
 describe('comfort-band-history-chart: another room (#34 review)', () => {
   // Only a range pick keeps the chart drawn while the new history loads.
-  it('shows the loading message, not the old room’s chart, for another room', async () => {
+  it('shows the loading message for another room, as main does', async () => {
     const { el, sub } = await chart(FULL);
     const now = Math.floor(Date.now() / 1000);
     internals(el)._plot = fakePlot(3);
@@ -757,7 +791,7 @@ describe('comfort-band-history-chart readout (#34)', () => {
     expect(pressedRule).toMatch(/font-weight:\s*500/);
   });
 
-  it('is two lines tall whatever its words take', () => {
+  it('is two lines tall whatever its words take, its digits one width', () => {
     const css = (
       customElements.get('comfort-band-history-chart') as unknown as {
         styles: Array<{ cssText: string }>;
@@ -769,6 +803,8 @@ describe('comfort-band-history-chart readout (#34)', () => {
     const rule = /\.readout\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(rule).toMatch(/line-height:\s*1\.35/);
     expect(rule).toMatch(/min-height:\s*2\.7em/);
+    // So the words don't shift as the numbers change, in any font.
+    expect(rule).toMatch(/font-variant-numeric:\s*tabular-nums/);
   });
 });
 

@@ -115,7 +115,8 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
   @state() private _hours: number = HOURS_TO_SHOW;
   /** A range picked while a chart is drawn: it stays until the new
    *  range's history arrives, the readout saying it's loading. Not for a
-   *  change of entities (another room), whose chart goes, as on main. */
+   *  change of entities (another room): that shows the loading message,
+   *  as on main. */
   @state() private _switching = false;
   /** The data point the pointer (or a tap) is on, from uPlot's cursor;
    *  null for none, when the readout gives the latest. */
@@ -668,9 +669,9 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
     if (!this.hass || !this.roomEntity) {
       return html`<div class="status">No room temperature sensor for this zone.</div>`;
     }
-    // Collapse the canvas host while a status message is showing so the
-    // user sees the message at the top of the panel instead of a blank
-    // CHART_HEIGHT gap above it.
+    // Collapse the canvas host while a status message is showing, so the
+    // message sits under the range buttons and the readout's (empty) two
+    // lines, not under a blank CHART_HEIGHT gap.
     const idle = this._loading || this._error !== null || this._empty;
     // Reflect what's actually plotted so screen-reader users get the
     // same disclosure sighted users get from the legend.
@@ -869,10 +870,10 @@ export function readoutTime(ms: number, now: number, hass?: Pick<HomeAssistant, 
   return days >= 7 ? `${weekday} ${d.getDate()} ${time}` : `${weekday} ${time}`;
 }
 
-/** An axis as wide as its widest label, each measured in its font, so
- *  none is cut ("21.25", "100%"; #34 review): uPlot's own pattern (which
- *  measures the longest string; digits' widths differ in some fonts), plus
- *  a pixel's room either side. */
+/** An axis as wide as its widest label, so none is cut ("21.25", "100%";
+ *  #34 review): uPlot's own autosize pattern, but measuring every label in
+ *  the axis's font (uPlot measures the longest string, and digits' widths
+ *  differ in some fonts), plus 2 px, which fall on the labels' outer side. */
 export function fitAxis(
   u: uPlot,
   values: string[] | null,
