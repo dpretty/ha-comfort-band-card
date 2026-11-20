@@ -223,18 +223,73 @@ describe('comfort-band-schedule-tab now', () => {
 
   // HA leaves the attributes out while the sensor is unavailable, as while
   // the integration reloads (#47 review): the place stays.
+  // As the card hands it on: a new `entities` object, the same ids, with
+  // each update from HA.
   it('keeps the next change’s place while whether a schedule sets the range can’t be read', async () => {
     const el = await tab();
-    const unavailable = makeHass({
+    el.hass = makeHass({
       'sensor.gym_next_band_change': { state: 'unavailable', attributes: {} },
     });
-    el.hass = unavailable;
+    el.entities = makeEntities();
     await el.updateComplete;
     expect(nextChange(el)).not.toBeNull();
     expect(text(nextChange(el))).toBe('');
     el.hass = makeHass();
+    el.entities = makeEntities();
     await el.updateComplete;
     expect(text(nextChange(el))).toBe('The schedule’s next change: 17:30 → 19.5–22.5°');
+  });
+
+  it('drops the next change’s place when a schedule stops setting the range', async () => {
+    const el = await tab();
+    expect(nextChange(el)).not.toBeNull();
+    el.hass = makeHass({
+      'sensor.gym_next_band_change': {
+        state: 'unknown',
+        attributes: { low: null, high: null, scheduled: false },
+      },
+    });
+    el.entities = makeEntities();
+    await el.updateComplete;
+    expect(nextChange(el)).toBeNull();
+  });
+
+  // HA's states hold every room's: another room is usually readable at once.
+  it('has another room’s next change at once where it can be read there', async () => {
+    const el = await tab(
+      makeHass({
+        'sensor.study_next_band_change': {
+          state: new Date(Date.UTC(2026, 9, 23, 18, 0)).toISOString(),
+          attributes: { low: 18, high: 21, scheduled: true },
+        },
+      }),
+    );
+    el.zone = 'study';
+    el.entities = makeEntities({ nextBandChange: 'sensor.study_next_band_change' });
+    await el.updateComplete;
+    expect(text(nextChange(el))).toBe('The schedule’s next change: 18:00 → 18–21°');
+  });
+
+  it('says the range in force, then the next change, then the shared note', async () => {
+    const el = await tab(
+      makeHass({
+        'select.gym_schedule_assignment': {
+          state: 'Bedrooms',
+          attributes: { schedule_id: 'abc', options: ['Own schedule', 'Bedrooms'] },
+        },
+      }),
+    );
+    const order = Array.from(
+      el.shadowRoot!.querySelectorAll(
+        '.now-line, .next-change, .shared-note, comfort-band-schedule-chart',
+      ),
+    ).map((n) => n.className || n.tagName.toLowerCase());
+    expect(order).toEqual([
+      'now-line',
+      'next-change',
+      'shared-note',
+      'comfort-band-schedule-chart',
+    ]);
   });
 
   // Another room's isn't known until read.

@@ -11,10 +11,10 @@
  * entities; **#47**: why it differs from the schedule's, where an entity
  * shows it, and the schedule's next change. While this list is the one in
  * force (the active profile's, not empty, and not while the room follows a
- * shared schedule), a now marker on
- * the chart and its current change marked "Current". A change that repeats
- * the range before it is marked "Same as before". The list reads first:
- * Add, Edit and Delete sit behind "Edit schedule".
+ * shared schedule), a now marker on the chart and its current change marked
+ * "Current". A change that repeats the range before it is marked "Same as
+ * before". The list reads first: Add, Edit and Delete sit behind "Edit
+ * schedule".
  *
  * Workflow:
  *   1. On mount, open a `comfort_band/subscribe_schedule` subscription for

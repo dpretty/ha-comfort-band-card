@@ -130,8 +130,8 @@ export function nowLine(hass: HomeAssistant, entities: ZoneEntities, now: number
  * adjustment or a peak can outlast it, and the band ramp eases into it)
  * (#33). It's the schedule in force: "The shared schedule’s" while the
  * room follows one, as the list below isn't it then. Null where no
- * schedule sets the range, or its next change, ahead, or its range can't
- * be read.
+ * schedule sets the range, where its next change can't be read or isn't
+ * ahead, or where the range it sets can't be read.
  */
 export function nextChangeLine(
   hass: HomeAssistant,
