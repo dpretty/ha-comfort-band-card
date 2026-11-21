@@ -5,8 +5,9 @@
  * line. (The exact-range slider's handles stay as on main: 44 px tap areas
  * for them were cut back after two rounds of review.)
  *
- * jsdom lays nothing out, so the styles are checked as written: each rule,
- * its at-rule's exact condition, and its place in the cascade. The author's
+ * jsdom lays nothing out, so the styles are checked as written: each rule
+ * always in force outside any at-rule, and the phone's rules by their
+ * at-rule's exact condition and its place in the cascade. The author's
  * browser runs check what they do.
  */
 
@@ -63,6 +64,11 @@ function topLevel(css: string): string {
   return out;
 }
 
+/** The rules always in force for an element: none in an at-rule's block. */
+function always(tag: string): string {
+  return topLevel(cssOf(tag));
+}
+
 /** One property's value across every rule for exactly `selector`; the last wins. */
 function prop(css: string, selector: string, name: string): string | undefined {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -93,6 +99,14 @@ describe('#3 the dialog on a phone', () => {
     expect(prop(phone, '.frame', 'height')).toBe('100%');
   });
 
+  it('scrolls the panel inside it, so nothing is cut off at the screen’s end', () => {
+    const css = always('comfort-band-modal');
+    expect(prop(css, '.frame', 'display')).toBe('flex');
+    expect(prop(css, '.frame', 'flex-direction')).toBe('column');
+    expect(prop(css, '.panel', 'flex')).toBe('1');
+    expect(prop(css, '.panel', 'overflow-y')).toBe('auto');
+  });
+
   it('comes after the floating dialog’s rules, so on a phone it wins', () => {
     const css = cssOf('comfort-band-modal');
     expect(atIndex(css, PHONE)).toBeGreaterThan(css.search(/(^|[}\s])dialog\s*\{/));
@@ -121,6 +135,10 @@ describe('#3 the dialog on a phone', () => {
     expect(prop(css, '.close', 'min-width')).toBe('44px');
     expect(prop(css, '.close', 'min-height')).toBe('44px');
     expect(prop(css, '.close', 'padding')).toBe('0');
+    // The ✕ in the middle of its box, where the smaller box had it.
+    expect(prop(css, '.close', 'display')).toBe('inline-flex');
+    expect(prop(css, '.close', 'align-items')).toBe('center');
+    expect(prop(css, '.close', 'justify-content')).toBe('center');
     // 44 px less 7 above and below: the 30 px it took before. At the line's
     // end, whichever way it runs, so the ✕ keeps its place right to left too.
     expect(prop(css, '.close', 'margin-block')).toBe('-7px');
@@ -135,7 +153,7 @@ describe('#3 the dialog on a phone', () => {
 
 describe('#3 the History chart', () => {
   it('makes each legend toggle 44 px tall and at least as wide', () => {
-    const css = cssOf('comfort-band-history-chart');
+    const css = always('comfort-band-history-chart');
     expect(prop(css, '.legend .toggle', 'display')).toBe('inline-flex');
     expect(prop(css, '.legend .toggle', 'align-items')).toBe('center');
     expect(prop(css, '.legend .toggle', 'min-width')).toBe('44px');
@@ -143,19 +161,27 @@ describe('#3 the History chart', () => {
   });
 
   it('lets the toggles’ height space the legend’s rows, with no gap as well', () => {
-    const css = cssOf('comfort-band-history-chart');
+    const css = always('comfort-band-history-chart');
     expect(prop(css, '.legend', 'row-gap')).toBe('0');
     expect(prop(css, '.legend', 'align-items')).toBe('center');
   });
 
+  it('comes after the shared legend rule, whose gap would put the rows apart again', () => {
+    const css = always('comfort-band-history-chart');
+    const shared = css.search(/(^|[}\s])\.legend\s*\{[^}]*\bgap\s*:/);
+    const own = css.search(/(^|[}\s])\.legend\s*\{[^}]*\brow-gap\s*:\s*0/);
+    expect(shared).toBeGreaterThanOrEqual(0);
+    expect(own).toBeGreaterThan(shared);
+  });
+
   it('makes each range button at least 44 px wide', () => {
-    expect(prop(cssOf('comfort-band-history-chart'), '.ranges button', 'min-width')).toBe('44px');
+    expect(prop(always('comfort-band-history-chart'), '.ranges button', 'min-width')).toBe('44px');
   });
 });
 
 describe('#3 the profile list', () => {
   it('makes “+ New profile” and the ⋮ menu’s items 44 px tall', () => {
-    const css = cssOf('comfort-band-profiles-tab');
+    const css = always('comfort-band-profiles-tab');
     expect(prop(css, '.new-profile', 'min-height')).toBe('44px');
     expect(prop(css, '.menu button', 'min-height')).toBe('44px');
   });
@@ -165,7 +191,7 @@ describe('#3 text fields and choices', () => {
   it.each(['transition-edit-dialog', 'profile-edit-dialog'])(
     'makes %s’s fields 44 px tall, in type iOS doesn’t zoom into',
     (tag) => {
-      const css = cssOf(tag);
+      const css = always(tag);
       expect(prop(css, 'input', 'min-height')).toBe('44px');
       expect(prop(css, 'input', 'box-sizing')).toBe('border-box');
       expect(prop(css, 'input', 'font-size')).toBe('16px');
@@ -173,7 +199,7 @@ describe('#3 text fields and choices', () => {
   );
 
   it('sets the settings’ drop-downs in type iOS doesn’t zoom into', () => {
-    expect(prop(cssOf('comfort-band-settings-tab'), '.choice', 'font-size')).toBe('16px');
+    expect(prop(always('comfort-band-settings-tab'), '.choice', 'font-size')).toBe('16px');
   });
 });
 
@@ -216,7 +242,7 @@ describe('#3 a narrow tile', () => {
     // Only the range: the sentence still wraps.
     expect(status.classList.contains('nowrap')).toBe(false);
     expect(el.shadowRoot!.querySelector('.status')!.classList.contains('nowrap')).toBe(false);
-    expect(prop(cssOf('comfort-band-tile'), '.nowrap', 'white-space')).toBe('nowrap');
+    expect(prop(always('comfort-band-tile'), '.nowrap', 'white-space')).toBe('nowrap');
   });
 
   it('keeps each range whole, whole degrees and below zero included', () => {
@@ -235,6 +261,7 @@ describe('#3 a narrow tile', () => {
       '',
     ]);
     expect(parts('A bit cool · -2–5°')).toEqual(['A bit cool · ', '[-2–5°]', '']);
+    expect(parts('Comfortable · -6–-1°')).toEqual(['Comfortable · ', '[-6–-1°]', '']);
     expect(parts('On hold: the room sensor is offline')).toEqual([
       'On hold: the room sensor is offline',
     ]);
