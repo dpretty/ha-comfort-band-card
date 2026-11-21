@@ -66,6 +66,14 @@ export class DualHandleSlider extends LitElement {
         touch-action: none;
         transition: transform 0.1s ease;
       }
+      /* WCAG 2.5.5: a 44px tap area round each thumb, the thumb drawn the
+         size it was (#3). Where two areas overlap, the nearer thumb is the
+         one taken (_onThumbPointerDown). */
+      .thumb::before {
+        content: '';
+        position: absolute;
+        inset: calc((var(--thumb-size) - 44px) / 2);
+      }
       .thumb:focus-visible {
         outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
         outline-offset: 3px;
@@ -121,14 +129,29 @@ export class DualHandleSlider extends LitElement {
     return this.min + ratio * (this.max - this.min);
   }
 
-  private _onThumbPointerDown = (event: PointerEvent, handle: BandHandle) => {
+  /** The handle nearer a value; between the two, the high one. */
+  private _nearerHandle(value: number): BandHandle {
+    return value < (this.low + this.high) / 2 ? 'low' : 'high';
+  }
+
+  /** A thumb's tap area reaches past it (#3), and with the thumbs close the
+   *  two areas overlap, the high thumb's on top. So the handle taken is the
+   *  one nearer the pointer, as on the track, not whichever area it's in.
+   *  It keeps its distance from the pointer as it's dragged, rather than
+   *  jumping to it: taken at its area's edge, up to 22px. */
+  private _onThumbPointerDown = (event: PointerEvent) => {
     event.preventDefault();
+    const handle = this._nearerHandle(this._xToValue(event.clientX));
+    const rect = this._track?.getBoundingClientRect();
+    const at = handle === 'low' ? this.low : this.high;
+    const grab =
+      rect && rect.width > 0 ? event.clientX - (rect.left + (this._pct(at) / 100) * rect.width) : 0;
     const target = event.currentTarget as HTMLElement;
     target.setPointerCapture(event.pointerId);
     this._dragging = handle;
 
     const onMove = (ev: PointerEvent) => {
-      if (this._setHandle(handle, this._xToValue(ev.clientX))) {
+      if (this._setHandle(handle, this._xToValue(ev.clientX - grab))) {
         this._fire('input');
       }
     };
@@ -148,9 +171,7 @@ export class DualHandleSlider extends LitElement {
   private _onTrackPointerDown = (event: PointerEvent) => {
     if ((event.target as HTMLElement).classList.contains('thumb')) return;
     const value = this._xToValue(event.clientX);
-    const mid = (this.low + this.high) / 2;
-    const handle: BandHandle = value < mid ? 'low' : 'high';
-    if (this._setHandle(handle, value)) this._fire('change');
+    if (this._setHandle(this._nearerHandle(value), value)) this._fire('change');
   };
 
   private _onKeyDown = (event: KeyboardEvent, handle: BandHandle) => {
@@ -210,7 +231,7 @@ export class DualHandleSlider extends LitElement {
           aria-valuemax=${this.high - this.step}
           aria-valuenow=${this.low}
           aria-valuetext=${this._fmt(this.low)}
-          @pointerdown=${(e: PointerEvent) => this._onThumbPointerDown(e, 'low')}
+          @pointerdown=${this._onThumbPointerDown}
           @keydown=${(e: KeyboardEvent) => this._onKeyDown(e, 'low')}
         ></div>
         <div
@@ -223,7 +244,7 @@ export class DualHandleSlider extends LitElement {
           aria-valuemax=${this.max}
           aria-valuenow=${this.high}
           aria-valuetext=${this._fmt(this.high)}
-          @pointerdown=${(e: PointerEvent) => this._onThumbPointerDown(e, 'high')}
+          @pointerdown=${this._onThumbPointerDown}
           @keydown=${(e: KeyboardEvent) => this._onKeyDown(e, 'high')}
         ></div>
       </div>

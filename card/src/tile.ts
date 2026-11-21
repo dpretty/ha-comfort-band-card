@@ -6,9 +6,12 @@
  * its icon. The `mini` variant is the number alone, with an icon in front
  * for anything notable. Tap fires `comfort-band-tile-tap`; the parent card
  * opens the modal in response.
+ *
+ * A narrow tile (under about 240 px, as two side by side on a phone) puts the
+ * gauge under the temperature, full width, rather than squeezing it (#3).
  */
 
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import './band-gauge.js';
 import type { ComfortBandCardVariant } from './types.js';
@@ -58,6 +61,7 @@ export class ComfortBandTile extends LitElement {
         box-shadow: var(--ha-card-box-shadow, none);
         cursor: pointer;
         transition: transform 0.12s ease;
+        container-type: inline-size;
       }
       .tile.no-expand {
         cursor: default;
@@ -181,6 +185,23 @@ export class ComfortBandTile extends LitElement {
       .status.sensor ha-icon {
         color: var(--warning-color, #ffa600);
       }
+      /* A range stays on one line, not broken after its dash (#3). */
+      .nowrap {
+        white-space: nowrap;
+      }
+      /* A tile under about 240 px (216 px inside its padding), as two side
+         by side on a phone: beside the temperature, the gauge shrank to
+         37 px on a 320 px phone. Under it, it has the tile's width (#3). */
+      @container (max-width: 215px) {
+        .body {
+          flex-direction: column;
+          align-items: stretch;
+          gap: var(--cb-gap-sm);
+        }
+        .gauge-wrap {
+          flex: none;
+        }
+      }
     `,
   ];
 
@@ -232,7 +253,7 @@ export class ComfortBandTile extends LitElement {
         ${this.statusText
           ? html`<div class="status ${this.statusKind}">
               <ha-icon icon=${STATUS_ICONS[this.statusKind]} aria-hidden="true"></ha-icon>
-              <span>${this.statusText}</span>
+              <span>${keepRangesWhole(this.statusText)}</span>
             </div>`
           : null}
       </div>
@@ -278,6 +299,17 @@ export class ComfortBandTile extends LitElement {
       </div>
     `;
   }
+}
+
+/** A range as `bandText` writes it: "19.5–22.5°". */
+const RANGE = /(-?\d+(?:\.\d+)?–-?\d+(?:\.\d+)?°)/;
+
+/** The status sentence with each range in a span kept on one line: a narrow
+ *  tile broke "19.5–22.5°" after the dash (#3). The words are unchanged. */
+export function keepRangesWhole(text: string): Array<string | TemplateResult> {
+  return text
+    .split(RANGE)
+    .map((part, i) => (i % 2 === 1 ? html`<span class="nowrap">${part}</span>` : part));
 }
 
 declare global {

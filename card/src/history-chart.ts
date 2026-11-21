@@ -161,6 +161,7 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       .ranges button {
         font: inherit;
         font-size: 12px;
+        min-width: 44px;
         min-height: 44px;
         padding: 0 12px;
         border-radius: 16px;
@@ -202,11 +203,22 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
         );
         background-color: transparent;
       }
+      /* The legend's rows meet, so a toggle's 44px tap area doesn't reach
+         into the next row's (#3). */
+      .legend {
+        row-gap: 0;
+        align-items: center;
+      }
       /* v0.8.3: clickable legend toggles. Pointer cursor signals
          interactivity; no underline on hover (the legend isn't a
          link). Hidden state dims the whole item and strikes the
-         label so it's obvious which series the user has muted. */
+         label so it's obvious which series the user has muted.
+         WCAG 2.5.5: 44px tall and at least as wide (#3). */
       .legend .toggle {
+        display: inline-flex;
+        align-items: center;
+        min-width: 44px;
+        min-height: 44px;
         cursor: pointer;
         user-select: none;
         transition: opacity 120ms ease;
