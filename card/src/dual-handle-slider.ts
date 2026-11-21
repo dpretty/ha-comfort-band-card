@@ -63,23 +63,8 @@ export class DualHandleSlider extends LitElement {
         border-radius: 50%;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
         cursor: grab;
-        /* A swipe up or down that starts on a thumb, or in its tap area,
-           scrolls the panel (#3); across, it drags. */
-        touch-action: pan-y;
+        touch-action: none;
         transition: transform 0.1s ease;
-      }
-      /* WCAG 2.5.5: a 44px tap area round each thumb, the thumb drawn the
-         size it was (#3). Where two areas overlap, the nearer thumb is the
-         one taken (_onThumbPointerDown). */
-      .thumb::before {
-        content: '';
-        position: absolute;
-        inset: calc((var(--thumb-size) - 44px) / 2);
-      }
-      /* The thumb grows while dragged; its tap area doesn't, so at the end of
-         the track it stays inside the panel. */
-      .thumb.dragging::before {
-        transform: scale(calc(1 / 1.15));
       }
       .thumb:focus-visible {
         outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
@@ -136,37 +121,14 @@ export class DualHandleSlider extends LitElement {
     return this.min + ratio * (this.max - this.min);
   }
 
-  /** The handle nearer a value; between the two, the high one. */
-  private _nearerHandle(value: number): BandHandle {
-    return value < (this.low + this.high) / 2 ? 'low' : 'high';
-  }
-
-  /** A thumb's tap area reaches past it (#3), and with the thumbs close the
-   *  two areas overlap, the high thumb's on top. So the handle taken is the
-   *  one nearer the pointer, as on the track, not whichever area it's in.
-   *  It keeps its distance from the pointer as it's dragged, rather than
-   *  jumping to it: taken at its area's edge, up to 22px.
-   *
-   *  With the larger area, a touch there is often a finger on its way past:
-   *  a tap that moves nothing fires nothing, and a swipe the browser takes
-   *  to scroll the panel puts the handle back. A drag that moved it ends with
-   *  `change`, even back where it began; exact-range sends nothing for the
-   *  range already in force. */
-  private _onThumbPointerDown = (event: PointerEvent) => {
+  private _onThumbPointerDown = (event: PointerEvent, handle: BandHandle) => {
     event.preventDefault();
-    const handle = this._nearerHandle(this._xToValue(event.clientX));
-    const rect = this._track?.getBoundingClientRect();
-    const at = handle === 'low' ? this.low : this.high;
-    const grab =
-      rect && rect.width > 0 ? event.clientX - (rect.left + (this._pct(at) / 100) * rect.width) : 0;
     const target = event.currentTarget as HTMLElement;
     target.setPointerCapture(event.pointerId);
     this._dragging = handle;
 
-    let moved = false;
     const onMove = (ev: PointerEvent) => {
-      if (this._setHandle(handle, this._xToValue(ev.clientX - grab))) {
-        moved = true;
+      if (this._setHandle(handle, this._xToValue(ev.clientX))) {
         this._fire('input');
       }
     };
@@ -176,11 +138,6 @@ export class DualHandleSlider extends LitElement {
       target.removeEventListener('pointerup', onUp);
       target.removeEventListener('pointercancel', onUp);
       this._dragging = null;
-      if (!moved) return;
-      if (ev.type === 'pointercancel') {
-        if (handle === 'low') this.low = at;
-        else this.high = at;
-      }
       this._fire('change');
     };
     target.addEventListener('pointermove', onMove);
@@ -191,7 +148,9 @@ export class DualHandleSlider extends LitElement {
   private _onTrackPointerDown = (event: PointerEvent) => {
     if ((event.target as HTMLElement).classList.contains('thumb')) return;
     const value = this._xToValue(event.clientX);
-    if (this._setHandle(this._nearerHandle(value), value)) this._fire('change');
+    const mid = (this.low + this.high) / 2;
+    const handle: BandHandle = value < mid ? 'low' : 'high';
+    if (this._setHandle(handle, value)) this._fire('change');
   };
 
   private _onKeyDown = (event: KeyboardEvent, handle: BandHandle) => {
@@ -251,7 +210,7 @@ export class DualHandleSlider extends LitElement {
           aria-valuemax=${this.high - this.step}
           aria-valuenow=${this.low}
           aria-valuetext=${this._fmt(this.low)}
-          @pointerdown=${this._onThumbPointerDown}
+          @pointerdown=${(e: PointerEvent) => this._onThumbPointerDown(e, 'low')}
           @keydown=${(e: KeyboardEvent) => this._onKeyDown(e, 'low')}
         ></div>
         <div
@@ -264,7 +223,7 @@ export class DualHandleSlider extends LitElement {
           aria-valuemax=${this.max}
           aria-valuenow=${this.high}
           aria-valuetext=${this._fmt(this.high)}
-          @pointerdown=${this._onThumbPointerDown}
+          @pointerdown=${(e: PointerEvent) => this._onThumbPointerDown(e, 'high')}
           @keydown=${(e: KeyboardEvent) => this._onKeyDown(e, 'high')}
         ></div>
       </div>

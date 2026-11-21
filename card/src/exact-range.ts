@@ -5,8 +5,7 @@
  *
  * Releasing a handle, or each keyboard step, sends
  * `comfort_band.start_override` with the range for three hours, the Now
- * tab's default length: not the range already in force, as a drag back to
- * where it began, or a touch the browser took to scroll, leaves it (#3). With no schedule, the range
+ * tab's default length. With no schedule, the range
  * then stays until it's changed again. Calls go one after another, so they
  * land in the order made. A failed call is reported by HA's own toast, and,
  * as screen readers don't hear that while the dialog is open, said to them
@@ -78,8 +77,6 @@ export class ComfortBandExactRange extends LitElement {
     this._pendingLow = null;
     this._pendingHigh = null;
     if (!this.hass || !this.zone) return;
-    const start = this._start();
-    if (start && event.detail.low === start.low && event.detail.high === start.high) return;
     const hass = this.hass;
     const data = {
       zone: this.zone,
@@ -93,21 +90,14 @@ export class ComfortBandExactRange extends LitElement {
       .catch(() => this.announce?.(EXACT_RANGE_REFUSED));
   };
 
-  /** The range the slider shows when not dragged: the band in force. The
-   *  manual values are only the last override's, which can be far from the
-   *  schedule's current band. */
-  private _start(): { low: number; high: number } | null {
-    if (!this.hass || !this.entities) return null;
-    const room = readRoom(this.hass, this.entities);
-    const manualLow = numericState(this.hass, this.entities.manualLow);
-    const manualHigh = numericState(this.hass, this.entities.manualHigh);
-    return sliderStart(room.band.low, room.band.high, manualLow, manualHigh);
-  }
-
   protected override render() {
     if (!this.hass || !this.entities) return nothing;
     const room = readRoom(this.hass, this.entities);
-    const start = this._start()!;
+    const manualLow = numericState(this.hass, this.entities.manualLow);
+    const manualHigh = numericState(this.hass, this.entities.manualHigh);
+    // Start from the band actually in force. The manual values are only the
+    // last override's, which can be far from the schedule's current band.
+    const start = sliderStart(room.band.low, room.band.high, manualLow, manualHigh);
     const low = this._pendingLow ?? start.low;
     const high = this._pendingHigh ?? start.high;
     // Widen the track to take in a band outside it, so both handles sit on it

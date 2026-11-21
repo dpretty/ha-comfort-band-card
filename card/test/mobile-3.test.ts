@@ -1,24 +1,24 @@
 /**
  * #3: the card on a phone. The dialog fills the screen where HA's own do,
- * every control in it is 44 px to tap, a narrow tile puts its gauge under
- * the temperature, and its status line keeps a range on one line.
+ * its buttons, tabs, toggles and fields are 44 px to tap, a narrow tile puts
+ * its gauge under the temperature, and its status line keeps a range on one
+ * line. (The exact-range slider's handles stay as on main: 44 px tap areas
+ * for them were cut back after two rounds of review.)
  *
  * jsdom lays nothing out, so the styles are checked as written: each rule,
  * its at-rule's exact condition, and its place in the cascade. The author's
  * browser runs check what they do.
  */
 
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import '../src/modal.js';
 import '../src/history-chart.js';
-import '../src/dual-handle-slider.js';
 import '../src/tabs/profiles-tab.js';
 import '../src/tabs/settings-tab.js';
 import '../src/transition-edit-dialog.js';
 import '../src/profile-edit-dialog.js';
 import '../src/tile.js';
 import { keepRangesWhole } from '../src/tile.js';
-import type { DualHandleSlider } from '../src/dual-handle-slider.js';
 import type { ComfortBandTile } from '../src/tile.js';
 import { mount, teardown } from './_fixture.js';
 
@@ -150,171 +150,6 @@ describe('#3 the History chart', () => {
 
   it('makes each range button at least 44 px wide', () => {
     expect(prop(cssOf('comfort-band-history-chart'), '.ranges button', 'min-width')).toBe('44px');
-  });
-});
-
-describe('#3 the exact-range slider', () => {
-  /** 16–26° over a 200 px track 10 px from the left: 20 px a degree. The
-   *  handles a degree apart, as they are on a phone with a narrow range:
-   *  21.5° at 120 px and 22.5° at 140, the point between them at 130. Their
-   *  44 px areas overlap from 118 to 142, the high one's on top. */
-  async function slider(low = 21.5, high = 22.5): Promise<DualHandleSlider> {
-    const el = await mount('dual-handle-slider', { min: 16, max: 26, step: 0.5, low, high });
-    const track = el.shadowRoot!.querySelector<HTMLElement>('.track')!;
-    track.getBoundingClientRect = () =>
-      ({ left: 10, right: 210, width: 200, top: 0, bottom: 6, height: 6 }) as DOMRect;
-    return el;
-  }
-
-  function thumbs(el: DualHandleSlider): [HTMLElement, HTMLElement] {
-    const [low, high] = el.shadowRoot!.querySelectorAll<HTMLElement>('.thumb');
-    return [low, high];
-  }
-
-  function pointer(target: Element, type: string, clientX: number): void {
-    const Ctor = window.PointerEvent ?? MouseEvent;
-    target.dispatchEvent(new Ctor(type, { bubbles: true, composed: true, clientX }));
-  }
-
-  it('gives each thumb a 44 px tap area, the thumb drawn the size it was', () => {
-    const css = cssOf('dual-handle-slider');
-    expect(prop(css, ':host', '--thumb-size')).toBe('20px');
-    expect(prop(css, '.thumb', 'width')).toBe('var(--thumb-size)');
-    expect(prop(css, '.thumb::before', 'content')).toBe("''");
-    expect(prop(css, '.thumb::before', 'position')).toBe('absolute');
-    // (20 − 44) / 2 = −12 px all round: 44 px each way, centred.
-    expect(prop(css, '.thumb::before', 'inset')).toBe('calc((var(--thumb-size) - 44px) / 2)');
-  });
-
-  it('keeps the area 44 px while the thumb grows as it’s dragged', () => {
-    const css = cssOf('dual-handle-slider');
-    expect(prop(css, '.thumb.dragging', 'transform')).toBe('scale(1.15)');
-    expect(prop(css, '.thumb.dragging::before', 'transform')).toBe('scale(calc(1 / 1.15))');
-  });
-
-  it('lets a swipe up or down that starts on a thumb scroll the panel', () => {
-    expect(prop(cssOf('dual-handle-slider'), '.thumb', 'touch-action')).toBe('pan-y');
-  });
-
-  it('takes the low handle where the areas overlap, the pointer nearer it', async () => {
-    const el = await slider();
-    const [low, high] = thumbs(el);
-    const input = vi.fn();
-    el.addEventListener('input', input);
-    // In the overlap, on the high thumb's area, 6 px from the low one's middle.
-    pointer(high, 'pointerdown', 126);
-    await el.updateComplete;
-    expect(low.classList.contains('dragging')).toBe(true);
-    expect(high.classList.contains('dragging')).toBe(false);
-    pointer(high, 'pointermove', 106);
-    pointer(high, 'pointerup', 106);
-    expect([el.low, el.high]).toEqual([20.5, 22.5]);
-    expect(input).toHaveBeenCalled();
-  });
-
-  it('takes the high handle where the areas overlap, the pointer nearer it', async () => {
-    const el = await slider();
-    const [low, high] = thumbs(el);
-    pointer(high, 'pointerdown', 134);
-    await el.updateComplete;
-    expect(high.classList.contains('dragging')).toBe(true);
-    expect(low.classList.contains('dragging')).toBe(false);
-    pointer(high, 'pointermove', 154);
-    pointer(high, 'pointerup', 154);
-    expect([el.low, el.high]).toEqual([21.5, 23.5]);
-  });
-
-  it('takes the high handle exactly between the two, as the track does', async () => {
-    const el = await slider();
-    const [, high] = thumbs(el);
-    pointer(high, 'pointerdown', 130);
-    pointer(high, 'pointermove', 150);
-    pointer(high, 'pointerup', 150);
-    expect([el.low, el.high]).toEqual([21.5, 23.5]);
-  });
-
-  it('keeps the thumb its distance from the pointer, rather than jumping to it', async () => {
-    const el = await slider();
-    const [, high] = thumbs(el);
-    const input = vi.fn();
-    el.addEventListener('input', input);
-    // Taken 6 px right of its middle (22.5° is at 140 px), outside the overlap.
-    pointer(high, 'pointerdown', 146);
-    pointer(high, 'pointermove', 146);
-    expect(el.high).toBe(22.5);
-    expect(input).not.toHaveBeenCalled();
-    pointer(high, 'pointermove', 166);
-    expect(el.high).toBe(23.5);
-    pointer(high, 'pointerup', 166);
-  });
-
-  /** The `change` events' ranges. */
-  function changes(el: DualHandleSlider): Array<[number, number]> {
-    const seen: Array<[number, number]> = [];
-    el.addEventListener('change', (e) => {
-      const { low, high } = (e as CustomEvent<{ low: number; high: number }>).detail;
-      seen.push([low, high]);
-    });
-    return seen;
-  }
-
-  it('ends a drag that moved the range with a change', async () => {
-    const el = await slider();
-    const [, high] = thumbs(el);
-    const seen = changes(el);
-    pointer(high, 'pointerdown', 146);
-    pointer(high, 'pointermove', 166);
-    pointer(high, 'pointerup', 166);
-    expect(seen).toEqual([[21.5, 23.5]]);
-  });
-
-  it('fires nothing for a tap, or a touch taken to scroll before it moved anything', async () => {
-    const el = await slider();
-    const [low, high] = thumbs(el);
-    const seen = changes(el);
-    const input = vi.fn();
-    el.addEventListener('input', input);
-    pointer(high, 'pointerdown', 146);
-    pointer(high, 'pointerup', 146);
-    pointer(low, 'pointerdown', 110);
-    pointer(low, 'pointercancel', 110);
-    expect(seen).toEqual([]);
-    expect(input).not.toHaveBeenCalled();
-  });
-
-  it('puts the handle back when the browser takes the touch to scroll', async () => {
-    const el = await slider();
-    const [, high] = thumbs(el);
-    const seen = changes(el);
-    pointer(high, 'pointerdown', 146);
-    pointer(high, 'pointermove', 166);
-    expect(el.high).toBe(23.5);
-    pointer(high, 'pointercancel', 166);
-    expect([el.low, el.high]).toEqual([21.5, 22.5]);
-    // The range as it was: exact-range sends nothing for it, and lets go of
-    // the dragged values.
-    expect(seen).toEqual([[21.5, 22.5]]);
-  });
-
-  it('ends a drag back where it began with the range as it was', async () => {
-    const el = await slider();
-    const [, high] = thumbs(el);
-    const seen = changes(el);
-    pointer(high, 'pointerdown', 146);
-    pointer(high, 'pointermove', 166);
-    pointer(high, 'pointermove', 146);
-    pointer(high, 'pointerup', 146);
-    expect(seen).toEqual([[21.5, 22.5]]);
-  });
-
-  it('still moves the nearer handle to a press on the track', async () => {
-    // 18° at 50 px and 24° at 170: the point between them (21°) at 110.
-    const el = await slider(18, 24);
-    const track = el.shadowRoot!.querySelector('.track')!;
-    pointer(track, 'pointerdown', 90);
-    expect([el.low, el.high]).toEqual([20, 24]);
-    pointer(track, 'pointerdown', 190);
-    expect([el.low, el.high]).toEqual([20, 25]);
   });
 });
 

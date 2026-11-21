@@ -249,33 +249,6 @@ describe('comfort-band-exact-range', () => {
     });
   });
 
-  // A drag back where it began, or a touch the browser took to scroll, ends
-  // with the range as it was (#3).
-  it('sends nothing for the range already in force, and lets go of the dragged values', async () => {
-    const hass = makeHass();
-    const el = await exactRange(hass);
-    slider(el).dispatchEvent(
-      new CustomEvent('input', { detail: { low: 20.5, high: 22.5 }, bubbles: true }),
-    );
-    await el.updateComplete;
-    await release(el, 19.5, 22.5);
-    expect(hass.callService).not.toHaveBeenCalled();
-    el.hass = makeHass({ 'sensor.gym_effective_low': '18', 'sensor.gym_effective_high': '23' });
-    await el.updateComplete;
-    expect([slider(el).low, slider(el).high]).toEqual([18, 23]);
-  });
-
-  it('sends a range that differs from the one in force at either end', async () => {
-    const hass = makeHass();
-    const el = await exactRange(hass);
-    await release(el, 19.5, 23);
-    await release(el, 19, 22.5);
-    expect((hass.callService as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[2])).toEqual([
-      { zone: 'gym', low: 19.5, high: 23, hours: 3 },
-      { zone: 'gym', low: 19, high: 22.5, hours: 3 },
-    ]);
-  });
-
   it('says how long the range lasts', async () => {
     const desc = async (hass: HomeAssistant) => {
       const el = await exactRange(hass);
