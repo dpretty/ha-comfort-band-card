@@ -7,7 +7,7 @@
  * for anything notable. Tap fires `comfort-band-tile-tap`; the parent card
  * opens the modal in response.
  *
- * A narrow tile (under about 240 px, as two side by side on a phone) puts the
+ * A narrow tile (under about 220 px, as two side by side on a phone) puts the
  * gauge under the temperature, full width, rather than squeezing it (#3).
  */
 
@@ -61,7 +61,6 @@ export class ComfortBandTile extends LitElement {
         box-shadow: var(--ha-card-box-shadow, none);
         cursor: pointer;
         transition: transform 0.12s ease;
-        container-type: inline-size;
       }
       .tile.no-expand {
         cursor: default;
@@ -137,10 +136,17 @@ export class ComfortBandTile extends LitElement {
         color: var(--cb-text-primary);
         font-family: var(--paper-font-body1_-_font-family, sans-serif);
       }
+      /* The gauge sits beside the temperature while there's room for it at
+         110 px, and wraps under it, at the tile's width, when there isn't: a
+         tile under about 220 px, as two side by side on a phone (#3). Beside
+         the temperature it shrank to 37 px on a 320 px phone. Not a container
+         query: containment would size a tile placed at its own width (on a
+         floorplan) to nothing. */
       .body {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
-        gap: var(--cb-gap-md);
+        gap: var(--cb-gap-sm) var(--cb-gap-md);
       }
       .room-temp {
         font-size: 32px;
@@ -160,7 +166,7 @@ export class ComfortBandTile extends LitElement {
         white-space: nowrap;
       }
       .gauge-wrap {
-        flex: 1;
+        flex: 1 1 110px;
         min-width: 0;
       }
       .status {
@@ -188,19 +194,6 @@ export class ComfortBandTile extends LitElement {
       /* A range stays on one line, not broken after its dash (#3). */
       .nowrap {
         white-space: nowrap;
-      }
-      /* A tile under about 240 px (216 px inside its padding), as two side
-         by side on a phone: beside the temperature, the gauge shrank to
-         37 px on a 320 px phone. Under it, it has the tile's width (#3). */
-      @container (max-width: 215px) {
-        .body {
-          flex-direction: column;
-          align-items: stretch;
-          gap: var(--cb-gap-sm);
-        }
-        .gauge-wrap {
-          flex: none;
-        }
       }
     `,
   ];

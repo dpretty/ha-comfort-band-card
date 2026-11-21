@@ -203,8 +203,8 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
         );
         background-color: transparent;
       }
-      /* The legend's rows meet, so a toggle's 44px tap area doesn't reach
-         into the next row's (#3). */
+      /* With the toggles 44px tall (#3), their own height spaces the rows;
+         a gap as well would only make the legend taller. */
       .legend {
         row-gap: 0;
         align-items: center;

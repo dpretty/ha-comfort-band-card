@@ -105,7 +105,7 @@ export class ComfortBandModal extends LitElement {
       }
       /* WCAG 2.5.5: 44px each way (#3). The margins take the extra out of
          the header's padding, so the header is no taller and the ✕ sits
-         where it did. */
+         where it did, at the line's end in either direction. */
       .close {
         font: inherit;
         font-size: 22px;
@@ -119,7 +119,8 @@ export class ComfortBandModal extends LitElement {
         justify-content: center;
         min-width: 44px;
         min-height: 44px;
-        margin: -7px -7px -7px 0;
+        margin-block: -7px;
+        margin-inline-end: -7px;
         padding: 0;
       }
       nav {
@@ -167,8 +168,8 @@ export class ComfortBandModal extends LitElement {
         font-size: 13px;
         text-align: center;
       }
-      /* A phone (#3): full screen, where HA's own dialogs are (under 450 px
-         wide or 500 px tall). A floating dialog left 19 px of dashboard down
+      /* A phone (#3): full screen, where HA's own dialogs are (450 px wide
+         or 500 px tall, or less). A floating dialog left 19 px of dashboard down
          each side of a 320 px phone. The padding keeps the header and the
          panel's end clear of a notch or the home indicator. */
       @media (max-width: 450px), (max-height: 500px) {

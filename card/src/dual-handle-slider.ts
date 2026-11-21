@@ -63,7 +63,9 @@ export class DualHandleSlider extends LitElement {
         border-radius: 50%;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
         cursor: grab;
-        touch-action: none;
+        /* A swipe up or down that starts on a thumb, or in its tap area,
+           scrolls the panel (#3); across, it drags. */
+        touch-action: pan-y;
         transition: transform 0.1s ease;
       }
       /* WCAG 2.5.5: a 44px tap area round each thumb, the thumb drawn the
@@ -73,6 +75,11 @@ export class DualHandleSlider extends LitElement {
         content: '';
         position: absolute;
         inset: calc((var(--thumb-size) - 44px) / 2);
+      }
+      /* The thumb grows while dragged; its tap area doesn't, so at the end of
+         the track it stays inside the panel. */
+      .thumb.dragging::before {
+        transform: scale(calc(1 / 1.15));
       }
       .thumb:focus-visible {
         outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4));
@@ -138,7 +145,13 @@ export class DualHandleSlider extends LitElement {
    *  two areas overlap, the high thumb's on top. So the handle taken is the
    *  one nearer the pointer, as on the track, not whichever area it's in.
    *  It keeps its distance from the pointer as it's dragged, rather than
-   *  jumping to it: taken at its area's edge, up to 22px. */
+   *  jumping to it: taken at its area's edge, up to 22px.
+   *
+   *  With the larger area, a touch there is often a finger on its way past:
+   *  a tap that moves nothing fires nothing, and a swipe the browser takes
+   *  to scroll the panel puts the handle back. A drag that moved it ends with
+   *  `change`, even back where it began; exact-range sends nothing for the
+   *  range already in force. */
   private _onThumbPointerDown = (event: PointerEvent) => {
     event.preventDefault();
     const handle = this._nearerHandle(this._xToValue(event.clientX));
@@ -150,8 +163,10 @@ export class DualHandleSlider extends LitElement {
     target.setPointerCapture(event.pointerId);
     this._dragging = handle;
 
+    let moved = false;
     const onMove = (ev: PointerEvent) => {
       if (this._setHandle(handle, this._xToValue(ev.clientX - grab))) {
+        moved = true;
         this._fire('input');
       }
     };
@@ -161,6 +176,11 @@ export class DualHandleSlider extends LitElement {
       target.removeEventListener('pointerup', onUp);
       target.removeEventListener('pointercancel', onUp);
       this._dragging = null;
+      if (!moved) return;
+      if (ev.type === 'pointercancel') {
+        if (handle === 'low') this.low = at;
+        else this.high = at;
+      }
       this._fire('change');
     };
     target.addEventListener('pointermove', onMove);
