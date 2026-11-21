@@ -135,8 +135,8 @@ describe('#3 the History chart', () => {
 });
 
 describe('#3 the exact-range slider', () => {
-  /** 16–26° over a 200 px track: 20 px a degree; 19° at 60 px, 22° at 120,
-   *  the point between them (20.5°) at 90. */
+  /** 16–26° over a 200 px track 10 px from the left: 20 px a degree; 19° at
+   *  70 px, 22° at 130, the point between them (20.5°) at 100. */
   async function slider(): Promise<DualHandleSlider> {
     const el = await mount('dual-handle-slider', {
       min: 16,
@@ -147,7 +147,7 @@ describe('#3 the exact-range slider', () => {
     });
     const track = el.shadowRoot!.querySelector<HTMLElement>('.track')!;
     track.getBoundingClientRect = () =>
-      ({ left: 0, right: 200, width: 200, top: 0, bottom: 6, height: 6 }) as DOMRect;
+      ({ left: 10, right: 210, width: 200, top: 0, bottom: 6, height: 6 }) as DOMRect;
     return el;
   }
 
@@ -176,9 +176,9 @@ describe('#3 the exact-range slider', () => {
     const [, high] = thumbs(el);
     const input = vi.fn();
     el.addEventListener('input', input);
-    pointer(high, 'pointerdown', 85);
-    pointer(high, 'pointermove', 65);
-    pointer(high, 'pointerup', 65);
+    pointer(high, 'pointerdown', 95);
+    pointer(high, 'pointermove', 75);
+    pointer(high, 'pointerup', 75);
     expect([el.low, el.high]).toEqual([18, 22]);
     expect(input).toHaveBeenCalled();
   });
@@ -186,18 +186,18 @@ describe('#3 the exact-range slider', () => {
   it('takes the high handle when the pointer is nearer it, though in the low thumb’s area', async () => {
     const el = await slider();
     const [low] = thumbs(el);
-    pointer(low, 'pointerdown', 95);
-    pointer(low, 'pointermove', 135);
-    pointer(low, 'pointerup', 135);
+    pointer(low, 'pointerdown', 105);
+    pointer(low, 'pointermove', 145);
+    pointer(low, 'pointerup', 145);
     expect([el.low, el.high]).toEqual([19, 24]);
   });
 
   it('takes the high handle exactly between the two, as the track does', async () => {
     const el = await slider();
     const [low] = thumbs(el);
-    pointer(low, 'pointerdown', 90);
-    pointer(low, 'pointermove', 110);
-    pointer(low, 'pointerup', 110);
+    pointer(low, 'pointerdown', 100);
+    pointer(low, 'pointermove', 120);
+    pointer(low, 'pointerup', 120);
     expect([el.low, el.high]).toEqual([19, 23]);
   });
 
@@ -206,22 +206,22 @@ describe('#3 the exact-range slider', () => {
     const [low] = thumbs(el);
     const input = vi.fn();
     el.addEventListener('input', input);
-    // Taken 10 px right of its middle (19° is at 60 px).
-    pointer(low, 'pointerdown', 70);
-    pointer(low, 'pointermove', 70);
+    // Taken 10 px right of its middle (19° is at 70 px).
+    pointer(low, 'pointerdown', 80);
+    pointer(low, 'pointermove', 80);
     expect(el.low).toBe(19);
     expect(input).not.toHaveBeenCalled();
-    pointer(low, 'pointermove', 50);
+    pointer(low, 'pointermove', 60);
     expect(el.low).toBe(18);
-    pointer(low, 'pointerup', 50);
+    pointer(low, 'pointerup', 60);
   });
 
   it('still moves the nearer handle to a press on the track', async () => {
     const el = await slider();
     const track = el.shadowRoot!.querySelector('.track')!;
-    pointer(track, 'pointerdown', 50);
+    pointer(track, 'pointerdown', 60);
     expect([el.low, el.high]).toEqual([18.5, 22]);
-    pointer(track, 'pointerdown', 90);
+    pointer(track, 'pointerdown', 100);
     expect([el.low, el.high]).toEqual([18.5, 20.5]);
   });
 });
