@@ -468,12 +468,13 @@ describe('the Schedule tab’s lines, in parts', () => {
   });
 
   // So a line doesn't end in "→".
-  it('keeps the next change’s time whole, and its range with the arrow before it', () => {
+  // The space before the arrow in the range's part: on its own, Chromium
+  // leaves it out of what screen readers get.
+  it('keeps the next change’s time whole, and its range with the arrow and space before it', () => {
     expect(nextParts(change(at(6, 30, 1), { low: 17.5, high: 21, scheduled: true }))).toEqual([
       'The schedule’s next change: ',
       whole('tomorrow 06:30'),
-      ' ',
-      whole('→ 17.5–21°'),
+      whole(' → 17.5–21°'),
     ]);
     expect(
       nextParts({
@@ -482,7 +483,7 @@ describe('the Schedule tab’s lines, in parts', () => {
           attributes: { schedule_id: 'abc', options: ['Own schedule', 'Bedrooms'] },
         },
       }),
-    ).toEqual(['The shared schedule’s next change: ', whole('21:00'), ' ', whole('→ 18–22°')]);
+    ).toEqual(['The shared schedule’s next change: ', whole('21:00'), whole(' → 18–22°')]);
   });
 
   it('keeps a 12-hour time whole, “pm” with it', () => {

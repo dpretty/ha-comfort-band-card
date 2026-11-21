@@ -2876,8 +2876,7 @@ function ed(e, t, n) {
   return [
     `The ${Bo(e, t) === !1 ? "shared schedule" : "schedule"}’s next change: `,
     { whole: h },
-    " ",
-    { whole: `→ ${Tt({ low: r, high: c })}` }
+    { whole: ` → ${Tt({ low: r, high: c })}` }
   ];
 }
 var td = Object.defineProperty, nd = Object.getOwnPropertyDescriptor, Ze = (e, t, n, i) => {
@@ -3489,7 +3488,7 @@ Be = Ze([
 ], Be);
 function Ba(e) {
   return e.map(
-    (t) => typeof t == "string" ? t : v`<span class="whole">${t.whole}</span>`
+    (t, n) => typeof t == "string" ? t : typeof e[n - 1] == "object" ? v`<wbr /><span class="whole">${t.whole}</span>` : v`<span class="whole">${t.whole}</span>`
   );
 }
 function Wa(e) {

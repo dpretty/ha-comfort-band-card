@@ -199,19 +199,39 @@ describe('comfort-band-schedule-tab now', () => {
       Array.from(el.shadowRoot!.querySelectorAll(`${sel} .whole`)).map((w) => w.textContent);
     expect(wholes('.now-line')).toEqual(['17–25°', '15:00']);
     expect(nowLine(el)).toBe('Now 17–25°, adjusted until 15:00');
-    expect(wholes('.next-change')).toEqual(['17:30', '→ 19.5–22.5°']);
-    expect(text(nextChange(el))).toBe('The schedule’s next change: 17:30 → 19.5–22.5°');
+    expect(wholes('.next-change')).toEqual(['17:30', ' → 19.5–22.5°']);
+    expect(nextChange(el)!.textContent).toBe('The schedule’s next change: 17:30 → 19.5–22.5°');
+    // The line may break between the time and the arrow.
+    expect(
+      Array.from(nextChange(el)!.children).map(
+        (c) => `${c.localName}${c.className ? '.' + c.className : ''}`,
+      ),
+    ).toEqual(['span.whole', 'wbr', 'span.whole']);
     // Only those: the rest of the line wraps.
     expect(el.shadowRoot!.querySelector('.now-line')!.classList.contains('whole')).toBe(false);
-    const css = (
+    for (const line of el.shadowRoot!.querySelectorAll('.now-line, .next-change')) {
+      // What screen readers get: nothing hidden, and no text that's only a
+      // space, which Chromium leaves out.
+      expect(line.querySelectorAll('[aria-hidden]')).toHaveLength(0);
+      const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (n.textContent) expect(n.textContent.trim(), JSON.stringify(n.textContent)).not.toBe('');
+      }
+    }
+    // Its own rule, whichever line it's in, outside any at-rule.
+    const rules = (
       customElements.get('comfort-band-schedule-tab') as unknown as {
         styles: Array<{ cssText: string }>;
       }
     ).styles
       .flat()
       .map((x) => x.cssText)
-      .join('\n');
-    expect(/(^|[}\s])\.whole\s*\{\s*white-space:\s*nowrap;\s*\}/.test(css)).toBe(true);
+      .join('\n')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const whole = [...rules.matchAll(/(?:^|\})\s*\.whole\s*\{([^}]*)\}/g)].map((m) =>
+      m[1].trim().replace(/\s+/g, ' '),
+    );
+    expect(whole).toEqual(['white-space: nowrap;']);
   });
 
   it('moves the next change on with the clock', async () => {

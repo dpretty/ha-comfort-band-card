@@ -982,10 +982,16 @@ export class ComfortBandScheduleTab extends LitElement {
 }
 
 /** A line's parts, those to keep whole in a span that doesn't wrap (#66).
- *  The words are the line's, unchanged. */
+ *  The words are the line's, unchanged. Between two whole parts, a `<wbr>`
+ *  lets the line break: the second starts with its space (" → 18–22°"),
+ *  which a break there leaves out. */
 function wholeParts(parts: LinePart[]) {
-  return parts.map((p) =>
-    typeof p === 'string' ? p : html`<span class="whole">${p.whole}</span>`,
+  return parts.map((p, i) =>
+    typeof p === 'string'
+      ? p
+      : typeof parts[i - 1] === 'object'
+        ? html`<wbr /><span class="whole">${p.whole}</span>`
+        : html`<span class="whole">${p.whole}</span>`,
   );
 }
 

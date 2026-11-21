@@ -168,7 +168,10 @@ export function nextChangeLine(
 }
 
 /** `nextChangeLine`, in parts: its time kept whole, and its range with the
- *  arrow before it, so a line doesn't end in "→" (#66). */
+ *  arrow before it, so a line doesn't end in "→" (#66). The space before the
+ *  arrow is in the range's part: on its own, Chromium leaves a space-only
+ *  text out of what screen readers get ("PM→"). The tab lets the line break
+ *  before it. */
 export function nextChangeLineParts(
   hass: HomeAssistant,
   entities: ZoneEntities,
@@ -187,7 +190,6 @@ export function nextChangeLineParts(
   return [
     `The ${whose}’s next change: `,
     { whole: when },
-    ' ',
-    { whole: `→ ${bandText({ low, high })}` },
+    { whole: ` → ${bandText({ low, high })}` },
   ];
 }
