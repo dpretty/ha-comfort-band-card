@@ -559,12 +559,13 @@ export function peakShift(
  * The earliest a peak announced while peak saving hasn't moved the range
  * could first move it, in ms; null where none could (#67). Peak saving waits
  * with a peak announced (`next_start`), or is getting ready for one but moved
- * nothing (a band too narrow to get ready, the climate's limits). Whether
+ * nothing (that direction's offset 0, or a band 0.5° wide or less). Whether
  * the peak will move the range then isn't known: the integration works that
  * out at the time. It can only where the zone's peak offsets aren't both 0:
  * they relax the range in a peak and move it ahead of one. Waiting, it could
  * from the lead time before the start (from now, where the lead time can't
- * be read); getting ready, from the start, when the peak relaxes it.
+ * be read). Getting ready, from now: the integration decides which way at
+ * every update, and the other way's offset can move the range at once.
  */
 export function peakComing(hass: HomeAssistant, entities: ZoneEntities): number | null {
   const peak = entity(hass, entities, 'peakSaving');
@@ -579,7 +580,7 @@ export function peakComing(hass: HomeAssistant, entities: ZoneEntities): number 
     return Number.isFinite(value) ? value : null;
   };
   if (reading('peakHeatOffset') === 0 && reading('peakCoolOffset') === 0) return null;
-  if (peak.state === 'preconditioning') return start;
+  if (peak.state === 'preconditioning') return -Infinity;
   const lead = reading('peakPreconditionMinutes');
   return lead === null ? -Infinity : start - lead * 60_000;
 }

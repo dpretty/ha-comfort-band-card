@@ -98,15 +98,34 @@ describe('peakComing', () => {
     );
   });
 
-  // Getting ready moved nothing (a band too narrow, the climate's limits),
-  // but the peak may still relax it when it starts.
-  it('is the peak’s start while getting ready for it moved nothing', () => {
+  // Getting ready moved nothing (that direction's offset 0, or a band 0.5°
+  // wide or less). The integration decides the direction at every update, so
+  // the other way's offset may move the range at once, and the peak's start
+  // may relax it.
+  it('is any time while getting ready for a peak moved nothing', () => {
     expect(
       coming(
         peak('preconditioning', { next_start: at(45), low_adjustment: 0, high_adjustment: 0 }),
       ),
-    ).toBe(NOW + 45 * MIN);
-    expect(coming(peak('preconditioning', { next_start: at(45) }))).toBe(NOW + 45 * MIN);
+    ).toBe(-Infinity);
+    expect(coming(peak('preconditioning', { next_start: at(45) }))).toBe(-Infinity);
+    // Getting ready to heat, with no heat offset: cooling could move it now.
+    expect(
+      coming({
+        ...peak('preconditioning', { next_start: at(240), precondition: 'heating' }),
+        'number.gym_peak_heat_offset': '0',
+      }),
+    ).toBe(-Infinity);
+  });
+
+  it('is nothing while getting ready where both offsets are 0', () => {
+    expect(
+      coming({
+        ...peak('preconditioning', { next_start: at(45), low_adjustment: 0, high_adjustment: 0 }),
+        'number.gym_peak_heat_offset': '0',
+        'number.gym_peak_cool_offset': '0.0',
+      }),
+    ).toBeNull();
   });
 
   // #64 says those: the range is moved.
@@ -165,6 +184,14 @@ describe('statusLine with a peak to come', () => {
     expect(line({ peakComing: NOW + 180 * MIN })).toBe('Comfortable · 17.5–23° until T+180m');
     expect(line({ peakComing: null })).toBe('Comfortable · 17.5–23° until T+180m');
     expect(line({ peakComing: undefined })).toBe('Comfortable · 17.5–23° until T+180m');
+  });
+
+  // The A1 case from #67's review: the peak after the schedule's change, but
+  // getting ready could move the range before it.
+  it('leaves it out while getting ready moved nothing, the peak after the schedule’s change', () => {
+    expect(line({ peakComing: -Infinity, nextChange: NOW + 30 * MIN })).toBe(
+      'Comfortable · 17.5–23°',
+    );
   });
 
   it('leaves it out after "Room sensor offline" too', () => {
