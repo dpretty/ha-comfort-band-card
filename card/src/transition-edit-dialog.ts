@@ -60,9 +60,13 @@ export class TransitionEditDialog extends LitElement {
            too low against HA's dark dialog bg in real-world testing. */
         color: var(--cb-text-primary);
       }
+      /* 44px tall (WCAG 2.5.5), and 16px type: iOS zooms the page into a
+         field set smaller when it's focused (#3). */
       input {
         font: inherit;
-        font-size: 14px;
+        font-size: 16px;
+        min-height: 44px;
+        box-sizing: border-box;
         padding: 8px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 6px;

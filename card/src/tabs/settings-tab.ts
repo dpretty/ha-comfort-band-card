@@ -449,7 +449,8 @@ export class ComfortBandSettingsTab extends LitElement {
         background-repeat: no-repeat;
         color: var(--cb-text-primary);
         font: inherit;
-        font-size: 14px;
+        /* iOS zooms the page into a select set smaller when it's tapped (#3). */
+        font-size: 16px;
         text-overflow: ellipsis;
         /* With its own look, WebKit lets a long option's text out of the box. */
         overflow: hidden;

@@ -1,5 +1,6 @@
 /**
- * `<comfort-band-modal>` — full-screen tabbed dialog opened by tile tap.
+ * `<comfort-band-modal>` — tabbed dialog opened by tile tap: full screen on
+ * a phone, as HA's own dialogs are (#3); floating on anything larger.
  *
  * Uses the native `<dialog>` element (modal API): `showModal()` opens with
  * a backdrop, ESC and click-outside close it. No browser_mod dependency.
@@ -102,6 +103,9 @@ export class ComfortBandModal extends LitElement {
         font-weight: 500;
         color: var(--cb-text-primary);
       }
+      /* WCAG 2.5.5: 44px each way (#3). The margins take the extra out of
+         the header's padding, so the header is no taller and the ✕ sits
+         where it did, at the line's end in either direction. */
       .close {
         font: inherit;
         font-size: 22px;
@@ -110,7 +114,14 @@ export class ComfortBandModal extends LitElement {
         border: none;
         color: var(--cb-text-secondary);
         cursor: pointer;
-        padding: 4px 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 44px;
+        min-height: 44px;
+        margin-block: -7px;
+        margin-inline-end: -7px;
+        padding: 0;
       }
       nav {
         flex-shrink: 0;
@@ -119,9 +130,11 @@ export class ComfortBandModal extends LitElement {
         border-bottom: 1px solid var(--divider-color, #e0e0e0);
         overflow-x: auto;
       }
+      /* WCAG 2.5.5: 44px tall (#3). */
       nav button {
         font: inherit;
         font-size: 13px;
+        min-height: 44px;
         padding: 10px 14px;
         background: transparent;
         border: none;
@@ -154,6 +167,27 @@ export class ComfortBandModal extends LitElement {
         color: var(--cb-text-secondary);
         font-size: 13px;
         text-align: center;
+      }
+      /* A phone (#3): full screen, where HA's own dialogs are (450 px wide
+         or 500 px tall, or less). A floating dialog left 19 px of dashboard down
+         each side of a 320 px phone. The padding keeps the header and the
+         panel's end clear of a notch or the home indicator. */
+      @media (max-width: 450px), (max-height: 500px) {
+        dialog {
+          box-sizing: border-box;
+          width: 100%;
+          max-width: none;
+          height: 100%;
+          max-height: none;
+          margin: 0;
+          border-radius: 0;
+          box-shadow: none;
+          padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0)
+            env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
+        }
+        .frame {
+          height: 100%;
+        }
       }
     `,
   ];

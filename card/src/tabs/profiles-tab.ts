@@ -157,12 +157,14 @@ export class ComfortBandProfilesTab extends LitElement {
         font-size: 12px;
         margin: 0 0 var(--cb-gap-sm);
       }
+      /* WCAG 2.5.5: 44px tall (#3), as the menu's items are. */
       .new-profile {
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 4px;
         width: 100%;
+        min-height: 44px;
         margin-bottom: var(--cb-gap-sm);
         padding: var(--cb-gap-sm) var(--cb-gap-md);
         border-radius: var(--cb-radius-card);
@@ -282,6 +284,7 @@ export class ComfortBandProfilesTab extends LitElement {
         text-align: left;
         font: inherit;
         font-size: 13px;
+        min-height: 44px;
         padding: 8px 12px;
         border-radius: 4px;
         cursor: pointer;
