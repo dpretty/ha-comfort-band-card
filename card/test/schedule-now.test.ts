@@ -2,8 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   currentIndex,
   minutesOfDay,
+  lineText,
   nextChangeLine,
+  nextChangeLineParts,
   nowLine,
+  nowLineParts,
   ownScheduleInForce,
   sameAsBefore,
   sharedScheduleName,
@@ -407,5 +410,107 @@ describe('nextChangeLine', () => {
     expect(nextChangeLine(hass, makeEntities(), Date.parse('2026-10-22T23:00:00Z'))).toBe(
       'The schedule’s next change: 21:00 → 18–22°',
     );
+  });
+});
+
+// A time or a range mustn't be broken across two lines (#66): the lines come
+// in parts, those to keep whole marked, the words unchanged.
+describe('the Schedule tab’s lines, in parts', () => {
+  const whole = (text: string) => ({ whole: text });
+  const nowParts = (overrides: Record<string, Spec | null> = {}) =>
+    nowLineParts(makeHass(overrides), makeEntities(), NOON);
+  const nextParts = (overrides: Record<string, Spec | null> = {}) =>
+    nextChangeLineParts(makeHass(overrides), makeEntities(), NOON);
+  const adjusted = (ends: string) => ({
+    'binary_sensor.gym_override_active': 'on',
+    'sensor.gym_override_ends': ends,
+  });
+  const change = (state: string, attributes: Record<string, unknown>) => ({
+    'sensor.gym_next_band_change': { state, attributes },
+  });
+
+  it('keeps the range in force whole', () => {
+    expect(nowParts()).toEqual(['Now ', whole('19.5–22.5°')]);
+  });
+
+  it('keeps an adjustment’s end whole, with its day', () => {
+    expect(nowParts(adjusted(at(7, 30, 1)))).toEqual([
+      'Now ',
+      whole('19.5–22.5°'),
+      ', adjusted until ',
+      whole('tomorrow 07:30'),
+    ]);
+    expect(nowParts(adjusted('unknown'))).toEqual(['Now ', whole('19.5–22.5°'), ', adjusted']);
+  });
+
+  it('keeps a peak’s end or start whole', () => {
+    expect(nowParts({ 'sensor.gym_peak_saving': peak('active', -1, 1, { ends: at(18) }) })).toEqual(
+      ['Now ', whole('19.5–22.5°'), ', relaxed for a peak until ', whole('18:00')],
+    );
+    expect(nowParts({ 'sensor.gym_peak_saving': peak('active', -0.5, 0) })).toEqual([
+      'Now ',
+      whole('19.5–22.5°'),
+      ', relaxed for a peak',
+    ]);
+    expect(
+      nowParts({ 'sensor.gym_peak_saving': peak('preconditioning', 1, 0, { next_start: at(16) }) }),
+    ).toEqual([
+      'Now ',
+      whole('19.5–22.5°'),
+      ', getting ready for a peak starting ',
+      whole('16:00'),
+    ]);
+    expect(nowParts({ 'sensor.gym_peak_saving': peak('preconditioning', 1, 0) })).toEqual([
+      'Now ',
+      whole('19.5–22.5°'),
+      ', getting ready for a peak',
+    ]);
+  });
+
+  // So a line doesn't end in "→".
+  it('keeps the next change’s time whole, and its range with the arrow before it', () => {
+    expect(nextParts(change(at(6, 30, 1), { low: 17.5, high: 21, scheduled: true }))).toEqual([
+      'The schedule’s next change: ',
+      whole('tomorrow 06:30'),
+      ' ',
+      whole('→ 17.5–21°'),
+    ]);
+    expect(
+      nextParts({
+        'select.gym_schedule_assignment': {
+          state: 'Bedrooms',
+          attributes: { schedule_id: 'abc', options: ['Own schedule', 'Bedrooms'] },
+        },
+      }),
+    ).toEqual(['The shared schedule’s next change: ', whole('21:00'), ' ', whole('→ 18–22°')]);
+  });
+
+  it('keeps a 12-hour time whole, “pm” with it', () => {
+    const hass = makeHass({
+      'sensor.gym_override_ends': at(16, 30),
+      'binary_sensor.gym_override_active': 'on',
+    });
+    hass.locale = { language: 'en-US', time_format: '12' };
+    expect(nowLineParts(hass, makeEntities(), NOON)).toEqual([
+      'Now ',
+      whole('19.5–22.5°'),
+      ', adjusted until ',
+      whole('4:30 PM'),
+    ]);
+  });
+
+  it('is nothing where the line is nothing', () => {
+    expect(nowParts({ 'sensor.gym_effective_low': 'unavailable' })).toBeNull();
+    expect(nextParts(change('unknown', { low: 18, high: 22, scheduled: true }))).toBeNull();
+  });
+
+  it('makes the lines, joined', () => {
+    expect(lineText(['Now ', whole('19.5–22.5°'), ', adjusted until ', whole('17:00')])).toBe(
+      'Now 19.5–22.5°, adjusted until 17:00',
+    );
+    expect(lineText(nowParts(adjusted(at(17)))!)).toBe(
+      nowLine(makeHass(adjusted(at(17))), makeEntities(), NOON),
+    );
+    expect(lineText(nextParts()!)).toBe(nextChangeLine(makeHass(), makeEntities(), NOON));
   });
 });

@@ -187,6 +187,33 @@ describe('comfort-band-schedule-tab now', () => {
     expect(nowLine(peak)).toBe('Now 17–25°, relaxed for a peak until 16:00');
   });
 
+  // A time or a range kept on one line (#66); the words as before.
+  it('keeps each time and range whole in the two lines, the words unchanged', async () => {
+    const el = await tab(
+      makeHass({
+        'binary_sensor.gym_override_active': 'on',
+        'sensor.gym_override_ends': new Date(Date.UTC(2026, 9, 23, 15, 0)).toISOString(),
+      }),
+    );
+    const wholes = (sel: string) =>
+      Array.from(el.shadowRoot!.querySelectorAll(`${sel} .whole`)).map((w) => w.textContent);
+    expect(wholes('.now-line')).toEqual(['17–25°', '15:00']);
+    expect(nowLine(el)).toBe('Now 17–25°, adjusted until 15:00');
+    expect(wholes('.next-change')).toEqual(['17:30', '→ 19.5–22.5°']);
+    expect(text(nextChange(el))).toBe('The schedule’s next change: 17:30 → 19.5–22.5°');
+    // Only those: the rest of the line wraps.
+    expect(el.shadowRoot!.querySelector('.now-line')!.classList.contains('whole')).toBe(false);
+    const css = (
+      customElements.get('comfort-band-schedule-tab') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((x) => x.cssText)
+      .join('\n');
+    expect(/(^|[}\s])\.whole\s*\{\s*white-space:\s*nowrap;\s*\}/.test(css)).toBe(true);
+  });
+
   it('moves the next change on with the clock', async () => {
     const el = await tab(
       makeHass({

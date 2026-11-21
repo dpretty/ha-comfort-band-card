@@ -50,8 +50,9 @@ import {
 import {
   currentIndex,
   minutesOfDay,
-  nextChangeLine,
-  nowLine,
+  nextChangeLineParts,
+  nowLineParts,
+  type LinePart,
   ownScheduleInForce,
   sameAsBefore,
   sharedScheduleName,
@@ -296,6 +297,10 @@ export class ComfortBandScheduleTab extends LitElement {
       .now-line {
         font-size: 14px;
         color: var(--cb-text-primary);
+      }
+      /* A time or a range kept on one line (#66). */
+      .whole {
+        white-space: nowrap;
       }
       .next-change {
         font-size: 13px;
@@ -849,14 +854,16 @@ export class ComfortBandScheduleTab extends LitElement {
    *  whether the room follows a shared schedule. */
   private _renderNow() {
     if (!this.hass || !this.entities) return nothing;
-    const line = nowLine(this.hass, this.entities, this._now);
+    const line = nowLineParts(this.hass, this.entities, this._now);
     const scheduled = this._scheduled === true;
-    const next = scheduled ? nextChangeLine(this.hass, this.entities, this._now) : null;
+    const next = scheduled ? nextChangeLineParts(this.hass, this.entities, this._now) : null;
     const following = ownScheduleInForce(this.hass, this.entities) === false;
     const shared = sharedScheduleName(this.hass, this.entities);
     return html`
-      <div class="now-line">${line ?? nothing}</div>
-      ${scheduled ? html`<div class="next-change">${next ?? nothing}</div>` : nothing}
+      <div class="now-line">${line ? wholeParts(line) : nothing}</div>
+      ${scheduled
+        ? html`<div class="next-change">${next ? wholeParts(next) : nothing}</div>`
+        : nothing}
       ${following
         ? html`<div class="shared-note">
             This room follows ${shared ? `“${shared}”, a shared schedule` : 'a shared schedule'}.
@@ -972,6 +979,14 @@ export class ComfortBandScheduleTab extends LitElement {
       </li>
     `;
   }
+}
+
+/** A line's parts, those to keep whole in a span that doesn't wrap (#66).
+ *  The words are the line's, unchanged. */
+function wholeParts(parts: LinePart[]) {
+  return parts.map((p) =>
+    typeof p === 'string' ? p : html`<span class="whole">${p.whole}</span>`,
+  );
 }
 
 /** The active profile's name, or null without a profile manager or while

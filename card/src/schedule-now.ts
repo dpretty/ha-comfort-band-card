@@ -98,30 +98,55 @@ export function sharedScheduleName(hass: HomeAssistant, entities: ZoneEntities):
  * can't be read.
  */
 export function nowLine(hass: HomeAssistant, entities: ZoneEntities, now: number): string | null {
+  const parts = nowLineParts(hass, entities, now);
+  return parts && lineText(parts);
+}
+
+/**
+ * A line's words, in parts, with the ones that mustn't be broken across two
+ * lines marked `whole` (#66): a range ("19.5–22.5°", which a browser may
+ * break after its dash), and a time ("tomorrow 4:30 pm", whose "pm" it may
+ * put on the next line). Joined, they're the line.
+ */
+export type LinePart = string | { whole: string };
+
+/** The line the parts make. */
+export function lineText(parts: LinePart[]): string {
+  return parts.map((p) => (typeof p === 'string' ? p : p.whole)).join('');
+}
+
+/** `nowLine`, in parts: its range and its time each kept whole. */
+export function nowLineParts(
+  hass: HomeAssistant,
+  entities: ZoneEntities,
+  now: number,
+): LinePart[] | null {
   const r = readRoom(hass, entities);
   if (!Number.isFinite(r.band.low) || !Number.isFinite(r.band.high)) return null;
   const zone = hass.config?.time_zone;
   const ahead = (ms: number | null) => ms !== null && ms > now;
-  let why = '';
+  const until = (words: string, ms: number): LinePart[] => [
+    words,
+    { whole: formatWhen(ms, now, hass, zone) },
+  ];
+  let why: LinePart[] = [];
   if (r.overrideActive) {
     if (r.scheduled === true) {
-      why = ahead(r.overrideEnds)
-        ? `, adjusted until ${formatWhen(r.overrideEnds!, now, hass, zone)}`
-        : ', adjusted';
+      why = ahead(r.overrideEnds) ? until(', adjusted until ', r.overrideEnds!) : [', adjusted'];
     }
   } else {
     const peak = peakShift(hass, entities);
     if (peak?.kind === 'relaxed') {
       why = ahead(peak.at)
-        ? `, relaxed for a peak until ${formatWhen(peak.at!, now, hass, zone)}`
-        : ', relaxed for a peak';
+        ? until(', relaxed for a peak until ', peak.at!)
+        : [', relaxed for a peak'];
     } else if (peak?.kind === 'ahead') {
       why = ahead(peak.at)
-        ? `, getting ready for a peak starting ${formatWhen(peak.at!, now, hass, zone)}`
-        : ', getting ready for a peak';
+        ? until(', getting ready for a peak starting ', peak.at!)
+        : [', getting ready for a peak'];
     }
   }
-  return `Now ${bandText(r.band)}${why}`;
+  return ['Now ', { whole: bandText(r.band) }, ...why];
 }
 
 /**
@@ -138,6 +163,17 @@ export function nextChangeLine(
   entities: ZoneEntities,
   now: number,
 ): string | null {
+  const parts = nextChangeLineParts(hass, entities, now);
+  return parts && lineText(parts);
+}
+
+/** `nextChangeLine`, in parts: its time kept whole, and its range with the
+ *  arrow before it, so a line doesn't end in "→" (#66). */
+export function nextChangeLineParts(
+  hass: HomeAssistant,
+  entities: ZoneEntities,
+  now: number,
+): LinePart[] | null {
   const r = readRoom(hass, entities);
   if (r.scheduled !== true || r.nextChange === null || r.nextChange <= now) return null;
   const id = entities.nextBandChange;
@@ -148,5 +184,10 @@ export function nextChangeLine(
   if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
   const when = formatWhen(r.nextChange, now, hass, hass.config?.time_zone);
   const whose = ownScheduleInForce(hass, entities) === false ? 'shared schedule' : 'schedule';
-  return `The ${whose}’s next change: ${when} → ${bandText({ low, high })}`;
+  return [
+    `The ${whose}’s next change: `,
+    { whole: when },
+    ' ',
+    { whole: `→ ${bandText({ low, high })}` },
+  ];
 }
