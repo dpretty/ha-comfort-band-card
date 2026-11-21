@@ -352,6 +352,47 @@ describe('comfort-band-card', () => {
     }
   });
 
+  // #67: a peak announced before the schedule's next change may move the
+  // range first; whether it will isn't known, so no "until".
+  it('tells the tile no time while a peak to come may move the range first', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 22, 10, 0));
+    try {
+      const hass = withPeak(makeHass('gym'), 'waiting', {
+        next_start: new Date(2026, 9, 22, 16, 0).toISOString(),
+      });
+      const el = await card('gym', hass);
+      expect(tileOf(el).statusText).toBe('Comfortable · 19.5–22.5°');
+      // A peak whose lead time starts after the schedule's change: the
+      // schedule's change. (A lead time it can't read could start any time.)
+      const later = withPeak(makeHass('gym'), 'waiting', {
+        next_start: new Date(2026, 9, 22, 19, 0).toISOString(),
+      });
+      const lead = 'number.gym_peak_precondition_minutes';
+      later.entities[lead] = {
+        entity_id: lead,
+        platform: 'comfort_band',
+        device_id: 'dev-gym',
+        area_id: null,
+        hidden: false,
+        entity_category: null,
+        translation_key: 'peak_precondition_minutes',
+        name: null,
+      };
+      later.states[lead] = {
+        entity_id: lead,
+        state: '60',
+        attributes: {},
+        last_changed: '',
+        last_updated: '',
+      };
+      const schedFirst = await card('gym', later);
+      expect(tileOf(schedFirst).statusText).toBe('Comfortable · 19.5–22.5° until 17:00');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('tells the tile when a range moved ahead of a peak next changes: when it starts', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 9, 22, 10, 0));

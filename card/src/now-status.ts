@@ -149,6 +149,9 @@ export interface StatusInput {
    *  in a peak, or moved ahead of one, with when the peak ends or starts;
    *  null otherwise (#64). */
   peak: { kind: 'relaxed' | 'ahead'; at: number | null } | null;
+  /** The earliest a peak announced, that hasn't moved the range, could move
+   *  it (`peakComing`), in ms; null or left out where none could (#67). */
+  peakComing?: number | null;
   /** What a change made on the card is doing, until it has gone through. */
   doing: string | null;
   now: number;
@@ -162,7 +165,9 @@ export interface StatusInput {
  * zone's band from then on, so it doesn't end. Where peak saving has moved
  * the range, "until" is when the range is next due to change: the peak's
  * end (or, getting ready for one, its start), or the schedule's next change
- * if that comes first; not said where either can't be told (#64). A peak's
+ * if that comes first; not said where either can't be told (#64). Nor is the
+ * schedule's next change while a peak announced before it could move the
+ * range first: whether it will isn't known until then (#67). A peak's
  * wider range says so ("for a peak"); getting ready for one, or led by
  * "Room sensor offline", the line gives the time alone, to keep it short:
  * the words took the Now tab's status past its two lines on a narrow phone
@@ -221,8 +226,9 @@ function inForce(s: StatusInput, why = true): { kind: StatusKind; text: string }
     const reason = why && s.peak.kind === 'relaxed' ? ' for a peak' : '';
     rest = `${bandText(s.band)}${reason}${until}`;
   } else {
+    const peakFirst = s.peakComing != null && s.nextChange !== null && s.peakComing < s.nextChange;
     const until =
-      s.scheduled === true && s.nextChange !== null && s.nextChange > s.now
+      s.scheduled === true && s.nextChange !== null && s.nextChange > s.now && !peakFirst
         ? ` until ${s.formatTime(s.nextChange)}`
         : '';
     rest = `${bandText(s.band)}${until}`;
