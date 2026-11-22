@@ -555,6 +555,36 @@ export function peakShift(
   return null;
 }
 
+/**
+ * The earliest a peak announced while peak saving hasn't moved the range
+ * could first move it, in ms; null where none could (#67). Peak saving waits
+ * with a peak announced (`next_start`), or is getting ready for one but moved
+ * nothing (that direction's offset 0, or a band 0.5° wide or less). Whether
+ * the peak will move the range then isn't known: the integration works that
+ * out at the time. It can only where the zone's peak offsets aren't both 0:
+ * they relax the range in a peak and move it ahead of one. Waiting, it could
+ * from the lead time before the start (from now, where the lead time can't
+ * be read). Getting ready, from now: the integration decides which way at
+ * every update, and the other way's offset can move the range at once.
+ */
+export function peakComing(hass: HomeAssistant, entities: ZoneEntities): number | null {
+  const peak = entity(hass, entities, 'peakSaving');
+  if (!peak || peakShift(hass, entities)) return null;
+  if (peak.state !== 'waiting' && peak.state !== 'preconditioning') return null;
+  const start =
+    typeof peak.attributes.next_start === 'string' ? Date.parse(peak.attributes.next_start) : NaN;
+  if (!Number.isFinite(start)) return null;
+  const reading = (field: keyof ZoneEntities) => {
+    const state = entity(hass, entities, field)?.state;
+    const value = state === undefined || state.trim() === '' ? NaN : Number(state);
+    return Number.isFinite(value) ? value : null;
+  };
+  if (reading('peakHeatOffset') === 0 && reading('peakCoolOffset') === 0) return null;
+  if (peak.state === 'preconditioning') return -Infinity;
+  const lead = reading('peakPreconditionMinutes');
+  return lead === null ? -Infinity : start - lead * 60_000;
+}
+
 /** What peak saving is doing now (`peak_saving`, integration v0.24.0+), or
  *  null without that sensor. */
 export function readPeak(

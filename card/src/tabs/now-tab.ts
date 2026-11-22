@@ -78,7 +78,7 @@ import {
   statusLine,
 } from '../now-status.js';
 import { STATUS_ICONS, controlling, readRoom, readSchedule, sensorNotice } from '../room-status.js';
-import { peakShift } from '../diagnostics.js';
+import { peakComing, peakShift } from '../diagnostics.js';
 
 /** Feedback pills: service label → button text. Order = display order. */
 const FEEDBACK_PILLS: ReadonlyArray<{ label: FeedbackLabel; text: string }> = [
@@ -817,6 +817,7 @@ export class ComfortBandNowTab extends LitElement {
     const status = statusLine({
       ...reading,
       peak: peakShift(this.hass, this.entities),
+      peakComing: peakComing(this.hass, this.entities),
       doing,
       now,
       formatTime: (ms) => formatTime(ms, this.hass),

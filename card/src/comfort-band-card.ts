@@ -17,7 +17,7 @@ import type { ComfortBandCardConfig, HomeAssistant } from './types.js';
 import type { ZoneEntities } from './helpers.js';
 import { findZoneEntities, zoneDisplayName } from './helpers.js';
 import { formatTime, statusLine } from './now-status.js';
-import { peakShift } from './diagnostics.js';
+import { peakComing, peakShift } from './diagnostics.js';
 import { controlling, readRoom, roomBadges } from './room-status.js';
 import { tokens } from './styles.js';
 
@@ -140,6 +140,7 @@ export class ComfortBandCard extends LitElement {
     const status = statusLine({
       ...room,
       peak: peakShift(hass, entities),
+      peakComing: peakComing(hass, entities),
       doing: null,
       now: Date.now(),
       formatTime: (ms) => formatTime(ms, hass),

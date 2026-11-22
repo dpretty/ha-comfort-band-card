@@ -424,6 +424,41 @@ describe('comfort-band-now-tab', () => {
       );
     });
 
+    // #67: a peak announced before the schedule's next change may move the
+    // range first; whether it will isn't known, so no "until".
+    it('says no time while a peak to come may move the range before the schedule does', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(NOW);
+      const waiting = (heat: string, cool: string) =>
+        makeHass(
+          {
+            'sensor.gym_next_band_change': new Date(NOW + 5 * HOUR).toISOString(),
+            'sensor.gym_peak_saving': 'waiting',
+            'number.gym_peak_heat_offset': heat,
+            'number.gym_peak_cool_offset': cool,
+            'number.gym_peak_precondition_minutes': '60',
+          },
+          {
+            'sensor.gym_next_band_change': { scheduled: true, low: 17, high: 24 },
+            'sensor.gym_peak_saving': { next_start: new Date(NOW + 2 * HOUR).toISOString() },
+          },
+        );
+      const entities = {
+        ...makeEntities(),
+        peakSaving: 'sensor.gym_peak_saving',
+        peakHeatOffset: 'number.gym_peak_heat_offset',
+        peakCoolOffset: 'number.gym_peak_cool_offset',
+        peakPreconditionMinutes: 'number.gym_peak_precondition_minutes',
+      };
+      const el = await nowTab(waiting('2', '1.5'), entities);
+      expect(statusText(el)).toBe('Comfortable · 19.5–22.5°');
+      // With both offsets 0 no peak moves it: the schedule's change.
+      const still = await nowTab(waiting('0', '0'), entities);
+      expect(statusText(still)).toBe(
+        `Comfortable · 19.5–22.5° until ${formatTime(NOW + 5 * HOUR)}`,
+      );
+    });
+
     it('says what the room is doing when it is heating or cooling', async () => {
       const heating = await nowTab(scheduledHass(null, { 'sensor.gym_current_action': 'heating' }));
       expect(statusText(heating)).toBe('Heating · 19.5–22.5°');
