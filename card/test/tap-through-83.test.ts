@@ -248,6 +248,11 @@ describe('#83 a finger on a dialog that closes by itself', () => {
     const el = await openModalIn(holder());
     const dialog = dialogIn(el.shadowRoot!)!;
     expect(press(dialog).lift().defaultPrevented).toBe(false);
+    // A control inside a tab, in the tab's own shadow root.
+    const inTab = document.createElement('button');
+    dialog.querySelector('comfort-band-now-tab')!.shadowRoot!.append(inTab);
+    expect(press(inTab).lift().defaultPrevented).toBe(false);
+    expect(tapLands(inTab)).toEqual([false, false, false]);
     const close = dialog.querySelector('.close')!;
     expect(press(close).lift().defaultPrevented).toBe(false);
     expect(tapLands(close)).toEqual([false, false, false]);
@@ -258,7 +263,7 @@ describe('#83 a finger on a dialog that closes by itself', () => {
     const el = await openModalIn(holder());
     const schedule = dialogIn(el.shadowRoot!)!.querySelector('#cb-tab-schedule')!;
     press(schedule).lift();
-    tapLands(schedule);
+    expect(tapLands(schedule)).toEqual([false, false, false]);
     const finger = press(dialogIn(el.shadowRoot!)!.querySelector('.close')!);
     el.remove();
     await settle(el);
@@ -324,13 +329,39 @@ describe('#83 a tap let go just before its dialog closes by itself', () => {
     expect(later).not.toHaveBeenCalled();
   });
 
-  // Hidden: the dialog is still open until the card's observer runs.
-  it('lands nowhere when its card is hidden before the click', async () => {
+  // Hidden, its card has no box; the dialog stays open until the card's
+  // observer runs, at the next frame.
+  it('lands nowhere when its card is hidden, before its dialog has closed', async () => {
     const place = holder();
-    await letGoOnClose(place);
+    const card = await letGoOnClose(place);
+    card.getClientRects = () => ({ length: 0 }) as DOMRectList;
     const page = pageControl(place);
     expect(tapLands(page.el)).toEqual([true, true, true]);
     expect(page.heard).toEqual([]);
+    const modal = card.shadowRoot!.querySelector('comfort-band-modal')!;
+    expect(dialogIn(modal.shadowRoot!)?.open).toBe(true);
+  });
+
+  // Kept in the dialog it began in: another room's, opened in its place
+  // (by an automation, say), isn't that.
+  it("lands nowhere in another room's dialog", async () => {
+    const place = holder();
+    const card = await letGoOnClose(place);
+    card.remove();
+    const other = await openCardIn(place);
+    const modal = other.shadowRoot!.querySelector('comfort-band-modal')!;
+    const tab = dialogIn(modal.shadowRoot!)!.querySelector('#cb-tab-schedule')!;
+    expect(tapLands(tab)).toEqual([true, true, true]);
+    expect(tab.getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('keeps nothing once its click has landed in the dialog', async () => {
+    const place = holder();
+    const el = await openModalIn(place);
+    const schedule = dialogIn(el.shadowRoot!)!.querySelector('#cb-tab-schedule')!;
+    press(schedule).lift();
+    expect(tapLands(schedule)).toEqual([false, false, false]);
+    expect(tapLands(pageControl(place).el)).toEqual([false, false, false]);
   });
 
   it('keeps nothing once its click has come', async () => {
@@ -348,11 +379,17 @@ describe('#83 a tap let go just before its dialog closes by itself', () => {
     const card = await letGoOnClose(place);
     card.remove();
     const page = pageControl(place);
+    // Even pressing a control that keeps its pointer to itself.
+    page.el.addEventListener('pointerdown', (e) => e.stopPropagation());
     page.el.dispatchEvent(new Event('pointerdown', { bubbles: true, composed: true }));
     expect(tapLands(page.el)).toEqual([false, false, false]);
   });
 
+  // Long enough for a tap a browser holds back to see if it's a double tap
+  // (about 300 ms); short enough that a click from a key soon after lands.
   it('keeps nothing once its time is up', async () => {
+    expect(TAP_WITHIN_MS).toBeGreaterThanOrEqual(300);
+    expect(TAP_WITHIN_MS).toBeLessThanOrEqual(1000);
     const place = holder();
     const card = await openCardIn(place);
     const modal = card.shadowRoot!.querySelector('comfort-band-modal')!;

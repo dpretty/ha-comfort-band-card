@@ -39,18 +39,22 @@ const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
  *  300 ms later where it waits to see if it's a double tap. */
 export const TAP_WITHIN_MS = 1000;
 
-/** The mouse events a browser makes for a tap, after the touch's end. */
+/** The mouse events a browser makes for a tap after the touch's end, the
+ *  ones that act on what's under it. A double tap's `dblclick` comes after
+ *  its click, once the tap is no longer kept: HA's taps act on the click. */
 const TAP_EVENTS = ['mousedown', 'mouseup', 'click'] as const;
 
 /**
  * Keeps the tap of a touch just ended in `dialog` in the dialog (#83): until
- * the tap's click, any of its mouse events landing anywhere else is stopped
- * before anything hears it. A modal dialog covers the page, so they land
- * elsewhere only if the dialog has gone or been hidden since the touch
- * ended. That's how HA closes it: while a finger is down, Chromium holds
- * back HA's updates, and the one hiding the card runs as the finger is let
- * go, before the click. A new press ends this, as does the click, or
- * TAP_WITHIN_MS without one.
+ * the tap's click, any of its `TAP_EVENTS` landing anywhere else is stopped,
+ * heard by nothing but a listener the window had first. A modal dialog
+ * covers the page, so they land elsewhere only if the dialog has gone or
+ * been hidden since the touch ended. That's how HA closes it: for up to
+ * 100 ms of a finger being down, Chromium holds back HA's updates, and one
+ * hiding the card runs as the finger is let go, before the click. A new
+ * press ends this, as does the click, or TAP_WITHIN_MS without one. A card
+ * inside a closed shadow root would have its own taps in the dialog stopped
+ * too, the window seeing no dialog in their path; HA's containers are open.
  */
 function keepTapIn(dialog: HTMLDialogElement): void {
   const stray = (e: Event): void => {
