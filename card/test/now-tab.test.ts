@@ -740,6 +740,173 @@ describe('comfort-band-now-tab', () => {
       ]);
     });
 
+    // #69: a tap starts an adjustment, which can outlast the peak (peak
+    // saving stands aside while it runs). During a peak it moves the range
+    // without the peak's relaxing; while getting ready for one, the range in
+    // force, as before.
+    describe('during a peak', () => {
+      const peakEntities = () => ({ ...makeEntities(), peakSaving: 'sensor.gym_peak_saving' });
+      const shaped = (state: string, low: string, high: string, adj: Record<string, unknown>) =>
+        makeHass(
+          {
+            'sensor.gym_effective_low': low,
+            'sensor.gym_effective_high': high,
+            'sensor.gym_peak_saving': state,
+          },
+          { 'sensor.gym_peak_saving': adj },
+        );
+
+      it('moves the range without the peak’s relaxing', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        // The schedule's 18–23°, relaxed to 17–24° for the peak.
+        const hass = shaped('active', '17', '24', { low_adjustment: -1, high_adjustment: 1 });
+        const el = await nowTab(hass, peakEntities());
+        await tap(el, 'warmer');
+        expect(statusText(el)).toBe('Adjusting to 18.5–23.5°');
+        vi.advanceTimersByTime(1_500);
+        await flush(el);
+        expect(calls(hass)).toEqual([
+          ['start_override', { zone: 'gym', low: 18.5, high: 23.5, hours: 3 }],
+        ]);
+      });
+
+      // Getting ready narrows the range towards comfort. Taking that off,
+      // Warmer would lower the floor the heating works towards (pre-heat
+      // 19–23°: 18.5–23.5°), and Cooler raise the ceiling the cooling does.
+      it('moves the range in force while getting ready for a peak, as before', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const preHeat = shaped('preconditioning', '19', '23', {
+          low_adjustment: 1,
+          high_adjustment: 0,
+          precondition: 'heating',
+        });
+        const warm = await nowTab(preHeat, peakEntities());
+        await tap(warm, 'warmer');
+        vi.advanceTimersByTime(1_500);
+        await flush(warm);
+        expect(calls(preHeat)).toEqual([
+          ['start_override', { zone: 'gym', low: 19.5, high: 23.5, hours: 3 }],
+        ]);
+        warm.remove();
+        const preCool = shaped('preconditioning', '18', '22', {
+          low_adjustment: 0,
+          high_adjustment: -1,
+          precondition: 'cooling',
+        });
+        const cool = await nowTab(preCool, peakEntities());
+        await tap(cool, 'cooler');
+        vi.advanceTimersByTime(1_500);
+        await flush(cool);
+        expect(calls(preCool)).toEqual([
+          ['start_override', { zone: 'gym', low: 17.5, high: 21.5, hours: 3 }],
+        ]);
+      });
+
+      it('moves it to the tenth, mid-ramp', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        // The schedule's 18.234–23.25° mid-ramp, relaxed 1° each way.
+        const hass = shaped('active', '17.234', '24.25', {
+          low_adjustment: -1,
+          high_adjustment: 1,
+        });
+        const el = await nowTab(hass, peakEntities());
+        await tap(el, 'warmer');
+        vi.advanceTimersByTime(1_500);
+        await flush(el);
+        expect(calls(hass)).toEqual([
+          ['start_override', { zone: 'gym', low: 18.7, high: 23.8, hours: 3 }],
+        ]);
+      });
+
+      // Offsets set off the UI's 0.5 step (`number.set_value` doesn't snap):
+      // the adjustment is taken off before rounding.
+      it('takes off an offset of a quarter degree before rounding', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const hass = shaped('active', '17.75', '23.25', {
+          low_adjustment: -0.25,
+          high_adjustment: 0.25,
+        });
+        const el = await nowTab(hass, peakEntities());
+        await tap(el, 'warmer');
+        vi.advanceTimersByTime(1_500);
+        await flush(el);
+        expect(calls(hass)).toEqual([
+          ['start_override', { zone: 'gym', low: 18.5, high: 23.5, hours: 3 }],
+        ]);
+      });
+
+      // The range is taken at a burst's first tap, as before: here the
+      // range moves under a ramp mid-burst.
+      it('moves the range the first tap was made from, though it moves mid-burst', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const first = shaped('active', '17', '24', { low_adjustment: -1, high_adjustment: 1 });
+        const el = await nowTab(first, peakEntities());
+        await tap(el, 'warmer');
+        el.hass = shaped('active', '17.2', '24.2', { low_adjustment: -1, high_adjustment: 1 });
+        (el.hass as HomeAssistant).callService = first.callService;
+        await el.updateComplete;
+        await tap(el, 'warmer');
+        vi.advanceTimersByTime(1_500);
+        await flush(el);
+        expect(calls(first)).toEqual([
+          ['start_override', { zone: 'gym', low: 19, high: 24, hours: 3 }],
+        ]);
+      });
+
+      // The range is taken at a burst's first tap, as before.
+      it('moves the range the first tap was made from, whatever the peak does next', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        // A peak starts mid-burst: from the schedule's 18–23°.
+        const before = shaped('waiting', '18', '23', {});
+        const el = await nowTab(before, peakEntities());
+        await tap(el, 'warmer');
+        el.hass = shaped('active', '17', '24', { low_adjustment: -1, high_adjustment: 1 });
+        (el.hass as HomeAssistant).callService = before.callService;
+        await el.updateComplete;
+        await tap(el, 'warmer');
+        vi.advanceTimersByTime(1_500);
+        await flush(el);
+        expect(calls(before)).toEqual([
+          ['start_override', { zone: 'gym', low: 19, high: 24, hours: 3 }],
+        ]);
+        el.remove();
+        // A peak ends mid-burst: from the range without its relaxing.
+        const during = shaped('active', '17', '24', { low_adjustment: -1, high_adjustment: 1 });
+        const after = await nowTab(during, peakEntities());
+        await tap(after, 'cooler');
+        after.hass = shaped('waiting', '18', '23', {});
+        (after.hass as HomeAssistant).callService = during.callService;
+        await after.updateComplete;
+        await tap(after, 'cooler');
+        vi.advanceTimersByTime(1_500);
+        await flush(after);
+        expect(calls(during)).toEqual([
+          ['start_override', { zone: 'gym', low: 17, high: 22, hours: 3 }],
+        ]);
+      });
+
+      // Where peak saving hasn't moved the range: as before.
+      it('moves the range in force where peak saving hasn’t moved it', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        for (const [state, adj] of [
+          ['active', { low_adjustment: 0, high_adjustment: 0 }],
+          ['preconditioning', { low_adjustment: 0, high_adjustment: 0 }],
+          ['waiting', { low_adjustment: -1, high_adjustment: 1 }],
+          ['override', { low_adjustment: -1, high_adjustment: 1 }],
+        ] as const) {
+          const hass = shaped(state, '19.5', '22.5', adj);
+          const el = await nowTab(hass, peakEntities());
+          await tap(el, 'warmer');
+          vi.advanceTimersByTime(1_500);
+          await flush(el);
+          expect(calls(hass), state).toEqual([
+            ['start_override', { zone: 'gym', low: 20, high: 23, hours: 3 }],
+          ]);
+          el.remove();
+        }
+      });
+    });
+
     it('moves the band in force as shown, to the tenth', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const hass = makeHass({
