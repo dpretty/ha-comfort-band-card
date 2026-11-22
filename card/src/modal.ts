@@ -221,7 +221,7 @@ export class ComfortBandModal extends LitElement {
     super.disconnectedCallback();
     // HA's toast is heard meanwhile: there's nothing to say on its return.
     this._refusal = null;
-    this._dialog?.close();
+    if (this._dialog?.open) this._dialog.close();
   }
 
   /** Says a refused call to screen readers, while the dialog is open on the

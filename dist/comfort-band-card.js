@@ -9095,7 +9095,7 @@ let It = class extends Ce {
    * never comes back by itself: the room's tile opens it again.
    */
   disconnectedCallback() {
-    super.disconnectedCallback(), this._refusal = null, this._dialog?.close();
+    super.disconnectedCallback(), this._refusal = null, this._dialog?.open && this._dialog.close();
   }
   render() {
     if (!this._isOpen) return $;
