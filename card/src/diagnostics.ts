@@ -15,7 +15,7 @@
 
 import type { ZoneEntities } from './helpers.js';
 import type { HassEntity, HomeAssistant } from './types.js';
-import { degrees, formatTime, knownZone } from './now-status.js';
+import { degrees, formatTime, knownZone, type Band } from './now-status.js';
 
 export type Controller = 'basic' | 'learning' | 'predictive';
 /** The integration's actions (`ACTION_*` in its `const.py`). */
@@ -553,6 +553,21 @@ export function peakShift(
   if (peak.state === 'active') return { kind: 'relaxed', at: at(a.ends) };
   if (peak.state === 'preconditioning') return { kind: 'ahead', at: at(a.next_start) };
   return null;
+}
+
+/**
+ * A range without peak saving's shaping (#69): where it has moved the range
+ * (`peakShift`), its signed adjustments taken off, as the integration says:
+ * "the effective band minus these is the band without it". The range as it
+ * is otherwise; an adjustment it can't read is taken as none.
+ */
+export function withoutPeak(hass: HomeAssistant, entities: ZoneEntities, band: Band): Band {
+  if (!peakShift(hass, entities)) return band;
+  const a = entity(hass, entities, 'peakSaving')!.attributes;
+  return {
+    low: band.low - (num(a.low_adjustment) ?? 0),
+    high: band.high - (num(a.high_adjustment) ?? 0),
+  };
 }
 
 /**

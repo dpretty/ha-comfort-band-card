@@ -740,6 +740,88 @@ describe('comfort-band-now-tab', () => {
       ]);
     });
 
+    // #69: a tap starts an adjustment, which outlasts the peak (peak saving
+    // stands aside while it runs): it moves the schedule's range, not the
+    // one peak saving shaped.
+    describe('during a peak', () => {
+      const peakEntities = () => ({ ...makeEntities(), peakSaving: 'sensor.gym_peak_saving' });
+      const shaped = (state: string, low: string, high: string, adj: Record<string, unknown>) =>
+        makeHass(
+          {
+            'sensor.gym_effective_low': low,
+            'sensor.gym_effective_high': high,
+            'sensor.gym_peak_saving': state,
+          },
+          { 'sensor.gym_peak_saving': adj },
+        );
+
+      it('moves the range without the peak’s relaxing', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        // The schedule's 18–23°, relaxed to 17–24° for the peak.
+        const hass = shaped('active', '17', '24', { low_adjustment: -1, high_adjustment: 1 });
+        const el = await nowTab(hass, peakEntities());
+        await tap(el, 'warmer');
+        expect(statusText(el)).toBe('Adjusting to 18.5–23.5°');
+        vi.advanceTimersByTime(1_500);
+        await flush(el);
+        expect(calls(hass)).toEqual([
+          ['start_override', { zone: 'gym', low: 18.5, high: 23.5, hours: 3 }],
+        ]);
+      });
+
+      it('moves the range without getting ready’s shaping', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        // The schedule's 18–23°, its top brought down 1° ahead of a peak.
+        const hass = shaped('preconditioning', '18', '22', {
+          low_adjustment: 0,
+          high_adjustment: -1,
+        });
+        const el = await nowTab(hass, peakEntities());
+        await tap(el, 'cooler');
+        vi.advanceTimersByTime(1_500);
+        await flush(el);
+        expect(calls(hass)).toEqual([
+          ['start_override', { zone: 'gym', low: 17.5, high: 22.5, hours: 3 }],
+        ]);
+      });
+
+      it('moves it to the tenth, from the shaping as published', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        // Mid-ramp, the adjustments to three decimals.
+        const hass = shaped('active', '17.234', '24.25', {
+          low_adjustment: -1.25,
+          high_adjustment: 1.125,
+        });
+        const el = await nowTab(hass, peakEntities());
+        await tap(el, 'warmer');
+        vi.advanceTimersByTime(1_500);
+        await flush(el);
+        expect(calls(hass)).toEqual([
+          ['start_override', { zone: 'gym', low: 19, high: 23.6, hours: 3 }],
+        ]);
+      });
+
+      // Where peak saving hasn't moved the range: as before.
+      it('moves the range in force where peak saving hasn’t moved it', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        for (const [state, adj] of [
+          ['active', { low_adjustment: 0, high_adjustment: 0 }],
+          ['waiting', { low_adjustment: -1, high_adjustment: 1 }],
+          ['override', { low_adjustment: -1, high_adjustment: 1 }],
+        ] as const) {
+          const hass = shaped(state, '19.5', '22.5', adj);
+          const el = await nowTab(hass, peakEntities());
+          await tap(el, 'warmer');
+          vi.advanceTimersByTime(1_500);
+          await flush(el);
+          expect(calls(hass), state).toEqual([
+            ['start_override', { zone: 'gym', low: 20, high: 23, hours: 3 }],
+          ]);
+          el.remove();
+        }
+      });
+    });
+
     it('moves the band in force as shown, to the tenth', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const hass = makeHass({

@@ -78,7 +78,7 @@ import {
   statusLine,
 } from '../now-status.js';
 import { STATUS_ICONS, controlling, readRoom, readSchedule, sensorNotice } from '../room-status.js';
-import { peakComing, peakShift } from '../diagnostics.js';
+import { peakComing, peakShift, withoutPeak } from '../diagnostics.js';
 
 /** Feedback pills: service label → button text. Order = display order. */
 const FEEDBACK_PILLS: ReadonlyArray<{ label: FeedbackLabel; text: string }> = [
@@ -466,12 +466,19 @@ export class ComfortBandNowTab extends LitElement {
     return Number.isFinite(n) ? n : NaN;
   }
 
-  /** The band in force, to the 0.1° shown, or null when it can't be read. */
+  /** The band Warmer and Cooler move, to the 0.1° shown, or null when it
+   *  can't be read: the band in force, without peak saving's shaping (#69).
+   *  A tap starts an adjustment, which outlasts the peak (peak saving stands
+   *  aside while it runs); from the shaped band, a peak's wider range would
+   *  stay in force for all of it. */
   private _bandInForce(): Band | null {
     const low = this._numericState(this.entities?.effectiveLow ?? null);
     const high = this._numericState(this.entities?.effectiveHigh ?? null);
-    if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
-    return { low: Math.round(low * 10) / 10, high: Math.round(high * 10) / 10 };
+    if (!Number.isFinite(low) || !Number.isFinite(high) || !this.hass || !this.entities) {
+      return null;
+    }
+    const band = withoutPeak(this.hass, this.entities, { low, high });
+    return { low: Math.round(band.low * 10) / 10, high: Math.round(band.high * 10) / 10 };
   }
 
   /** The room's adjustment as HA shows it, or null where its manual band,
