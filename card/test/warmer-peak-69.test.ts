@@ -48,14 +48,22 @@ describe('withoutPeak', () => {
   it('leaves getting ready’s shaping on', () => {
     expect(
       withoutPeak(
-        makeHass('preconditioning', { low_adjustment: 0, high_adjustment: -1 }),
+        makeHass('preconditioning', {
+          low_adjustment: 0,
+          high_adjustment: -1,
+          precondition: 'cooling',
+        }),
         ENTITIES,
         { low: 18, high: 22 },
       ),
     ).toEqual({ low: 18, high: 22 });
     expect(
       withoutPeak(
-        makeHass('preconditioning', { low_adjustment: 1, high_adjustment: 0 }),
+        makeHass('preconditioning', {
+          low_adjustment: 1,
+          high_adjustment: 0,
+          precondition: 'heating',
+        }),
         ENTITIES,
         { low: 19, high: 23 },
       ),

@@ -740,9 +740,10 @@ describe('comfort-band-now-tab', () => {
       ]);
     });
 
-    // #69: a tap starts an adjustment, which outlasts the peak (peak saving
-    // stands aside while it runs): it moves the schedule's range, not the
-    // one peak saving shaped.
+    // #69: a tap starts an adjustment, which can outlast the peak (peak
+    // saving stands aside while it runs). During a peak it moves the range
+    // without the peak's relaxing; while getting ready for one, the range in
+    // force, as before.
     describe('during a peak', () => {
       const peakEntities = () => ({ ...makeEntities(), peakSaving: 'sensor.gym_peak_saving' });
       const shaped = (state: string, low: string, high: string, adj: Record<string, unknown>) =>
@@ -777,6 +778,7 @@ describe('comfort-band-now-tab', () => {
         const preHeat = shaped('preconditioning', '19', '23', {
           low_adjustment: 1,
           high_adjustment: 0,
+          precondition: 'heating',
         });
         const warm = await nowTab(preHeat, peakEntities());
         await tap(warm, 'warmer');
@@ -789,6 +791,7 @@ describe('comfort-band-now-tab', () => {
         const preCool = shaped('preconditioning', '18', '22', {
           low_adjustment: 0,
           high_adjustment: -1,
+          precondition: 'cooling',
         });
         const cool = await nowTab(preCool, peakEntities());
         await tap(cool, 'cooler');
@@ -812,6 +815,41 @@ describe('comfort-band-now-tab', () => {
         await flush(el);
         expect(calls(hass)).toEqual([
           ['start_override', { zone: 'gym', low: 18.7, high: 23.8, hours: 3 }],
+        ]);
+      });
+
+      // Offsets set off the UI's 0.5 step (`number.set_value` doesn't snap):
+      // the adjustment is taken off before rounding.
+      it('takes off an offset of a quarter degree before rounding', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const hass = shaped('active', '17.75', '23.25', {
+          low_adjustment: -0.25,
+          high_adjustment: 0.25,
+        });
+        const el = await nowTab(hass, peakEntities());
+        await tap(el, 'warmer');
+        vi.advanceTimersByTime(1_500);
+        await flush(el);
+        expect(calls(hass)).toEqual([
+          ['start_override', { zone: 'gym', low: 18.5, high: 23.5, hours: 3 }],
+        ]);
+      });
+
+      // The range is taken at a burst's first tap, as before: here the
+      // range moves under a ramp mid-burst.
+      it('moves the range the first tap was made from, though it moves mid-burst', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        const first = shaped('active', '17', '24', { low_adjustment: -1, high_adjustment: 1 });
+        const el = await nowTab(first, peakEntities());
+        await tap(el, 'warmer');
+        el.hass = shaped('active', '17.2', '24.2', { low_adjustment: -1, high_adjustment: 1 });
+        (el.hass as HomeAssistant).callService = first.callService;
+        await el.updateComplete;
+        await tap(el, 'warmer');
+        vi.advanceTimersByTime(1_500);
+        await flush(el);
+        expect(calls(first)).toEqual([
+          ['start_override', { zone: 'gym', low: 19, high: 24, hours: 3 }],
         ]);
       });
 
