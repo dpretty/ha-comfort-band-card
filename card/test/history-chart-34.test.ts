@@ -796,9 +796,10 @@ describe('comfort-band-history-chart readout (#34)', () => {
   // some fonts (Segoe UI) don't draw. The theme's selection colours fill it
   // there, every colour its own (or forced colours would put its words on a
   // plate of the page's colour); a fill shows at any zoom, where a thicker
-  // border rounds. Every rule for the range buttons is pinned whole, in and out of
-  // forced colours, so a rule added, moved or changed that would undo the
-  // fill, resize a button or move its words fails here too.
+  // border rounds. Every rule naming `.ranges` is pinned whole, in and out
+  // of forced colours, so one of them added, moved or changed fails here.
+  // A rule reaching the buttons under another selector isn't caught,
+  // except in forced colours or by its forced-color-adjust (below).
   it('fills the range on show with the selection colours in forced colours (#73)', () => {
     const css = (
       customElements.get('comfort-band-history-chart') as unknown as {
@@ -866,11 +867,14 @@ describe('comfort-band-history-chart readout (#34)', () => {
           'color: HighlightText; outline-color: Highlight;',
       },
     ]);
-    // ...and it's the chart's only rule for forced colours, so none under
-    // another selector can undo it there.
+    // ...and it's the chart's only rule inside a forced-colours query, and
+    // the only rule anywhere in the chart's styles to set forced-color-adjust.
     expect(rules.filter((r) => r.at.includes('forced-colors')).map((r) => r.selector)).toEqual([
       ".ranges button[aria-pressed='true']",
     ]);
+    expect(
+      rules.filter((r) => r.body.includes('forced-color-adjust')).map((r) => r.selector),
+    ).toEqual([".ranges button[aria-pressed='true']"]);
   });
 
   it('is two lines tall whatever its words take, its digits one width', () => {
