@@ -20,10 +20,11 @@ describe('#89 the length picked in forced colours', () => {
   const rules = cssRules('comfort-band-now-tab');
 
   // Every rule naming `.lengths`, whole, in and out of forced colours, and
-  // the focus ring the fill's own ring replaces: one of them added, moved or
-  // changed fails here. A rule reaching the buttons under a selector that
-  // doesn't name `.lengths` isn't caught (except in forced colours, or by
-  // its forced-color-adjust: the next test), nor is an inline style.
+  // the focus ring whose colour the forced rule replaces: one of them added,
+  // moved or changed fails here. A rule reaching the buttons under a
+  // selector that doesn't name `.lengths` isn't caught, unless it's in
+  // forced colours or sets forced-color-adjust (the next test); nor is an
+  // inline style.
   it('fills the length picked with the selection colours, and nothing else changes', () => {
     expect(
       rules.filter((r) => r.selector.includes('lengths') || r.selector === 'button:focus-visible'),
@@ -68,8 +69,9 @@ describe('#89 the length picked in forced colours', () => {
     ]);
   });
 
-  // So no rule under another selector undoes it there, or opts anything
-  // else out of forced colours.
+  // So no other forced-colours rule, under any selector, undoes it there,
+  // and no other rule opts in or out of forced colours. (A rule outside
+  // forced colours can still reach the opted-out button: see above.)
   it("is the Now tab's only forced-colours rule, and its only forced-color-adjust", () => {
     expect(rules.filter((r) => r.at.includes('forced-colors')).map((r) => r.selector)).toEqual([
       PICKED,
