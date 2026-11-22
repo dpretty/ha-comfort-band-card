@@ -34,6 +34,51 @@ const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: 'advanced', label: 'Advanced' },
 ];
 
+/** How long after a touch ends its tap can still come. A browser sends the
+ *  tap's mouse events and click straight after the touch's end, or about
+ *  300 ms later where it waits to see if it's a double tap. */
+export const TAP_WITHIN_MS = 1000;
+
+/** The mouse events a browser makes for a tap after the touch's end, the
+ *  ones that act on what's under it. A double tap's `dblclick` comes after
+ *  its click, once the tap is no longer kept: HA's taps act on the click. */
+const TAP_EVENTS = ['mousedown', 'mouseup', 'click'] as const;
+
+/**
+ * Keeps the tap of a touch just ended in `dialog` in the dialog (#83): until
+ * the tap's click, any of its `TAP_EVENTS` landing anywhere else is stopped,
+ * heard by nothing but a listener the window had first. A modal dialog
+ * covers the page, so they land elsewhere only if the dialog has gone or
+ * been hidden (or another has opened above it): since the touch ended, or
+ * before, with the close not yet come.
+ * That's how HA closes it: for up to 100 ms of a finger being down,
+ * Chromium holds back HA's updates, and one hiding the card runs as the
+ * finger is let go, before the click. A new press ends this, as does the
+ * click, or TAP_WITHIN_MS without one.
+ *
+ * What it can't do: a tap landing in an iframe (a Webpage card) goes to the
+ * iframe's own window, which this doesn't hear. And a card inside a closed
+ * shadow root would have its own taps in the dialog stopped too, the window
+ * seeing no dialog in their path; HA's containers are open.
+ */
+function keepTapIn(dialog: HTMLDialogElement): void {
+  const stray = (e: Event): void => {
+    if (!e.composedPath().includes(dialog)) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+    if (e.type === 'click') done();
+  };
+  const done = (): void => {
+    clearTimeout(timer);
+    for (const type of TAP_EVENTS) window.removeEventListener(type, stray, true);
+    window.removeEventListener('pointerdown', done, true);
+  };
+  for (const type of TAP_EVENTS) window.addEventListener(type, stray, true);
+  window.addEventListener('pointerdown', done, true);
+  const timer = setTimeout(done, TAP_WITHIN_MS);
+}
+
 @customElement('comfort-band-modal')
 export class ComfortBandModal extends LitElement {
   @property({ attribute: false }) public hass?: HomeAssistant;
@@ -247,6 +292,40 @@ export class ComfortBandModal extends LitElement {
    *  call a press makes is kept, however soon HA answers. */
   private _quietOnPress = { handleEvent: this._quiet, capture: true };
 
+  /**
+   * A tap on the dialog as it closes by itself (its card taken off the page,
+   * #75, or hidden where it is, #82) would land on whatever is now under the
+   * finger on the dashboard: another card's switch, say (#83). A touch's end
+   * goes to the element the touch began on, wherever that is by then: in the
+   * dialog, off the page with it, or taken out of it (the History chart
+   * removes its drawing as it leaves). So each touch begun in the dialog
+   * waits for its end there:
+   * - the dialog closed while the finger was down: its tap is cancelled, so
+   *   that finger makes no tap;
+   * - still open: the tap is kept in the dialog (`keepTapIn`), in case the
+   *   dialog goes, or is hidden and yet to close, before the tap's click.
+   * A touch the browser has made a scroll can't be cancelled, and makes no
+   * tap. Heard in the capture phase, so a control keeping its touches to
+   * itself can't hide one. Closed by the person, the dialog is still open as
+   * their touch ends, and the tap lands in it: ✕ closes it on the click.
+   */
+  private _onTouchStart = {
+    handleEvent: (e: TouchEvent): void => {
+      const dialog = e.currentTarget as HTMLDialogElement;
+      e.composedPath()[0]?.addEventListener(
+        'touchend',
+        (end) => {
+          if (!end.cancelable) return;
+          if (dialog.open) keepTapIn(dialog);
+          else end.preventDefault();
+        },
+        { once: true },
+      );
+    },
+    capture: true,
+    passive: true,
+  };
+
   private _onClose = () => {
     this._isOpen = false;
     this._refusal = null;
@@ -311,6 +390,7 @@ export class ComfortBandModal extends LitElement {
         @close=${this._onClose}
         @pointerdown=${this._quietOnPress}
         @keydown=${this._quietOnPress}
+        @touchstart=${this._onTouchStart}
       >
         <div class="frame">
           <header>
