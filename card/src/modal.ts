@@ -197,6 +197,7 @@ export class ComfortBandModal extends LitElement {
   public open(): void {
     this._activeTab = 'now';
     this._isOpen = true;
+    dialogsOpened++;
     this.updateComplete.then(() => this._showModal());
   }
 
@@ -218,15 +219,22 @@ export class ComfortBandModal extends LitElement {
    * modal: out of the top layer, with no backdrop and no Esc, and placed in
    * what holds the card, where the next card or a floorplan's edge can
    * cover it (#75). Back on the page within MOVED_WITHIN_MS, it's still
-   * open, and it's shown modal again, on the tab it was on.
+   * open, and it's shown modal again, on the tab it was on; but if another
+   * room's dialog was opened meanwhile, the person has moved on, and it's
+   * closed instead of covering that one.
    */
   public override connectedCallback(): void {
     super.connectedCallback();
     clearTimeout(this._offPage);
     this.updateComplete.then(() => {
-      if (this._dialog?.open) this._showModal();
+      if (!this._dialog?.open) return;
+      if (dialogsOpened === this._openedAsItLeft) this._showModal();
+      else this._closeAway();
     });
   }
+
+  /** `dialogsOpened` as the card left the page with its dialog open. */
+  private _openedAsItLeft = 0;
 
   /** Started as the card leaves the page with its dialog open. If it runs
    *  out, the card was hidden (a visibility condition, another view), not
@@ -234,8 +242,9 @@ export class ComfortBandModal extends LitElement {
    *  over whatever is open then. */
   private _offPage?: ReturnType<typeof setTimeout>;
 
-  /** Off the page too long: closed. `_isOpen` is cleared here too, as an
-   *  engine needn't send `close` for a dialog off the page. */
+  /** Off the page too long, or another dialog opened meanwhile: closed.
+   *  `_isOpen` is cleared here too, as an engine needn't send `close` for a
+   *  dialog off the page. */
   private _closeAway = (): void => {
     this._dialog?.close();
     this._isOpen = false;
@@ -253,7 +262,9 @@ export class ComfortBandModal extends LitElement {
     super.disconnectedCallback();
     // HA's toast is heard meanwhile: there's nothing to say on its return.
     this._refusal = null;
-    if (this._dialog?.open) this._offPage = setTimeout(this._closeAway, MOVED_WITHIN_MS);
+    if (!this._dialog?.open) return;
+    this._openedAsItLeft = dialogsOpened;
+    this._offPage = setTimeout(this._closeAway, MOVED_WITHIN_MS);
   }
 
   /** Says a refused call to screen readers, while the dialog is open on the
@@ -416,6 +427,9 @@ export class ComfortBandModal extends LitElement {
  *  moved, not hidden (#75): HA's masonry view puts each card back as soon
  *  as it knows its size, well within this. */
 const MOVED_WITHIN_MS = 1000;
+
+/** Rooms' dialogs opened on this page, by any card (#75). */
+let dialogsOpened = 0;
 
 /** Whether a dialog is shown modal; false where the engine can't tell. */
 function isModal(dialog: HTMLDialogElement): boolean {

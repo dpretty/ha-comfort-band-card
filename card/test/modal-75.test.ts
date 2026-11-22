@@ -318,6 +318,21 @@ describe('#75 a dialog left open as its card moves', () => {
     expect(log).toEqual(['showModal', 'close']);
   });
 
+  // #75 review: room A's card hidden, room B's dialog opened, room A's card
+  // back within the second; a tap meant for room B mustn't reach room A.
+  it('closes, not shows, its dialog when another room’s opened meanwhile', async () => {
+    const [a, b] = holders();
+    const roomA = await openIn(a);
+    modal.set(dialogOf(roomA)!, false);
+    roomA.remove();
+    const roomB = await openIn(b);
+    a.appendChild(roomA);
+    await settle(roomA);
+    expect(dialogOf(roomA)).toBeNull();
+    expect(dialogOf(roomB)!.matches(':modal')).toBe(true);
+    expect(log).toEqual(['showModal', 'showModal', 'close']);
+  });
+
   // `close()` while the card is off the page, put back in the same task.
   it('stays closed when closed while its card is off the page', async () => {
     const [a, b] = holders();
