@@ -171,12 +171,9 @@ export class ComfortBandModal extends LitElement {
       /* A phone (#3): full screen, where HA's own dialogs are (450 px wide
          or 500 px tall, or less). A floating dialog left 19 px of dashboard down
          each side of a 320 px phone. The padding keeps the header and the
-         panel's end clear of a notch or the home indicator. Only while it's
-         modal (#75): one left open as its card moves in the page isn't, and
-         is placed in what holds the card, so 100% of that could leave its
-         content out of reach. It floats at its own size then, as before. */
+         panel's end clear of a notch or the home indicator. */
       @media (max-width: 450px), (max-height: 500px) {
-        dialog:modal {
+        dialog {
           box-sizing: border-box;
           width: 100%;
           max-width: none;
@@ -188,7 +185,7 @@ export class ComfortBandModal extends LitElement {
           padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0)
             env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
         }
-        dialog:modal .frame {
+        .frame {
           height: 100%;
         }
       }
@@ -200,7 +197,32 @@ export class ComfortBandModal extends LitElement {
   public open(): void {
     this._activeTab = 'now';
     this._isOpen = true;
-    this.updateComplete.then(() => this._dialog?.showModal());
+    this.updateComplete.then(() => this._showModal());
+  }
+
+  /** Shows the dialog modal. One left open but not modal (below) is closed
+   *  and shown again: `showModal()` refuses a dialog that's open. */
+  private _showModal(): void {
+    const dialog = this._dialog;
+    if (!dialog?.isConnected) return;
+    if (dialog.open) {
+      if (isModal(dialog)) return;
+      dialog.close();
+    }
+    dialog.showModal();
+  }
+
+  /**
+   * A card moved in the page with its dialog open, as HA's masonry view does
+   * when its columns change (a phone turned) and a visibility condition can,
+   * leaves the dialog open but not modal: out of the top layer, with no
+   * backdrop and no Esc, and placed in what holds the card, where the next
+   * card or a floorplan's edge can cover it (#75). Back on the page, it's
+   * shown modal again, on the tab it was on.
+   */
+  public override connectedCallback(): void {
+    super.connectedCallback();
+    if (this._isOpen) this.updateComplete.then(() => this._showModal());
   }
 
   public close(): void {
@@ -219,11 +241,10 @@ export class ComfortBandModal extends LitElement {
 
   /** Says a refused call to screen readers, while the dialog is open on the
    *  page. Closed, or with the card off the page, the dialog makes nothing
-   *  inert, so HA's toast is heard, and nothing here is. Not covered: a
-   *  card moved in the page with the dialog open (as HA's masonry view can,
-   *  when its columns change) leaves the dialog open but not modal, as on
-   *  main; then the toast is heard, and these words too. Of refusals
-   *  answered at the same moment, only the last one's words are said. */
+   *  inert, so HA's toast is heard, and nothing here is. A card moved in
+   *  the page with the dialog open is shown modal again once back (#75).
+   *  Of refusals answered at the same moment, only the last one's words
+   *  are said. */
   private _announce = (words: string): void => {
     if (!this._isOpen || !this.isConnected) return;
     this._refusal = { words, n: ++this._refusals };
@@ -243,6 +264,8 @@ export class ComfortBandModal extends LitElement {
   private _quietOnPress = { handleEvent: this._quiet, capture: true };
 
   private _onClose = () => {
+    // Shown modal again (#75): the close was the dialog's on its way back.
+    if (this._dialog?.open) return;
     this._isOpen = false;
     this._refusal = null;
     this.dispatchEvent(
@@ -369,6 +392,15 @@ export class ComfortBandModal extends LitElement {
           .announce=${this._announce}
         ></comfort-band-advanced-tab>`;
     }
+  }
+}
+
+/** Whether a dialog is shown modal; false where the engine can't tell. */
+function isModal(dialog: HTMLDialogElement): boolean {
+  try {
+    return dialog.matches(':modal');
+  } catch {
+    return false;
   }
 }
 

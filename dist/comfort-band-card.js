@@ -9042,9 +9042,9 @@ let It = class extends Ce {
     }, this._quiet = () => {
       this._refusal = null;
     }, this._quietOnPress = { handleEvent: this._quiet, capture: !0 }, this._onClose = () => {
-      this._isOpen = !1, this._refusal = null, this.dispatchEvent(
+      this._dialog?.open || (this._isOpen = !1, this._refusal = null, this.dispatchEvent(
         new CustomEvent("comfort-band-modal-close", { bubbles: !0, composed: !0 })
-      );
+      ));
     }, this._onSelectTab = (e) => {
       this._activeTab = e;
     }, this._onTablistKeydown = (e) => {
@@ -9077,7 +9077,30 @@ let It = class extends Ce {
   /** Opens on Now, whichever tab it was left on: the family's tap shouldn't
    *  land on Advanced because someone set the house up last. */
   open() {
-    this._activeTab = "now", this._isOpen = !0, this.updateComplete.then(() => this._dialog?.showModal());
+    this._activeTab = "now", this._isOpen = !0, this.updateComplete.then(() => this._showModal());
+  }
+  /** Shows the dialog modal. One left open but not modal (below) is closed
+   *  and shown again: `showModal()` refuses a dialog that's open. */
+  _showModal() {
+    const e = this._dialog;
+    if (e?.isConnected) {
+      if (e.open) {
+        if (Zp(e)) return;
+        e.close();
+      }
+      e.showModal();
+    }
+  }
+  /**
+   * A card moved in the page with its dialog open, as HA's masonry view does
+   * when its columns change (a phone turned) and a visibility condition can,
+   * leaves the dialog open but not modal: out of the top layer, with no
+   * backdrop and no Esc, and placed in what holds the card, where the next
+   * card or a floorplan's edge can cover it (#75). Back on the page, it's
+   * shown modal again, on the tab it was on.
+   */
+  connectedCallback() {
+    super.connectedCallback(), this._isOpen && this.updateComplete.then(() => this._showModal());
   }
   close() {
     this._dialog?.close();
@@ -9279,12 +9302,9 @@ It.styles = [
       /* A phone (#3): full screen, where HA's own dialogs are (450 px wide
          or 500 px tall, or less). A floating dialog left 19 px of dashboard down
          each side of a 320 px phone. The padding keeps the header and the
-         panel's end clear of a notch or the home indicator. Only while it's
-         modal (#75): one left open as its card moves in the page isn't, and
-         is placed in what holds the card, so 100% of that could leave its
-         content out of reach. It floats at its own size then, as before. */
+         panel's end clear of a notch or the home indicator. */
       @media (max-width: 450px), (max-height: 500px) {
-        dialog:modal {
+        dialog {
           box-sizing: border-box;
           width: 100%;
           max-width: none;
@@ -9296,7 +9316,7 @@ It.styles = [
           padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0)
             env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
         }
-        dialog:modal .frame {
+        .frame {
           height: 100%;
         }
       }
@@ -9329,10 +9349,17 @@ dn([
 It = dn([
   Ge("comfort-band-modal")
 ], It);
-var Zp = Object.defineProperty, Jp = Object.getOwnPropertyDescriptor, Ir = (e, t, n, i) => {
-  for (var o = i > 1 ? void 0 : i ? Jp(t, n) : t, s = e.length - 1, r; s >= 0; s--)
+function Zp(e) {
+  try {
+    return e.matches(":modal");
+  } catch {
+    return !1;
+  }
+}
+var Jp = Object.defineProperty, Qp = Object.getOwnPropertyDescriptor, Ir = (e, t, n, i) => {
+  for (var o = i > 1 ? void 0 : i ? Qp(t, n) : t, s = e.length - 1, r; s >= 0; s--)
     (r = e[s]) && (o = (i ? r(t, n, o) : r(o)) || o);
-  return i && o && Zp(t, n, o), o;
+  return i && o && Jp(t, n, o), o;
 };
 let go = class extends Ce {
   constructor() {
@@ -9528,10 +9555,10 @@ Ir([
 go = Ir([
   Ge("comfort-band-card-editor")
 ], go);
-var Qp = Object.defineProperty, Xp = Object.getOwnPropertyDescriptor, cs = (e, t, n, i) => {
-  for (var o = i > 1 ? void 0 : i ? Xp(t, n) : t, s = e.length - 1, r; s >= 0; s--)
+var Xp = Object.defineProperty, em = Object.getOwnPropertyDescriptor, cs = (e, t, n, i) => {
+  for (var o = i > 1 ? void 0 : i ? em(t, n) : t, s = e.length - 1, r; s >= 0; s--)
     (r = e[s]) && (o = (i ? r(t, n, o) : r(o)) || o);
-  return i && o && Qp(t, n, o), o;
+  return i && o && Xp(t, n, o), o;
 };
 let Ni = class extends Ce {
   constructor() {
