@@ -1699,7 +1699,7 @@ function _o(e, t) {
   return n.state === "active" ? { kind: "relaxed", at: o(i.ends) } : n.state === "preconditioning" ? { kind: "ahead", at: o(i.next_start) } : null;
 }
 function jh(e, t, n) {
-  if (!_o(e, t)) return n;
+  if (_o(e, t)?.kind !== "relaxed") return n;
   const i = mt(e, t, "peakSaving").attributes;
   return {
     low: n.low - (Ue(i.low_adjustment) ?? 0),
@@ -1918,10 +1918,11 @@ let bt = class extends Ce {
     return Number.isFinite(n) ? n : NaN;
   }
   /** The band Warmer and Cooler move, to the 0.1° shown, or null when it
-   *  can't be read: the band in force, without peak saving's shaping (#69).
-   *  A tap starts an adjustment, which outlasts the peak (peak saving stands
-   *  aside while it runs); from the shaped band, a peak's wider range would
-   *  stay in force for all of it. */
+   *  can't be read: the band in force, without a peak's relaxing (#69). A
+   *  tap starts an adjustment, which can outlast the peak, and peak saving
+   *  stands aside while it runs: from the relaxed band, the peak's wider
+   *  range would stay in force for all of it. Taken when the first tap of a
+   *  burst is made. */
   _bandInForce() {
     const e = this._numericState(this.entities?.effectiveLow ?? null), t = this._numericState(this.entities?.effectiveHigh ?? null);
     if (!Number.isFinite(e) || !Number.isFinite(t) || !this.hass || !this.entities)

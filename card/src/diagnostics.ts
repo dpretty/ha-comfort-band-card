@@ -556,13 +556,16 @@ export function peakShift(
 }
 
 /**
- * A range without peak saving's shaping (#69): where it has moved the range
- * (`peakShift`), its signed adjustments taken off, as the integration says:
- * "the effective band minus these is the band without it". The range as it
- * is otherwise; an adjustment it can't read is taken as none.
+ * A range without a peak's relaxing (#69): where a peak has relaxed it
+ * (`peakShift`, `relaxed`), peak saving's signed adjustments taken off, as
+ * the integration says: "the effective band minus these is the band without
+ * it". The range as it is otherwise, getting ready for a peak included: that
+ * narrows the range towards comfort, and without it, a tap would move the
+ * edge the heating or cooling is working towards against the tap. An
+ * adjustment it can't read is taken as none.
  */
 export function withoutPeak(hass: HomeAssistant, entities: ZoneEntities, band: Band): Band {
-  if (!peakShift(hass, entities)) return band;
+  if (peakShift(hass, entities)?.kind !== 'relaxed') return band;
   const a = entity(hass, entities, 'peakSaving')!.attributes;
   return {
     low: band.low - (num(a.low_adjustment) ?? 0),

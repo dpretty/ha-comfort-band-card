@@ -467,10 +467,11 @@ export class ComfortBandNowTab extends LitElement {
   }
 
   /** The band Warmer and Cooler move, to the 0.1° shown, or null when it
-   *  can't be read: the band in force, without peak saving's shaping (#69).
-   *  A tap starts an adjustment, which outlasts the peak (peak saving stands
-   *  aside while it runs); from the shaped band, a peak's wider range would
-   *  stay in force for all of it. */
+   *  can't be read: the band in force, without a peak's relaxing (#69). A
+   *  tap starts an adjustment, which can outlast the peak, and peak saving
+   *  stands aside while it runs: from the relaxed band, the peak's wider
+   *  range would stay in force for all of it. Taken when the first tap of a
+   *  burst is made. */
   private _bandInForce(): Band | null {
     const low = this._numericState(this.entities?.effectiveLow ?? null);
     const high = this._numericState(this.entities?.effectiveHigh ?? null);

@@ -1,7 +1,9 @@
 /**
- * #69: Warmer and Cooler move the schedule's range, not the one peak saving
- * shaped: `withoutPeak` takes peak saving's published adjustments off the
- * range in force, where it has moved it.
+ * #69: during a peak, Warmer and Cooler move the range without the peak's
+ * relaxing: `withoutPeak` takes peak saving's published adjustments off the
+ * range in force, where a peak has relaxed it. Not while getting ready for
+ * one: that narrows the range towards comfort, and taking it off would move
+ * the edge the heating or cooling works towards against the tap.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -43,21 +45,21 @@ describe('withoutPeak', () => {
     ).toEqual({ low: 18, high: 23 });
   });
 
-  it('takes getting ready’s shaping off, one edge or both', () => {
+  it('leaves getting ready’s shaping on', () => {
     expect(
       withoutPeak(
         makeHass('preconditioning', { low_adjustment: 0, high_adjustment: -1 }),
         ENTITIES,
         { low: 18, high: 22 },
       ),
-    ).toEqual({ low: 18, high: 23 });
+    ).toEqual({ low: 18, high: 22 });
     expect(
       withoutPeak(
-        makeHass('preconditioning', { low_adjustment: 1.5, high_adjustment: 0 }),
+        makeHass('preconditioning', { low_adjustment: 1, high_adjustment: 0 }),
         ENTITIES,
-        { low: 19.5, high: 23 },
+        { low: 19, high: 23 },
       ),
-    ).toEqual({ low: 18, high: 23 });
+    ).toEqual({ low: 19, high: 23 });
   });
 
   it('takes off the edge it can read where the other can’t be', () => {
