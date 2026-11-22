@@ -185,11 +185,26 @@ describe('#82 a dialog whose card is hidden where it is', () => {
     expect(log).toEqual([]);
   });
 
-  it('has nothing to close on a compact card, which opens no dialog', async () => {
+  // Watched all the same: HA hands a card a new config in place, and a
+  // compact card made full opens a dialog.
+  it('watches a compact card, which has nothing to close yet', async () => {
     const card = await cardIn(holder(), true);
     expect(modalOf(card)).toBeNull();
+    expect(watches.filter((w) => w.targets.includes(card))).toHaveLength(1);
     drawn(card, false);
     expect(() => sizeChanges(card)).not.toThrow();
+  });
+
+  // The observer watches the card's box; an inline one never reports a
+  // change in size, so hidden in place it would never be heard.
+  it('is a block, so its box is what gets watched', async () => {
+    const card = await cardIn(holder());
+    const styles = (card.constructor as typeof ComfortBandCard).styles as { cssText: string }[];
+    const css = styles.map((s) => s.cssText).join('\n');
+    const displays = [...css.matchAll(/:host\s*\{([^}]*)\}/g)]
+      .map((rule) => rule[1].match(/display:\s*([\w-]+)/)?.[1])
+      .filter(Boolean);
+    expect(displays).toEqual(['block']);
   });
 
   it('watches its size only while on the page', async () => {

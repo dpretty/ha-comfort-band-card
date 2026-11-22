@@ -71,6 +71,8 @@ export class ComfortBandCard extends LitElement {
     return { type: 'custom:comfort-band-card', zone };
   }
 
+  // `:host` is a block: it's the card's box that `_drawn` watches (#82),
+  // and an inline box never reports a change in size.
   public static override styles = [
     tokens,
     css`
@@ -137,14 +139,16 @@ export class ComfortBandCard extends LitElement {
 
   /**
    * HA's sections view can hide a card where it is, with `display: none` on
-   * what holds it: a section whose visibility condition turns false, or the
-   * sidebar's side not shown when the view becomes tabs (a phone turned to
-   * portrait). A dialog open from the card then has no box: it can't be
-   * seen, and being modal it leaves the rest of the page inert, with no Esc
-   * on a phone (#82). So when the card stops being drawn, its dialog is
-   * closed, as when the card leaves the page (#75); the tile opens it again.
-   * Its size going to nothing is what's watched; a card scrolled out of view
-   * keeps its size.
+   * what holds it: a section whose visibility condition turns false; the
+   * sidebar, by its own condition; or, in a view whose sidebar has tab
+   * labels, the side not shown once the view drops to one column (a phone
+   * turned to portrait). A dialog open from the card then has no box: it
+   * can't be seen, and being modal it leaves the rest of the page inert,
+   * with no Esc on a phone (#82). So when the card stops being drawn, its
+   * dialog is closed, as when the card leaves the page (#75); the tile opens
+   * it again. The observer is told of any change in the card's size, and
+   * closes the dialog only when the card has no box at all: a card squeezed
+   * to nothing, or scrolled out of view, is still drawn.
    */
   private _drawn = new ResizeObserver(() => {
     if (this.getClientRects().length === 0) this._modal?.close();
