@@ -17,7 +17,8 @@ import { cssRules } from './_css.js';
 const PICKED = ".lengths button[aria-pressed='true']";
 
 describe('#89 the length picked in forced colours', () => {
-  const rules = cssRules('comfort-band-now-tab');
+  // Read in each test, so CSS the helper can't parse fails a named test.
+  const now = () => cssRules('comfort-band-now-tab');
 
   // Every rule naming `.lengths`, whole, in and out of forced colours, and
   // the focus ring whose colour the forced rule replaces: one of them added,
@@ -27,7 +28,7 @@ describe('#89 the length picked in forced colours', () => {
   // inline style.
   it('fills the length picked with the selection colours, and nothing else changes', () => {
     expect(
-      rules.filter((r) => r.selector.includes('lengths') || r.selector === 'button:focus-visible'),
+      now().filter((r) => r.selector.includes('lengths') || r.selector === 'button:focus-visible'),
     ).toEqual([
       { at: '', selector: '.lengths, .steps', body: 'display: flex; gap: var(--cb-gap-sm);' },
       {
@@ -73,6 +74,7 @@ describe('#89 the length picked in forced colours', () => {
   // and no other rule opts in or out of forced colours. (A rule outside
   // forced colours can still reach the opted-out button: see above.)
   it("is the Now tab's only forced-colours rule, and its only forced-color-adjust", () => {
+    const rules = now();
     expect(rules.filter((r) => r.at.includes('forced-colors')).map((r) => r.selector)).toEqual([
       PICKED,
     ]);
