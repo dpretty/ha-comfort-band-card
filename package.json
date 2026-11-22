@@ -1,6 +1,6 @@
 {
   "name": "comfort-band-card",
-  "version": "0.22.7",
+  "version": "0.22.8",
   "private": true,
   "description": "Lovelace card for the Comfort Band Home Assistant integration",
   "type": "module",

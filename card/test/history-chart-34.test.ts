@@ -791,6 +791,92 @@ describe('comfort-band-history-chart readout (#34)', () => {
     expect(pressedRule).toMatch(/font-weight:\s*500/);
   });
 
+  // #73: forced colours give every range button the same border and
+  // background, leaving the one on show marked only by its weight, which
+  // some fonts (Segoe UI) don't draw. The theme's selection colours fill it
+  // there, every colour its own (or forced colours would put its words on a
+  // plate of the page's colour); a fill shows at any zoom, where a thicker
+  // border rounds. Every rule naming `.ranges` is pinned whole, in and out
+  // of forced colours, so one of them added, moved or changed fails here.
+  // A rule reaching the buttons under another selector isn't caught,
+  // except in forced colours or by its forced-color-adjust (below).
+  it('fills the range on show with the selection colours in forced colours (#73)', () => {
+    const css = (
+      customElements.get('comfort-band-history-chart') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((s) => s.cssText)
+      .join('\n')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    // Every rule, with the at-rules it's in, in order.
+    const rules: Array<{ at: string; selector: string; body: string }> = [];
+    const open: string[] = [];
+    let text = '';
+    for (const ch of css) {
+      if (ch === '{') {
+        open.push(text.replace(/\s+/g, ' ').trim());
+        text = '';
+      } else if (ch === '}') {
+        const head = open.pop()!;
+        if (!head.startsWith('@')) {
+          rules.push({
+            at: open.join(' '),
+            // One quote style, so `"true"` can't slip past as another rule.
+            selector: head.replace(/"/g, "'"),
+            body: text.replace(/\s+/g, ' ').trim(),
+          });
+        }
+        text = '';
+      } else {
+        text += ch;
+      }
+    }
+    expect(rules.filter((r) => r.selector.includes('ranges'))).toEqual([
+      {
+        at: '',
+        selector: '.ranges',
+        body: 'display: flex; justify-content: flex-end; gap: var(--cb-gap-xs);',
+      },
+      {
+        at: '',
+        selector: '.ranges button',
+        body:
+          'font: inherit; font-size: 12px; min-width: 44px; min-height: 44px; padding: 0 12px; ' +
+          'border-radius: 16px; border: 1px solid var(--cb-track-bg); background: transparent; ' +
+          'color: var(--cb-text-secondary); cursor: pointer;',
+      },
+      {
+        at: '',
+        selector: ".ranges button[aria-pressed='true']",
+        body:
+          'background: var(--cb-track-bg); border-color: var(--cb-text-secondary); ' +
+          'color: var(--cb-text-primary); font-weight: 500;',
+      },
+      {
+        at: '',
+        selector: '.ranges button:focus-visible',
+        body: 'outline: 2px solid var(--primary-color); outline-offset: 2px;',
+      },
+      {
+        at: '@media (forced-colors: active)',
+        selector: ".ranges button[aria-pressed='true']",
+        body:
+          'forced-color-adjust: none; background: Highlight; border-color: Highlight; ' +
+          'color: HighlightText; outline-color: Highlight;',
+      },
+    ]);
+    // ...and it's the chart's only rule inside a forced-colours query, and
+    // the only rule anywhere in the chart's styles to set forced-color-adjust.
+    expect(rules.filter((r) => r.at.includes('forced-colors')).map((r) => r.selector)).toEqual([
+      ".ranges button[aria-pressed='true']",
+    ]);
+    expect(
+      rules.filter((r) => r.body.includes('forced-color-adjust')).map((r) => r.selector),
+    ).toEqual([".ranges button[aria-pressed='true']"]);
+  });
+
   it('is two lines tall whatever its words take, its digits one width', () => {
     const css = (
       customElements.get('comfort-band-history-chart') as unknown as {
