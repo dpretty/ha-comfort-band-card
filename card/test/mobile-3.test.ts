@@ -89,14 +89,14 @@ describe('#3 the dialog on a phone', () => {
 
   it('fills the screen at 450 px wide or 500 px tall, or less, where HA’s own dialogs do', () => {
     const phone = atBlock(cssOf('comfort-band-modal'), PHONE);
-    expect(prop(phone, 'dialog', 'width')).toBe('100%');
-    expect(prop(phone, 'dialog', 'max-width')).toBe('none');
-    expect(prop(phone, 'dialog', 'height')).toBe('100%');
-    expect(prop(phone, 'dialog', 'max-height')).toBe('none');
-    expect(prop(phone, 'dialog', 'margin')).toBe('0');
-    expect(prop(phone, 'dialog', 'border-radius')).toBe('0');
-    expect(prop(phone, 'dialog', 'box-shadow')).toBe('none');
-    expect(prop(phone, '.frame', 'height')).toBe('100%');
+    expect(prop(phone, 'dialog:modal', 'width')).toBe('100%');
+    expect(prop(phone, 'dialog:modal', 'max-width')).toBe('none');
+    expect(prop(phone, 'dialog:modal', 'height')).toBe('100%');
+    expect(prop(phone, 'dialog:modal', 'max-height')).toBe('none');
+    expect(prop(phone, 'dialog:modal', 'margin')).toBe('0');
+    expect(prop(phone, 'dialog:modal', 'border-radius')).toBe('0');
+    expect(prop(phone, 'dialog:modal', 'box-shadow')).toBe('none');
+    expect(prop(phone, 'dialog:modal .frame', 'height')).toBe('100%');
   });
 
   it('scrolls the panel inside it, so nothing is cut off at the screen’s end', () => {
@@ -115,11 +115,20 @@ describe('#3 the dialog on a phone', () => {
 
   it('keeps clear of a notch and the home indicator, inside its own size', () => {
     const phone = atBlock(cssOf('comfort-band-modal'), PHONE);
-    expect(prop(phone, 'dialog', 'padding')).toBe(
+    expect(prop(phone, 'dialog:modal', 'padding')).toBe(
       'env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0)',
     );
     // Without it, the padding would make the dialog wider and taller than the screen.
-    expect(prop(phone, 'dialog', 'box-sizing')).toBe('border-box');
+    expect(prop(phone, 'dialog:modal', 'box-sizing')).toBe('border-box');
+  });
+
+  // #75: a card moved in the page with its dialog open leaves the dialog
+  // open but not modal, placed in what holds the card: 100% of that could
+  // leave its content out of reach. It keeps its floating size.
+  it('fills the screen only while the dialog is modal', () => {
+    const phone = atBlock(cssOf('comfort-band-modal'), PHONE).replace(/\/\*[\s\S]*?\*\//g, '');
+    const selectors = [...phone.matchAll(/([^{}]+)\{[^}]*\}/g)].map((m) => m[1].trim());
+    expect(selectors).toEqual(['dialog:modal', 'dialog:modal .frame']);
   });
 
   it('floats over the dashboard as before on anything larger', () => {

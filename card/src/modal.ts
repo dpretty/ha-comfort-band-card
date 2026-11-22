@@ -171,9 +171,12 @@ export class ComfortBandModal extends LitElement {
       /* A phone (#3): full screen, where HA's own dialogs are (450 px wide
          or 500 px tall, or less). A floating dialog left 19 px of dashboard down
          each side of a 320 px phone. The padding keeps the header and the
-         panel's end clear of a notch or the home indicator. */
+         panel's end clear of a notch or the home indicator. Only while it's
+         modal (#75): one left open as its card moves in the page isn't, and
+         is placed in what holds the card, so 100% of that could leave its
+         content out of reach. It floats at its own size then, as before. */
       @media (max-width: 450px), (max-height: 500px) {
-        dialog {
+        dialog:modal {
           box-sizing: border-box;
           width: 100%;
           max-width: none;
@@ -185,7 +188,7 @@ export class ComfortBandModal extends LitElement {
           padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0)
             env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
         }
-        .frame {
+        dialog:modal .frame {
           height: 100%;
         }
       }
