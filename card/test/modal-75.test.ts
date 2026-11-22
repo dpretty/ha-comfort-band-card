@@ -5,7 +5,8 @@
  *
  * jsdom has no `<dialog>` behaviour, so this file stands in for the
  * browser's: `showModal()` refuses an open dialog, `close()` fires `close`
- * as a task, `:modal` is tracked, and the test does what the browser's
+ * later (as a task in WebKit; Chromium sends it with the next rendering
+ * update), `:modal` is tracked, and the test does what the browser's
  * removing steps do (a modal dialog taken off the page stays open but stops
  * being modal).
  */
@@ -126,8 +127,9 @@ describe('#75 a dialog left open as its card moves', () => {
     expect(selected?.textContent?.trim()).toBe('Advanced');
   });
 
-  // Before #75, `showModal()` threw on a dialog open but not modal, and the
-  // tile did nothing until the dashboard reloaded.
+  // Before #75, `showModal()` threw on a dialog open but not modal: the tile
+  // did nothing, and only the dialog's ✕ closed it, where that could be
+  // reached.
   it('opens modal from its tile while open but not modal', async () => {
     const [a] = holders();
     const el = await openIn(a);
@@ -135,6 +137,38 @@ describe('#75 a dialog left open as its card moves', () => {
     expect(() => el.open()).not.toThrow();
     await settle(el);
     expect(dialogOf(el)!.matches(':modal')).toBe(true);
+  });
+
+  // Within the task: a frame painted between the move and the re-show would
+  // show the dialog sized from what holds the card.
+  it('is shown modal again before the next task', async () => {
+    const [a, b] = holders();
+    const el = await openIn(a);
+    modal.set(dialogOf(el)!, false);
+    b.appendChild(el);
+    await el.updateComplete;
+    await Promise.resolve();
+    expect(dialogOf(el)!.matches(':modal')).toBe(true);
+  });
+
+  // Chrome before 105 and Safari before 15.6 have <dialog> but can't parse
+  // `:modal`: there the dialog is taken as not modal, so shown modal again.
+  it('shows it modal again where the engine can’t tell whether it is', async () => {
+    const proto = window.HTMLDialogElement.prototype as HTMLDialogElement;
+    const tracked = proto.matches;
+    proto.matches = function (this: HTMLDialogElement, selector: string) {
+      if (selector === ':modal') throw new SyntaxError("':modal' is not a valid selector");
+      return tracked.call(this, selector);
+    };
+    try {
+      const [a, b] = holders();
+      const el = await openIn(a);
+      await move(el, b);
+      expect(log).toEqual(['showModal', 'close', 'showModal']);
+      expect(dialogOf(el)).not.toBeNull();
+    } finally {
+      proto.matches = tracked;
+    }
   });
 
   it('leaves a modal dialog as it is when opened again', async () => {
