@@ -9037,9 +9037,7 @@ const jn = [
 ];
 let It = class extends Ce {
   constructor() {
-    super(...arguments), this.zone = "", this.zoneName = "", this._activeTab = "now", this._isOpen = !1, this._refusal = null, this._refusals = 0, this._openedAsItLeft = 0, this._closeAway = () => {
-      this._dialog?.close(), this._isOpen = !1;
-    }, this._announce = (e) => {
+    super(...arguments), this.zone = "", this.zoneName = "", this._activeTab = "now", this._isOpen = !1, this._refusal = null, this._refusals = 0, this._openedAsItLeft = 0, this._announce = (e) => {
       !this._isOpen || !this.isConnected || (this._refusal = { words: e, n: ++this._refusals });
     }, this._quiet = () => {
       this._refusal = null;
@@ -9105,7 +9103,7 @@ let It = class extends Ce {
    */
   connectedCallback() {
     super.connectedCallback(), clearTimeout(this._offPage), this.updateComplete.then(() => {
-      this._dialog?.open && (er === this._openedAsItLeft ? this._showModal() : this._closeAway());
+      this._dialog?.open && (er === this._openedAsItLeft ? this._showModal() : this.close());
     });
   }
   close() {
@@ -9115,7 +9113,7 @@ let It = class extends Ce {
     this._activeTab = e;
   }
   disconnectedCallback() {
-    super.disconnectedCallback(), this._refusal = null, this._dialog?.open && (this._openedAsItLeft = er, this._offPage = setTimeout(this._closeAway, Jp));
+    super.disconnectedCallback(), this._refusal = null, this._dialog?.open && (this._openedAsItLeft = er, this._offPage = setTimeout(() => this.close(), Jp));
   }
   render() {
     if (!this._isOpen) return $;

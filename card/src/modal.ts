@@ -229,7 +229,7 @@ export class ComfortBandModal extends LitElement {
     this.updateComplete.then(() => {
       if (!this._dialog?.open) return;
       if (dialogsOpened === this._openedAsItLeft) this._showModal();
-      else this._closeAway();
+      else this.close();
     });
   }
 
@@ -241,14 +241,6 @@ export class ComfortBandModal extends LitElement {
    *  moved, and the dialog is closed for good, so it can't come back later
    *  over whatever is open then. */
   private _offPage?: ReturnType<typeof setTimeout>;
-
-  /** Off the page too long, or another dialog opened meanwhile: closed.
-   *  `_isOpen` is cleared here too, as an engine needn't send `close` for a
-   *  dialog off the page. */
-  private _closeAway = (): void => {
-    this._dialog?.close();
-    this._isOpen = false;
-  };
 
   public close(): void {
     this._dialog?.close();
@@ -264,7 +256,7 @@ export class ComfortBandModal extends LitElement {
     this._refusal = null;
     if (!this._dialog?.open) return;
     this._openedAsItLeft = dialogsOpened;
-    this._offPage = setTimeout(this._closeAway, MOVED_WITHIN_MS);
+    this._offPage = setTimeout(() => this.close(), MOVED_WITHIN_MS);
   }
 
   /** Says a refused call to screen readers, while the dialog is open on the
@@ -424,8 +416,10 @@ export class ComfortBandModal extends LitElement {
 }
 
 /** How long a card can be off the page with its dialog open and count as
- *  moved, not hidden (#75): HA's masonry view puts each card back as soon
- *  as it knows its size, well within this. */
+ *  moved, not hidden (#75). HA's masonry view puts the cards back in order,
+ *  each once it has its size: within a frame or two on a dashboard already
+ *  drawn. It waits up to 500 ms for a card slow to give one, so slow cards
+ *  ahead of this one can take it past this, and then the dialog closes. */
 const MOVED_WITHIN_MS = 1000;
 
 /** Rooms' dialogs opened on this page, by any card (#75). */

@@ -275,7 +275,8 @@ describe('#75 a dialog left open as its card moves', () => {
     expect(log).toEqual(['showModal']);
     vi.advanceTimersByTime(1);
     expect(log).toEqual(['showModal', 'close']);
-    vi.advanceTimersByTime(0);
+    // Its `close` event, off the page: Chromium and WebKit send it.
+    vi.advanceTimersByTime(1);
     b.appendChild(el);
     await el.updateComplete;
     await Promise.resolve();
