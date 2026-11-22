@@ -48,8 +48,9 @@ const TAP_EVENTS = ['mousedown', 'mouseup', 'click'] as const;
  * Keeps the tap of a touch just ended in `dialog` in the dialog (#83): until
  * the tap's click, any of its `TAP_EVENTS` landing anywhere else is stopped,
  * heard by nothing but a listener the window had first. A modal dialog
- * covers the page, so they land elsewhere only if, since the touch ended,
- * the dialog has gone or been hidden (or another has opened above it).
+ * covers the page, so they land elsewhere only if the dialog has gone or
+ * been hidden (or another has opened above it): since the touch ended, or
+ * before, with the close not yet come.
  * That's how HA closes it: for up to 100 ms of a finger being down,
  * Chromium holds back HA's updates, and one hiding the card runs as the
  * finger is let go, before the click. A new press ends this, as does the
@@ -302,7 +303,7 @@ export class ComfortBandModal extends LitElement {
    * - the dialog closed while the finger was down: its tap is cancelled, so
    *   that finger makes no tap;
    * - still open: the tap is kept in the dialog (`keepTapIn`), in case the
-   *   dialog goes before the tap's click comes.
+   *   dialog goes, or is hidden and yet to close, before the tap's click.
    * A touch the browser has made a scroll can't be cancelled, and makes no
    * tap. Heard in the capture phase, so a control keeping its touches to
    * itself can't hide one. Closed by the person, the dialog is still open as

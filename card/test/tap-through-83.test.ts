@@ -225,8 +225,9 @@ describe('#83 a finger on a dialog that closes by itself', () => {
     expect(finger.lift().defaultPrevented).toBe(true);
   });
 
-  // The dialog it began in: the room opened again (another finger on its
-  // tile) is a new one, and opening it doesn't give the old touch a tap.
+  // The dialog it began in: the room opened again (from a key, say; a second
+  // finger's tap makes no click) is a new one, and opening it doesn't give
+  // the old touch a tap.
   it('taps nothing when its room is opened again before it is let go', async () => {
     const place = holder();
     const card = await openCardIn(place);
@@ -343,8 +344,8 @@ describe('#83 a tap let go just before its dialog closes by itself', () => {
     expect(dialogIn(modal.shadowRoot!)?.open).toBe(true);
   });
 
-  // Kept in the dialog it began in: another room's, opened from its tile in
-  // the meantime, isn't that.
+  // Kept in the dialog it began in: another room's, opened in the meantime
+  // (from a key, say: a press on its tile would end the keep), isn't that.
   it("lands nowhere in another room's dialog", async () => {
     const place = holder();
     const card = await letGoOnClose(place);
@@ -353,7 +354,24 @@ describe('#83 a tap let go just before its dialog closes by itself', () => {
     const modal = other.shadowRoot!.querySelector('comfort-band-modal')!;
     const tab = dialogIn(modal.shadowRoot!)!.querySelector('#cb-tab-schedule')!;
     expect(tapLands(tab)).toEqual([true, true, true]);
+    await modal.updateComplete;
     expect(tab.getAttribute('aria-selected')).toBe('false');
+  });
+
+  // The pressed element redrawn away (the History chart rebuilt, a schedule
+  // row updated) with the dialog still open: the person's tap, kept.
+  it('keeps the tap of a press whose element left the open dialog', async () => {
+    const place = holder();
+    const card = await openCardIn(place);
+    const modal = card.shadowRoot!.querySelector('comfort-band-modal')!;
+    const dialog = dialogIn(modal.shadowRoot!)!;
+    const drawing = document.createElement('div');
+    dialog.querySelector('comfort-band-now-tab')!.shadowRoot!.append(drawing);
+    const finger = press(drawing);
+    drawing.remove();
+    expect(finger.lift().defaultPrevented).toBe(false);
+    card.remove();
+    expect(tapLands(pageControl(place).el)).toEqual([true, true, true]);
   });
 
   it('keeps nothing once its click has landed in the dialog', async () => {
@@ -373,6 +391,21 @@ describe('#83 a tap let go just before its dialog closes by itself', () => {
     expect(tapLands(page.el)).toEqual([true, true, true]);
     expect(tapLands(page.el)).toEqual([false, false, false]);
     expect(page.heard).toEqual(['mousedown', 'mouseup', 'click']);
+  });
+
+  // In the dialog too: a touch there that made no click (a long press, say)
+  // leaves nothing kept once the next press comes.
+  it('keeps nothing once a new press comes in the dialog', async () => {
+    const place = holder();
+    const card = await openCardIn(place);
+    const modal = card.shadowRoot!.querySelector('comfort-band-modal')!;
+    const dialog = dialogIn(modal.shadowRoot!)!;
+    press(dialog.querySelector('.close')!).lift();
+    dialog
+      .querySelector('#cb-tab-schedule')!
+      .dispatchEvent(new Event('pointerdown', { bubbles: true, composed: true }));
+    card.remove();
+    expect(tapLands(pageControl(place).el)).toEqual([false, false, false]);
   });
 
   it('keeps nothing once a new press comes', async () => {
