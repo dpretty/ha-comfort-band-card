@@ -4,7 +4,7 @@
  * go, would tap whatever is now under it on the dashboard. A touch's end
  * goes to the element it began on, wherever that is by then, so each touch
  * begun in the dialog waits for its end there and cancels it if the dialog
- * has closed: that finger does nothing. Cancelled, a touch makes no click
+ * has closed: that finger makes no tap. Cancelled, a touch makes no click
  * (nor the mouse events a browser makes for a tap). Let go with the dialog
  * still open, its tap is kept in the dialog until its click: HA's update
  * closing the dialog can run between the touch's end and the click.
@@ -299,9 +299,10 @@ describe('#83 a finger on a dialog that closes by itself', () => {
   });
 });
 
-// Chromium holds back HA's updates while a finger is down, and runs them as
-// it's let go: an update hiding the card closes the dialog after the touch's
-// end, before the tap's click.
+// Chromium holds back HA's updates for up to 100 ms of a finger being down,
+// and runs them as it's let go: after the touch's end and before the tap's
+// click, an update taking the card off the page closes the dialog, and one
+// hiding it leaves the dialog without a box until the next frame.
 describe('#83 a tap let go just before its dialog closes by itself', () => {
   async function letGoOnClose(place: HTMLElement): Promise<ComfortBandCard> {
     const card = await openCardIn(place);
@@ -342,8 +343,8 @@ describe('#83 a tap let go just before its dialog closes by itself', () => {
     expect(dialogIn(modal.shadowRoot!)?.open).toBe(true);
   });
 
-  // Kept in the dialog it began in: another room's, opened in its place
-  // (by an automation, say), isn't that.
+  // Kept in the dialog it began in: another room's, opened from its tile in
+  // the meantime, isn't that.
   it("lands nowhere in another room's dialog", async () => {
     const place = holder();
     const card = await letGoOnClose(place);
@@ -385,10 +386,10 @@ describe('#83 a tap let go just before its dialog closes by itself', () => {
     expect(tapLands(page.el)).toEqual([false, false, false]);
   });
 
-  // Long enough for a tap a browser holds back to see if it's a double tap
-  // (about 300 ms); short enough that a click from a key soon after lands.
+  // Well past a tap a browser holds back to see if it's a double tap (about
+  // 300 ms); short enough that a click from a key soon after lands.
   it('keeps nothing once its time is up', async () => {
-    expect(TAP_WITHIN_MS).toBeGreaterThanOrEqual(300);
+    expect(TAP_WITHIN_MS).toBeGreaterThanOrEqual(500);
     expect(TAP_WITHIN_MS).toBeLessThanOrEqual(1000);
     const place = holder();
     const card = await openCardIn(place);

@@ -48,13 +48,17 @@ const TAP_EVENTS = ['mousedown', 'mouseup', 'click'] as const;
  * Keeps the tap of a touch just ended in `dialog` in the dialog (#83): until
  * the tap's click, any of its `TAP_EVENTS` landing anywhere else is stopped,
  * heard by nothing but a listener the window had first. A modal dialog
- * covers the page, so they land elsewhere only if the dialog has gone or
- * been hidden since the touch ended. That's how HA closes it: for up to
- * 100 ms of a finger being down, Chromium holds back HA's updates, and one
- * hiding the card runs as the finger is let go, before the click. A new
- * press ends this, as does the click, or TAP_WITHIN_MS without one. A card
- * inside a closed shadow root would have its own taps in the dialog stopped
- * too, the window seeing no dialog in their path; HA's containers are open.
+ * covers the page, so they land elsewhere only if, since the touch ended,
+ * the dialog has gone or been hidden (or another has opened above it).
+ * That's how HA closes it: for up to 100 ms of a finger being down,
+ * Chromium holds back HA's updates, and one hiding the card runs as the
+ * finger is let go, before the click. A new press ends this, as does the
+ * click, or TAP_WITHIN_MS without one.
+ *
+ * What it can't do: a tap landing in an iframe (a Webpage card) goes to the
+ * iframe's own window, which this doesn't hear. And a card inside a closed
+ * shadow root would have its own taps in the dialog stopped too, the window
+ * seeing no dialog in their path; HA's containers are open.
  */
 function keepTapIn(dialog: HTMLDialogElement): void {
   const stray = (e: Event): void => {
@@ -296,7 +300,7 @@ export class ComfortBandModal extends LitElement {
    * removes its drawing as it leaves). So each touch begun in the dialog
    * waits for its end there:
    * - the dialog closed while the finger was down: its tap is cancelled, so
-   *   that finger does nothing;
+   *   that finger makes no tap;
    * - still open: the tap is kept in the dialog (`keepTapIn`), in case the
    *   dialog goes before the tap's click comes.
    * A touch the browser has made a scroll can't be cancelled, and makes no
