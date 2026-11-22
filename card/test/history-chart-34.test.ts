@@ -820,8 +820,9 @@ describe('comfort-band-history-chart readout (#34)', () => {
     const pressed = /\.ranges button\[aria-pressed='true'\]\s*\{([^}]*)\}/;
     const inForced = forced.map((block) => pressed.exec(block)?.[1]).filter(Boolean);
     expect(inForced).toHaveLength(1);
-    expect(inForced[0]).toMatch(/border-width:\s*2px;/);
-    expect(inForced[0]).toMatch(/padding:\s*0 11px;/);
+    // The whole rule, so a declaration added there (a border style that
+    // hides it, say) fails here too.
+    expect(inForced[0]!.replace(/\s+/g, ' ').trim()).toBe('border-width: 2px; padding: 0 11px;');
     // ...a pixel more border and a pixel less padding than every range
     // button has.
     const all = /\.ranges button\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
