@@ -182,12 +182,20 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
       }
       /* Forced colours (a Windows contrast theme) give every range button
          the same border and background, so only the weight would mark the
-         one on show. A 2 px border marks it, as the Now tab's length
-         buttons do (#73); a pixel less padding keeps its words in place. */
+         one on show, and some fonts have no weight between. The theme's
+         selection colours fill it there (#73): a fill shows at any zoom,
+         where a thicker border can round to the others' width, and nothing
+         changes size. Left to forced colours, its words would sit on a
+         plate of the page's colour, so it takes every colour itself, all
+         the theme's: its focus ring Highlight, as forced colours make the
+         others'. */
       @media (forced-colors: active) {
         .ranges button[aria-pressed='true'] {
-          border-width: 2px;
-          padding: 0 11px;
+          forced-color-adjust: none;
+          background: Highlight;
+          border-color: Highlight;
+          color: HighlightText;
+          outline-color: Highlight;
         }
       }
       /* Two lines' height whatever its words take, so the chart under it

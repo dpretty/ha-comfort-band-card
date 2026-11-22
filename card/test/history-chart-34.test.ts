@@ -793,9 +793,13 @@ describe('comfort-band-history-chart readout (#34)', () => {
 
   // #73: forced colours give every range button the same border and
   // background, leaving the one on show marked only by its weight, which
-  // some fonts (Segoe UI) don't draw. A 2 px border marks it there, taking a
-  // pixel of its padding so its words don't move; normal colours as before.
-  it('marks the range on show with a 2 px border in forced colours (#73)', () => {
+  // some fonts (Segoe UI) don't draw. The theme's selection colours fill it
+  // there, every colour its own (or forced colours would put its words on a
+  // plate of the page's colour); a fill shows at any zoom, where a thicker
+  // border rounds. Every rule for the range buttons is pinned whole, in and out of
+  // forced colours, so a rule added, moved or changed that would undo the
+  // fill, resize a button or move its words fails here too.
+  it('fills the range on show with the selection colours in forced colours (#73)', () => {
     const css = (
       customElements.get('comfort-band-history-chart') as unknown as {
         styles: Array<{ cssText: string }>;
@@ -805,31 +809,63 @@ describe('comfort-band-history-chart readout (#34)', () => {
       .map((s) => s.cssText)
       .join('\n')
       .replace(/\/\*[\s\S]*?\*\//g, '');
-    // The text of each `@media (forced-colors: active)` block.
-    const forced: string[] = [];
-    const at = /@media\s*\(forced-colors:\s*active\)\s*\{/g;
-    for (let m = at.exec(css); m; m = at.exec(css)) {
-      let depth = 1;
-      let i = at.lastIndex;
-      for (; depth > 0 && i < css.length; i++) {
-        if (css[i] === '{') depth++;
-        else if (css[i] === '}') depth--;
+    // Every rule, with the at-rules it's in, in order.
+    const rules: Array<{ at: string; selector: string; body: string }> = [];
+    const open: string[] = [];
+    let text = '';
+    for (const ch of css) {
+      if (ch === '{') {
+        open.push(text.replace(/\s+/g, ' ').trim());
+        text = '';
+      } else if (ch === '}') {
+        const head = open.pop()!;
+        if (!head.startsWith('@')) {
+          rules.push({
+            at: open.join(' '),
+            // One quote style, so `"true"` can't slip past as another rule.
+            selector: head.replace(/"/g, "'"),
+            body: text.replace(/\s+/g, ' ').trim(),
+          });
+        }
+        text = '';
+      } else {
+        text += ch;
       }
-      forced.push(css.slice(at.lastIndex, i - 1));
     }
-    const pressed = /\.ranges button\[aria-pressed='true'\]\s*\{([^}]*)\}/;
-    const inForced = forced.map((block) => pressed.exec(block)?.[1]).filter(Boolean);
-    expect(inForced).toHaveLength(1);
-    // The whole rule, so a declaration added there (a border style that
-    // hides it, say) fails here too.
-    expect(inForced[0]!.replace(/\s+/g, ' ').trim()).toBe('border-width: 2px; padding: 0 11px;');
-    // ...a pixel more border and a pixel less padding than every range
-    // button has.
-    const all = /\.ranges button\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
-    expect(all).toMatch(/border:\s*1px solid/);
-    expect(all).toMatch(/padding:\s*0 12px;/);
-    // Outside forced colours the one on show keeps its 1 px border.
-    expect(pressed.exec(css)?.[1]).not.toMatch(/border-width|padding/);
+    expect(rules.filter((r) => r.selector.includes('ranges'))).toEqual([
+      {
+        at: '',
+        selector: '.ranges',
+        body: 'display: flex; justify-content: flex-end; gap: var(--cb-gap-xs);',
+      },
+      {
+        at: '',
+        selector: '.ranges button',
+        body:
+          'font: inherit; font-size: 12px; min-width: 44px; min-height: 44px; padding: 0 12px; ' +
+          'border-radius: 16px; border: 1px solid var(--cb-track-bg); background: transparent; ' +
+          'color: var(--cb-text-secondary); cursor: pointer;',
+      },
+      {
+        at: '',
+        selector: ".ranges button[aria-pressed='true']",
+        body:
+          'background: var(--cb-track-bg); border-color: var(--cb-text-secondary); ' +
+          'color: var(--cb-text-primary); font-weight: 500;',
+      },
+      {
+        at: '',
+        selector: '.ranges button:focus-visible',
+        body: 'outline: 2px solid var(--primary-color); outline-offset: 2px;',
+      },
+      {
+        at: '@media (forced-colors: active)',
+        selector: ".ranges button[aria-pressed='true']",
+        body:
+          'forced-color-adjust: none; background: Highlight; border-color: Highlight; ' +
+          'color: HighlightText; outline-color: Highlight;',
+      },
+    ]);
   });
 
   it('is two lines tall whatever its words take, its digits one width', () => {
