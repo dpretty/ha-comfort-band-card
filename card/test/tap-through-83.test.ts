@@ -279,15 +279,18 @@ describe('#83 a finger on a dialog that closes by itself', () => {
     expect(cancel).not.toHaveBeenCalled();
   });
 
+  // Cancelled, the tap makes no mouse events, so none is waited for: a
+  // click on the dashboard without a press (from a key) lands.
   it('leaves the next tap, on the dashboard, alone', async () => {
     const page = holder();
     const el = await openModalIn(page);
-    press(dialogIn(el.shadowRoot!)!.querySelector('.close')!);
+    const finger = press(dialogIn(el.shadowRoot!)!.querySelector('.close')!);
     el.remove();
     await settle(el);
-    const other = document.createElement('button');
-    page.appendChild(other);
-    expect(press(other).lift().defaultPrevented).toBe(false);
+    expect(finger.lift().defaultPrevented).toBe(true);
+    const other = pageControl(page);
+    expect(press(other.el).lift().defaultPrevented).toBe(false);
+    expect(tapLands(other.el)).toEqual([false, false, false]);
   });
 });
 
@@ -309,8 +312,16 @@ describe('#83 a tap let go just before its dialog closes by itself', () => {
     const card = await letGoOnClose(place);
     card.remove();
     const page = pageControl(place);
-    expect(tapLands(page.el)).toEqual([true, true, true]);
+    // Not even heard by a listener on the window that came later.
+    const later = vi.fn();
+    window.addEventListener('click', later, true);
+    try {
+      expect(tapLands(page.el)).toEqual([true, true, true]);
+    } finally {
+      window.removeEventListener('click', later, true);
+    }
     expect(page.heard).toEqual([]);
+    expect(later).not.toHaveBeenCalled();
   });
 
   // Hidden: the dialog is still open until the card's observer runs.
