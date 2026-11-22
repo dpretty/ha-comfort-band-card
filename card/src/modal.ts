@@ -217,28 +217,26 @@ export class ComfortBandModal extends LitElement {
    * when its columns change (a phone turned), leaves the dialog open but not
    * modal: out of the top layer, with no backdrop and no Esc, and placed in
    * what holds the card, where the next card or a floorplan's edge can
-   * cover it (#75). Back on the page within MOVED_WITHIN_MS, it's shown
-   * modal again, on the tab it was on.
+   * cover it (#75). Back on the page within MOVED_WITHIN_MS, it's still
+   * open, and it's shown modal again, on the tab it was on.
    */
   public override connectedCallback(): void {
     super.connectedCallback();
-    if (this._offPage === null) return;
     clearTimeout(this._offPage);
-    this._offPage = null;
     this.updateComplete.then(() => {
-      if (this._isOpen && this._dialog?.open) this._showModal();
+      if (this._dialog?.open) this._showModal();
     });
   }
 
-  /** Set while the card is off the page with its dialog open: when it runs
+  /** Started as the card leaves the page with its dialog open. If it runs
    *  out, the card was hidden (a visibility condition, another view), not
    *  moved, and the dialog is closed for good, so it can't come back later
    *  over whatever is open then. */
-  private _offPage: ReturnType<typeof setTimeout> | null = null;
+  private _offPage?: ReturnType<typeof setTimeout>;
 
-  /** Off the page too long: closed. */
+  /** Off the page too long: closed. `_isOpen` is cleared here too, as an
+   *  engine needn't send `close` for a dialog off the page. */
   private _closeAway = (): void => {
-    this._offPage = null;
     this._dialog?.close();
     this._isOpen = false;
   };
@@ -255,9 +253,7 @@ export class ComfortBandModal extends LitElement {
     super.disconnectedCallback();
     // HA's toast is heard meanwhile: there's nothing to say on its return.
     this._refusal = null;
-    if (!this._isOpen || !this._dialog?.open) return;
-    if (this._offPage !== null) clearTimeout(this._offPage);
-    this._offPage = setTimeout(this._closeAway, MOVED_WITHIN_MS);
+    if (this._dialog?.open) this._offPage = setTimeout(this._closeAway, MOVED_WITHIN_MS);
   }
 
   /** Says a refused call to screen readers, while the dialog is open on the

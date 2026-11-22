@@ -318,6 +318,30 @@ describe('#75 a dialog left open as its card moves', () => {
     expect(log).toEqual(['showModal', 'close']);
   });
 
+  // `close()` while the card is off the page, put back in the same task.
+  it('stays closed when closed while its card is off the page', async () => {
+    const [a, b] = holders();
+    const el = await openIn(a);
+    modal.set(dialogOf(el)!, false);
+    el.remove();
+    el.close();
+    b.appendChild(el);
+    await settle(el);
+    expect(dialogOf(el)).toBeNull();
+    expect(log).toEqual(['showModal', 'close']);
+  });
+
+  it('leaves nothing running when its card leaves with no dialog open', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const [a] = holders();
+    const el = document.createElement('comfort-band-modal');
+    Object.assign(el, { hass: makeHass(), zone: 'gym', zoneName: 'Gym', entities });
+    a.appendChild(el);
+    await el.updateComplete;
+    el.remove();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('shows nothing while its card is off the page', async () => {
     const [a] = holders();
     const el = await openIn(a);
