@@ -1,7 +1,9 @@
 /**
  * #75: a card moved in the page with its dialog open (HA's masonry view
- * re-columning, a visibility condition) leaves the dialog open but not
- * modal. Back on the page, it's shown modal again, on the tab it was on.
+ * re-columning) leaves the dialog open but not modal. Back on the page
+ * within a second, it's shown modal again, on the tab it was on; off the
+ * page longer (hidden by a visibility condition, another view), the dialog
+ * is closed, so it can't come back later over whatever is open then.
  *
  * jsdom has no `<dialog>` behaviour, so this file stands in for the
  * browser's: `showModal()` refuses an open dialog, `close()` fires `close`
@@ -48,9 +50,14 @@ beforeAll(() => {
   };
 });
 
+const made: ComfortBandModal[] = [];
+
+// Closed first, so taking them off the page starts no timer.
 afterEach(() => {
+  for (const el of made.splice(0)) el.close();
   teardown();
   log.length = 0;
+  vi.useRealTimers();
 });
 
 const entities = { deviceId: 'dev-gym', deviceName: 'gym' } as unknown as ZoneEntities;
@@ -77,6 +84,7 @@ async function openIn(holder: HTMLElement): Promise<ComfortBandModal> {
   const el = document.createElement('comfort-band-modal');
   Object.assign(el, { hass: makeHass(), zone: 'gym', zoneName: 'Gym', entities });
   holder.appendChild(el);
+  made.push(el);
   await el.updateComplete;
   el.open();
   await settle(el);
@@ -127,16 +135,62 @@ describe('#75 a dialog left open as its card moves', () => {
     expect(selected?.textContent?.trim()).toBe('Advanced');
   });
 
-  // Before #75, `showModal()` threw on a dialog open but not modal: the tile
-  // did nothing, and only the dialog's ✕ closed it, where that could be
-  // reached.
+  // Before #75, `showModal()` refused a dialog open but not modal: the tile
+  // put it on Now, and it stayed not modal.
   it('opens modal from its tile while open but not modal', async () => {
     const [a] = holders();
     const el = await openIn(a);
     modal.set(dialogOf(el)!, false);
-    expect(() => el.open()).not.toThrow();
+    el.open();
     await settle(el);
     expect(dialogOf(el)!.matches(':modal')).toBe(true);
+    expect(log).toEqual(['showModal', 'close', 'showModal']);
+  });
+
+  // A phone turned and turned back.
+  it('is shown modal again after each of several moves, on its tab', async () => {
+    const [a, b] = holders();
+    const el = await openIn(a);
+    el.selectTab('schedule');
+    await el.updateComplete;
+    await move(el, b);
+    await move(el, a);
+    expect(dialogOf(el)!.matches(':modal')).toBe(true);
+    expect(log).toEqual(['showModal', 'close', 'showModal', 'close', 'showModal']);
+    const selected = el.shadowRoot!.querySelector('button[role="tab"][aria-selected="true"]');
+    expect(selected?.textContent?.trim()).toBe('Schedule');
+  });
+
+  // The close the re-show causes can arrive with the card off the page again.
+  it('stays open through that close though its card is off the page again', async () => {
+    const [a, b] = holders();
+    const el = await openIn(a);
+    modal.set(dialogOf(el)!, false);
+    b.appendChild(el);
+    await el.updateComplete;
+    await Promise.resolve();
+    modal.set(dialogOf(el)!, false);
+    el.remove();
+    await new Promise((r) => setTimeout(r, 0));
+    a.appendChild(el);
+    await settle(el);
+    expect(dialogOf(el)!.matches(':modal')).toBe(true);
+  });
+
+  // A refusal answered between the re-show and the close it causes is still
+  // said: that close isn't the dialog's.
+  it('keeps a refusal’s words through the close on its way back', async () => {
+    const [a, b] = holders();
+    const el = await openIn(a);
+    modal.set(dialogOf(el)!, false);
+    b.appendChild(el);
+    await el.updateComplete;
+    await Promise.resolve();
+    (el as unknown as { _announce: (words: string) => void })._announce('Not sent: try again.');
+    await settle(el);
+    expect(el.shadowRoot!.querySelector('dialog > .refusal')?.textContent?.trim()).toBe(
+      'Not sent: try again.',
+    );
   });
 
   // Within the task: a frame painted between the move and the re-show would
@@ -199,6 +253,69 @@ describe('#75 a dialog left open as its card moves', () => {
     await move(el, b);
     expect(dialogOf(el)).toBeNull();
     expect(log).toEqual([]);
+  });
+
+  // #75 review: hidden by a visibility condition, a card can come back at
+  // any time, over another room's dialog.
+  it('closes the dialog when its card is off the page for over a second', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const [a, b] = holders();
+    const el = document.createElement('comfort-band-modal');
+    Object.assign(el, { hass: makeHass(), zone: 'gym', zoneName: 'Gym', entities });
+    a.appendChild(el);
+    made.push(el);
+    await el.updateComplete;
+    el.open();
+    await el.updateComplete;
+    await Promise.resolve();
+    expect(log).toEqual(['showModal']);
+    modal.set(dialogOf(el)!, false);
+    el.remove();
+    vi.advanceTimersByTime(999);
+    expect(log).toEqual(['showModal']);
+    vi.advanceTimersByTime(1);
+    expect(log).toEqual(['showModal', 'close']);
+    vi.advanceTimersByTime(0);
+    b.appendChild(el);
+    await el.updateComplete;
+    await Promise.resolve();
+    expect(dialogOf(el)).toBeNull();
+    expect(log).toEqual(['showModal', 'close']);
+  });
+
+  it('shows it modal again when its card is back within a second', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const [a, b] = holders();
+    const el = document.createElement('comfort-band-modal');
+    Object.assign(el, { hass: makeHass(), zone: 'gym', zoneName: 'Gym', entities });
+    a.appendChild(el);
+    made.push(el);
+    await el.updateComplete;
+    el.open();
+    await el.updateComplete;
+    await Promise.resolve();
+    modal.set(dialogOf(el)!, false);
+    el.remove();
+    vi.advanceTimersByTime(999);
+    b.appendChild(el);
+    await el.updateComplete;
+    await Promise.resolve();
+    vi.advanceTimersByTime(5_000);
+    await el.updateComplete;
+    expect(dialogOf(el)!.matches(':modal')).toBe(true);
+    expect(log).toEqual(['showModal', 'close', 'showModal']);
+  });
+
+  // Closed, then moved in the same task, before its close event.
+  it('stays closed when its card moves just as it closes', async () => {
+    const [a, b] = holders();
+    const el = await openIn(a);
+    el.close();
+    modal.set(dialogOf(el)!, false);
+    b.appendChild(el);
+    await settle(el);
+    expect(dialogOf(el)).toBeNull();
+    expect(log).toEqual(['showModal', 'close']);
   });
 
   it('shows nothing while its card is off the page', async () => {
