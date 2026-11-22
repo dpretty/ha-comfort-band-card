@@ -208,19 +208,27 @@ export class ComfortBandModal extends LitElement {
     this._activeTab = tab;
   }
 
+  /**
+   * Leaving the page, the dialog is closed (#75). A modal dialog taken off
+   * the page stays open but stops being modal: put back (HA's masonry view
+   * re-columning as a phone turns), it would sit in what holds the card,
+   * sized from it, with no backdrop and no Esc, where the next card or a
+   * floorplan's edge can cover it; hidden (a visibility condition, another
+   * view), it would come back that way whenever the card does. Closed, it
+   * never comes back by itself: the room's tile opens it again.
+   */
   public override disconnectedCallback(): void {
     super.disconnectedCallback();
     // HA's toast is heard meanwhile: there's nothing to say on its return.
     this._refusal = null;
+    if (this._dialog?.open) this._dialog.close();
   }
 
   /** Says a refused call to screen readers, while the dialog is open on the
-   *  page. Closed, or with the card off the page, the dialog makes nothing
-   *  inert, so HA's toast is heard, and nothing here is. Not covered: a
-   *  card moved in the page with the dialog open (as HA's masonry view can,
-   *  when its columns change) leaves the dialog open but not modal, as on
-   *  main; then the toast is heard, and these words too. Of refusals
-   *  answered at the same moment, only the last one's words are said. */
+   *  page. Closed, or with the card off the page (which closes it, #75), the
+   *  dialog makes nothing inert, so HA's toast is heard, and nothing here
+   *  is. Of refusals answered at the same moment, only the last one's words
+   *  are said. */
   private _announce = (words: string): void => {
     if (!this._isOpen || !this.isConnected) return;
     this._refusal = { words, n: ++this._refusals };

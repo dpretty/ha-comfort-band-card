@@ -4,7 +4,7 @@ A Lovelace card for the [Comfort Band](https://github.com/dpretty/ha-comfort-ban
 
 Compact tile + expanded modal with **Now / Schedule / Advanced** tabs: Now and Schedule for the whole family, Advanced for whoever sets the house up. Replaces a dashboard full of sliders, input_numbers, and `browser_mod` popups with one element per zone.
 
-On a phone (450 px wide or 500 px tall, or less) the modal fills the screen, as Home Assistant's own dialogs do; on anything larger it floats over the dashboard. Its buttons, tabs, toggles and fields are all at least 44 px to tap; the exact-range slider's handles are 24 px.
+On a phone (450 px wide or 500 px tall, or less) the modal fills the screen, as Home Assistant's own dialogs do; on anything larger it floats over the dashboard. Its buttons, tabs, toggles and fields are all at least 44 px to tap; the exact-range slider's handles are 24 px. If its card leaves the page while it's open (a masonry dashboard re-arranging its columns as a phone turns, the window is resized or the page zoomed; a visibility condition hiding it; another view), the modal closes, taking anything typed in it and not yet saved; tap the room again to reopen it. A sections dashboard doesn't move its cards.
 
 > Requires the `comfort_band` integration ≥ **v0.1.0** for the tile, Now, Schedule and History, **≥ v0.3.0** for full profile management (create / clone / rename / delete), or **≥ v0.4.0** for the "feels like" and learning switches.
 
