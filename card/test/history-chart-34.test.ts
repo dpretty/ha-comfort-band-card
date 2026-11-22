@@ -866,6 +866,11 @@ describe('comfort-band-history-chart readout (#34)', () => {
           'color: HighlightText; outline-color: Highlight;',
       },
     ]);
+    // ...and it's the chart's only rule for forced colours, so none under
+    // another selector can undo it there.
+    expect(rules.filter((r) => r.at.includes('forced-colors')).map((r) => r.selector)).toEqual([
+      ".ranges button[aria-pressed='true']",
+    ]);
   });
 
   it('is two lines tall whatever its words take, its digits one width', () => {
