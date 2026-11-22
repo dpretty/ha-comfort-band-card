@@ -197,50 +197,8 @@ export class ComfortBandModal extends LitElement {
   public open(): void {
     this._activeTab = 'now';
     this._isOpen = true;
-    dialogsOpened++;
-    this.updateComplete.then(() => this._showModal());
+    this.updateComplete.then(() => this._dialog?.showModal());
   }
-
-  /** Shows the dialog modal. One left open but not modal (below) is closed
-   *  and shown again: `showModal()` refuses a dialog that's open. */
-  private _showModal(): void {
-    const dialog = this._dialog;
-    if (!dialog?.isConnected) return;
-    if (dialog.open) {
-      if (isModal(dialog)) return;
-      dialog.close();
-    }
-    dialog.showModal();
-  }
-
-  /**
-   * A card moved in the page with its dialog open, as HA's masonry view does
-   * when its columns change (a phone turned), leaves the dialog open but not
-   * modal: out of the top layer, with no backdrop and no Esc, and placed in
-   * what holds the card, where the next card or a floorplan's edge can
-   * cover it (#75). Back on the page within MOVED_WITHIN_MS, it's still
-   * open, and it's shown modal again, on the tab it was on; but if another
-   * room's dialog was opened meanwhile, the person has moved on, and it's
-   * closed instead of covering that one.
-   */
-  public override connectedCallback(): void {
-    super.connectedCallback();
-    clearTimeout(this._offPage);
-    this.updateComplete.then(() => {
-      if (!this._dialog?.open) return;
-      if (dialogsOpened === this._openedAsItLeft) this._showModal();
-      else this.close();
-    });
-  }
-
-  /** `dialogsOpened` as the card left the page with its dialog open. */
-  private _openedAsItLeft = 0;
-
-  /** Started as the card leaves the page with its dialog open. If it runs
-   *  out, the card was hidden (a visibility condition, another view), not
-   *  moved, and the dialog is closed for good, so it can't come back later
-   *  over whatever is open then. */
-  private _offPage?: ReturnType<typeof setTimeout>;
 
   public close(): void {
     this._dialog?.close();
@@ -250,20 +208,26 @@ export class ComfortBandModal extends LitElement {
     this._activeTab = tab;
   }
 
+  /**
+   * Leaving the page, the dialog is closed (#75). A modal dialog taken off
+   * the page stays open but stops being modal: put back (HA's masonry view
+   * re-columning as a phone turns), it would sit in what holds the card,
+   * sized from it, with no backdrop and no Esc, where the next card or a
+   * floorplan's edge can cover it; hidden (a visibility condition, another
+   * view), it would come back that way whenever the card does. Closed, it
+   * never comes back by itself: the room's tile opens it again.
+   */
   public override disconnectedCallback(): void {
     super.disconnectedCallback();
     // HA's toast is heard meanwhile: there's nothing to say on its return.
     this._refusal = null;
-    if (!this._dialog?.open) return;
-    this._openedAsItLeft = dialogsOpened;
-    this._offPage = setTimeout(() => this.close(), MOVED_WITHIN_MS);
+    this._dialog?.close();
   }
 
   /** Says a refused call to screen readers, while the dialog is open on the
-   *  page. Closed, or with the card off the page, the dialog makes nothing
-   *  inert, so HA's toast is heard, and nothing here is. A card moved in
-   *  the page with the dialog open is shown modal again once back (#75).
-   *  Of refusals answered at the same moment, only the last one's words
+   *  page. Closed, or with the card off the page (which closes it, #75), the
+   *  dialog makes nothing inert, so HA's toast is heard, and nothing here
+   *  is. Of refusals answered at the same moment, only the last one's words
    *  are said. */
   private _announce = (words: string): void => {
     if (!this._isOpen || !this.isConnected) return;
@@ -284,8 +248,6 @@ export class ComfortBandModal extends LitElement {
   private _quietOnPress = { handleEvent: this._quiet, capture: true };
 
   private _onClose = () => {
-    // Shown modal again (#75): the close was the dialog's on its way back.
-    if (this._dialog?.open) return;
     this._isOpen = false;
     this._refusal = null;
     this.dispatchEvent(
@@ -412,25 +374,6 @@ export class ComfortBandModal extends LitElement {
           .announce=${this._announce}
         ></comfort-band-advanced-tab>`;
     }
-  }
-}
-
-/** How long a card can be off the page with its dialog open and count as
- *  moved, not hidden (#75). HA's masonry view puts the cards back in order,
- *  each once it has its size: within a frame or two on a dashboard already
- *  drawn. It waits up to 500 ms for a card slow to give one, so slow cards
- *  ahead of this one can take it past this, and then the dialog closes. */
-const MOVED_WITHIN_MS = 1000;
-
-/** Rooms' dialogs opened on this page, by any card (#75). */
-let dialogsOpened = 0;
-
-/** Whether a dialog is shown modal; false where the engine can't tell. */
-function isModal(dialog: HTMLDialogElement): boolean {
-  try {
-    return dialog.matches(':modal');
-  } catch {
-    return false;
   }
 }
 
