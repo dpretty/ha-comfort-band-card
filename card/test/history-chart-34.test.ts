@@ -791,6 +791,46 @@ describe('comfort-band-history-chart readout (#34)', () => {
     expect(pressedRule).toMatch(/font-weight:\s*500/);
   });
 
+  // #73: forced colours give every range button the same border and
+  // background, leaving the one on show marked only by its weight, which
+  // some fonts (Segoe UI) don't draw. A 2 px border marks it there, taking a
+  // pixel of its padding so its words don't move; normal colours as before.
+  it('marks the range on show with a 2 px border in forced colours (#73)', () => {
+    const css = (
+      customElements.get('comfort-band-history-chart') as unknown as {
+        styles: Array<{ cssText: string }>;
+      }
+    ).styles
+      .flat()
+      .map((s) => s.cssText)
+      .join('\n')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    // The text of each `@media (forced-colors: active)` block.
+    const forced: string[] = [];
+    const at = /@media\s*\(forced-colors:\s*active\)\s*\{/g;
+    for (let m = at.exec(css); m; m = at.exec(css)) {
+      let depth = 1;
+      let i = at.lastIndex;
+      for (; depth > 0 && i < css.length; i++) {
+        if (css[i] === '{') depth++;
+        else if (css[i] === '}') depth--;
+      }
+      forced.push(css.slice(at.lastIndex, i - 1));
+    }
+    const pressed = /\.ranges button\[aria-pressed='true'\]\s*\{([^}]*)\}/;
+    const inForced = forced.map((block) => pressed.exec(block)?.[1]).filter(Boolean);
+    expect(inForced).toHaveLength(1);
+    expect(inForced[0]).toMatch(/border-width:\s*2px;/);
+    expect(inForced[0]).toMatch(/padding:\s*0 11px;/);
+    // ...a pixel more border and a pixel less padding than every range
+    // button has.
+    const all = /\.ranges button\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(all).toMatch(/border:\s*1px solid/);
+    expect(all).toMatch(/padding:\s*0 12px;/);
+    // Outside forced colours the one on show keeps its 1 px border.
+    expect(pressed.exec(css)?.[1]).not.toMatch(/border-width|padding/);
+  });
+
   it('is two lines tall whatever its words take, its digits one width', () => {
     const css = (
       customElements.get('comfort-band-history-chart') as unknown as {

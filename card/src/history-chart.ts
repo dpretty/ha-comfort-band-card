@@ -180,6 +180,16 @@ export class ComfortBandHistoryChart extends ComfortBandChartBase {
         outline: 2px solid var(--primary-color);
         outline-offset: 2px;
       }
+      /* Forced colours (a Windows contrast theme) give every range button
+         the same border and background, so only the weight would mark the
+         one on show. A 2 px border marks it, as the Now tab's length
+         buttons do (#73); a pixel less padding keeps its words in place. */
+      @media (forced-colors: active) {
+        .ranges button[aria-pressed='true'] {
+          border-width: 2px;
+          padding: 0 11px;
+        }
+      }
       /* Two lines' height whatever its words take, so the chart under it
          doesn't move as the pointer does (#34). */
       .readout {
