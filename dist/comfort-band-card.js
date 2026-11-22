@@ -9543,7 +9543,9 @@ let Ni = class extends Ce {
   constructor() {
     super(...arguments), this._onTileTap = () => {
       this._modal?.open();
-    };
+    }, this._drawn = new ResizeObserver(() => {
+      this.getClientRects().length === 0 && this._modal?.close();
+    });
   }
   setConfig(e) {
     if (!e?.zone)
@@ -9611,6 +9613,12 @@ let Ni = class extends Ce {
           ></comfort-band-modal>`}
     `;
   }
+  connectedCallback() {
+    super.connectedCallback(), this._drawn.observe(this);
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback(), this._drawn.disconnect();
+  }
   _buildView(e, t) {
     const n = zi(e, t), i = Yl({
       ...n,
@@ -9668,7 +9676,7 @@ Ni = cs([
   preview: !1
 });
 console.info(
-  "%c COMFORT-BAND-CARD %c v0.22.5 ",
+  "%c COMFORT-BAND-CARD %c v0.22.6 ",
   "color:white;background:#2196F3;padding:2px 4px;border-radius:3px",
   "color:#000;background:#fff;padding:2px 4px;border-radius:3px"
 );
