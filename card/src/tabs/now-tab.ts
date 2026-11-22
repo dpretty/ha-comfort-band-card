@@ -563,9 +563,10 @@ export class ComfortBandNowTab extends LitElement {
       await call();
       sent = true;
     } catch {
-      // Even if the tab has gone meanwhile: a tab moved in the page comes
-      // back with it, and a closed one is discarded. The dialog decides
-      // whether the words are heard.
+      // Even if the tab has gone meanwhile: a tab off the page can be put
+      // back, and one whose dialog has closed (as it does when the card
+      // leaves the page, #75) is discarded. The dialog decides whether the
+      // words are heard.
       if (before) {
         this._length = before.length;
         this._pickedNext = before.pickedNext;

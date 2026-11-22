@@ -288,7 +288,8 @@ describe('comfort-band-now-tab when HA refuses a change', () => {
     expect(lengths(el)[0]).toEqual({ text: '1 h', checked: true });
   });
 
-  // Moved in the page while the call was out, the tab comes back with it.
+  // The tab on its own, taken off the page while the call was out and put
+  // back. (In the card, its dialog closes as the card leaves, #75.)
   it('puts the length back for a change refused while the tab was away', async () => {
     const { hass, hold } = setup({ adjusted: true });
     const el = await nowTab(hass);

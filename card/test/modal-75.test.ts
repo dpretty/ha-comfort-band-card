@@ -124,6 +124,20 @@ describe('#75 a dialog whose card leaves the page', () => {
     expect(closed).toHaveBeenCalledTimes(1);
   });
 
+  // A move in one step (HA's masonry view, reusing its columns, puts a card
+  // already on the page before another): the card is back on the page by
+  // the time it hears it left.
+  it('is closed when its card moves in one step', async () => {
+    const [a, b] = holders();
+    const el = await openIn(a);
+    modal.set(dialogOf(el)!, false);
+    b.appendChild(el);
+    expect(el.isConnected).toBe(true);
+    await settle(el);
+    expect(dialogOf(el)).toBeNull();
+    expect(log).toEqual(['showModal', 'close']);
+  });
+
   // Closed as it leaves, not as it comes back: left open off the page, it
   // would come back with the card, not modal, however much later.
   it('is closed as its card leaves, and stays closed when it’s back', async () => {
@@ -139,7 +153,8 @@ describe('#75 a dialog whose card leaves the page', () => {
     expect(log).toEqual(['showModal', 'close']);
   });
 
-  it('opens modal from its tile once its card has moved, on Now', async () => {
+  // `open()` is what the room's tile calls.
+  it('opens modal again once its card has moved, on Now', async () => {
     const [a, b] = holders();
     const el = await openIn(a);
     el.selectTab('advanced');
