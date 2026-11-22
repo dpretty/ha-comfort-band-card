@@ -247,6 +247,19 @@ export class ComfortBandModal extends LitElement {
    *  call a press makes is kept, however soon HA answers. */
   private _quietOnPress = { handleEvent: this._quiet, capture: true };
 
+  /**
+   * A finger still on the dialog as it closes by itself (its card taken off
+   * the page, #75, or hidden where it is, #82), let go, would tap whatever
+   * is now under it on the dashboard: another card's switch, say (#83). The
+   * touch's end still comes here, where the touch began, even with the
+   * dialog off the page, so its tap is cancelled: that finger does nothing.
+   * Closed by the person, it's still open as their touch ends: ✕ closes it
+   * on the click, which comes after.
+   */
+  private _onTouchEnd = (e: TouchEvent): void => {
+    if (e.cancelable && !(e.currentTarget as HTMLDialogElement).open) e.preventDefault();
+  };
+
   private _onClose = () => {
     this._isOpen = false;
     this._refusal = null;
@@ -311,6 +324,7 @@ export class ComfortBandModal extends LitElement {
         @close=${this._onClose}
         @pointerdown=${this._quietOnPress}
         @keydown=${this._quietOnPress}
+        @touchend=${this._onTouchEnd}
       >
         <div class="frame">
           <header>

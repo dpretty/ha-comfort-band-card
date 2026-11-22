@@ -9041,7 +9041,9 @@ let It = class extends Ce {
       !this._isOpen || !this.isConnected || (this._refusal = { words: e, n: ++this._refusals });
     }, this._quiet = () => {
       this._refusal = null;
-    }, this._quietOnPress = { handleEvent: this._quiet, capture: !0 }, this._onClose = () => {
+    }, this._quietOnPress = { handleEvent: this._quiet, capture: !0 }, this._onTouchEnd = (e) => {
+      e.cancelable && !e.currentTarget.open && e.preventDefault();
+    }, this._onClose = () => {
       this._isOpen = !1, this._refusal = null, this.dispatchEvent(
         new CustomEvent("comfort-band-modal-close", { bubbles: !0, composed: !0 })
       );
@@ -9105,6 +9107,7 @@ let It = class extends Ce {
         @close=${this._onClose}
         @pointerdown=${this._quietOnPress}
         @keydown=${this._quietOnPress}
+        @touchend=${this._onTouchEnd}
       >
         <div class="frame">
           <header>
@@ -9676,7 +9679,7 @@ Ni = cs([
   preview: !1
 });
 console.info(
-  "%c COMFORT-BAND-CARD %c v0.22.6 ",
+  "%c COMFORT-BAND-CARD %c v0.22.7 ",
   "color:white;background:#2196F3;padding:2px 4px;border-radius:3px",
   "color:#000;background:#fff;padding:2px 4px;border-radius:3px"
 );
