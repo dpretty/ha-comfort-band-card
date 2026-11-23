@@ -200,7 +200,8 @@ export class ComfortBandModal extends LitElement {
          out, every colour is its own, or its words would sit on a plate of
          the page's colour. The tab on show is the one that takes focus, so
          its ring goes inside, in the words' colour: one in the fill's colour
-         wouldn't show on it, and outside, the tab bar clips it (#87). */
+         wouldn't show on it, and outside, the tab bar would clip its top and
+         bottom (#87). */
       @media (forced-colors: active) {
         nav button[aria-selected='true'] {
           forced-color-adjust: none;
