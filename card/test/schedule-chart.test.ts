@@ -90,9 +90,13 @@ describe('comfort-band-schedule-chart', () => {
     );
     const legend = el.shadowRoot!.querySelector('.legend')!;
     expect(legend.getAttribute('aria-hidden')).toBe('true');
-    expect(Array.from(legend.children).map((c) => [c.className, c.textContent!.trim()])).toEqual([
-      ['low', 'Low'],
-      ['high', 'High'],
+    // Spans: each swatch is drawn by `.legend span::before` (#98's
+    // forced-colours rule names it too).
+    expect(
+      Array.from(legend.children).map((c) => [c.localName, c.className, c.textContent!.trim()]),
+    ).toEqual([
+      ['span', 'low', 'Low'],
+      ['span', 'high', 'High'],
     ]);
   });
 
