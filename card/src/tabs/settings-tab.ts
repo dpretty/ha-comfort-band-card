@@ -347,32 +347,30 @@ export class ComfortBandSettingsTab extends LitElement {
       /* Forced colours (a Windows contrast theme) give the track and the
          knob the page's colour, and neither has a border, so the whole
          switch vanished (#88). There it's drawn in the theme's button
-         colours, a track with a border and a knob in its text colour; on,
-         the track is filled with the selection colour, the knob in that
-         colour's text. Opted out, as #73's buttons, every colour is its own,
-         the focus ring Highlight as forced colours make the others'. The
-         border is inside the button's 52 x 44, so the knob is set 2 px
-         nearer it to stay where it is. */
+         colours, a track edged and a knob in its text colour; on, the track
+         is filled with the selection colour, the knob in that colour's
+         text. Opted out, as #73's buttons, every colour is its own, the
+         focus ring Highlight as forced colours make the others'. The edge
+         is an inset shadow: a border would take room inside the button,
+         rounded to whole device pixels, and move the knob. */
       @media (forced-colors: active) {
         .toggle {
           forced-color-adjust: none;
-          border: 2px solid ButtonText;
           background: ButtonFace;
+          box-shadow: inset 0 0 0 2px ButtonText;
         }
         .toggle:focus-visible {
           outline-color: Highlight;
         }
         .toggle[aria-checked='true'] {
-          border-color: Highlight;
           background: Highlight;
+          box-shadow: none;
         }
         .toggle .knob {
-          left: 2px;
           background: ButtonText;
           box-shadow: none;
         }
         .toggle[aria-checked='true'] .knob {
-          left: 22px;
           background: HighlightText;
         }
       }

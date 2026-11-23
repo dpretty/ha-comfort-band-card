@@ -2,11 +2,11 @@
  * #88: in forced colours (a Windows contrast theme) the Settings tab's
  * switches vanished: their track and knob are drawn by backgrounds alone,
  * which forced colours turn to the page's colour, and neither had a border.
- * There they're now drawn in the theme's button colours, a bordered track
- * and a knob in its text colour; on, the track is filled with the selection
+ * There they're now drawn in the theme's button colours, a track edged and
+ * a knob in its text colour; on, the track is filled with the selection
  * colour and the knob takes that colour's text. Every colour is the
- * switch's own (opted out, as #73's buttons). The border is inside the
- * button's box, so the knob moves 2 px nearer it to stay where it was.
+ * switch's own (opted out, as #73's buttons). The edge is an inset shadow,
+ * which takes no room, so the knob stays where it was.
  *
  * jsdom has no forced colours or layout, so this pins the rules; real
  * browsers check the look.
@@ -67,23 +67,25 @@ describe('#88 the Settings switches in forced colours', () => {
       {
         at: FORCED,
         selector: '.toggle',
-        body: 'forced-color-adjust: none; border: 2px solid ButtonText; background: ButtonFace;',
+        body:
+          'forced-color-adjust: none; background: ButtonFace; ' +
+          'box-shadow: inset 0 0 0 2px ButtonText;',
       },
       { at: FORCED, selector: '.toggle:focus-visible', body: 'outline-color: Highlight;' },
       {
         at: FORCED,
         selector: ".toggle[aria-checked='true']",
-        body: 'border-color: Highlight; background: Highlight;',
+        body: 'background: Highlight; box-shadow: none;',
       },
       {
         at: FORCED,
         selector: '.toggle .knob',
-        body: 'left: 2px; background: ButtonText; box-shadow: none;',
+        body: 'background: ButtonText; box-shadow: none;',
       },
       {
         at: FORCED,
         selector: ".toggle[aria-checked='true'] .knob",
-        body: 'left: 22px; background: HighlightText;',
+        body: 'background: HighlightText;',
       },
     ]);
   });
