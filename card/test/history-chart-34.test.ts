@@ -13,6 +13,7 @@ import {
 import type { ComfortBandHistoryChart } from '../src/history-chart.js';
 import type { HomeAssistant, HassConnection } from '../src/types.js';
 import { captureSubscription, mount, teardown } from './_fixture.js';
+import { cssRules } from './_css.js';
 
 // #34: a readout of the values at the pointer, a range picker, heating and
 // cooling as a strip under the plot, and readable axes.
@@ -867,14 +868,16 @@ describe('comfort-band-history-chart readout (#34)', () => {
           'color: HighlightText; outline-color: Highlight;',
       },
     ]);
-    // ...and it's the chart's only rule inside a forced-colours query, and
-    // the only rule anywhere in the chart's styles to set forced-color-adjust.
+    // ...and it and the legend's swatches (#90, pinned in their own test)
+    // are the chart's only rules inside a forced-colours query, and the only
+    // rules anywhere in the chart's styles to set forced-color-adjust.
     expect(rules.filter((r) => r.at.includes('forced-colors')).map((r) => r.selector)).toEqual([
+      '.legend .swatch',
       ".ranges button[aria-pressed='true']",
     ]);
     expect(
       rules.filter((r) => r.body.includes('forced-color-adjust')).map((r) => r.selector),
-    ).toEqual([".ranges button[aria-pressed='true']"]);
+    ).toEqual(['.legend .swatch', ".ranges button[aria-pressed='true']"]);
   });
 
   it('is two lines tall whatever its words take, its digits one width', () => {
@@ -1000,6 +1003,102 @@ describe('comfort-band-history-chart strip and axes (#34)', () => {
     expect(swatch('Heating').style.background).toBe(internals(el)._stripColors.heating);
     expect(swatch('Cooling').style.background).toBe(internals(el)._stripColors.cooling);
     expect(swatch('Heating').style.opacity).toBe('');
+  });
+
+  // #90: in forced colours the swatches keep their colours, ringed, by the
+  // `.legend .swatch` rule; it reaches only a legend item holding one. Each
+  // swatch's colour is pinned exactly: a fill (a dash of `color` for "Feels
+  // like"), and the strip's colours for Heating and Cooling.
+  it('starts every legend item with its .swatch, coloured as written (#90)', async () => {
+    const { el } = await chart(OVERLAYS);
+    internals(el)._buildOpts(400);
+    internals(el)._loading = false;
+    el.requestUpdate();
+    await el.updateComplete;
+    const strip = internals(el)._stripColors;
+    const want: Record<string, [string, string]> = {
+      Room: ['swatch', 'background:var(--primary-color)'],
+      'Feels like': ['swatch dashed', 'color:var(--primary-color)'],
+      'Low band': ['swatch', 'background:var(--cb-action-heating)'],
+      'High band': ['swatch', 'background:var(--cb-action-cooling)'],
+      'Humidity (%, right axis)': ['swatch', 'background:var(--cb-text-secondary)'],
+      Heating: ['swatch', `background:${strip.heating}`],
+      Cooling: ['swatch', `background:${strip.cooling}`],
+    };
+    const items = Array.from(root(el).querySelectorAll<HTMLElement>('.legend > span'));
+    expect(items.map((i) => i.textContent!.replace(/\s+/g, ' ').trim())).toEqual([
+      'Room',
+      'Feels like',
+      'Low band',
+      'High band',
+      'Humidity (%, right axis)',
+      'Heating',
+      'Cooling',
+    ]);
+    for (const item of items) {
+      const swatches = item.querySelectorAll<HTMLElement>('.swatch');
+      expect(swatches).toHaveLength(1);
+      // First of all it holds (Lit's comment markers and blank text aside),
+      // ahead of its words.
+      const first = Array.from(item.childNodes).find(
+        (n) =>
+          n.nodeType === Node.ELEMENT_NODE ||
+          (n.nodeType === Node.TEXT_NODE && n.textContent!.trim() !== ''),
+      );
+      expect(first).toBe(swatches[0]);
+      expect(swatches[0].localName).toBe('span');
+      const name = item.textContent!.replace(/\s+/g, ' ').trim();
+      expect([swatches[0].className, swatches[0].getAttribute('style')!.trim()]).toEqual(
+        want[name],
+      );
+    }
+  });
+
+  // #90's point: each line's swatch is the colour the canvas draws the line
+  // in. The lines' colours are read from HA's variables as the plot is
+  // built; here each variable reads as a colour of its own, so a swatch
+  // naming another variable than its line's, or a line read from another,
+  // fails. (The swatch for Humidity names the tokens' --cb-text-secondary,
+  // which is HA's --secondary-text-color, the variable its line is read
+  // from: pinned below.)
+  it('gives every line’s swatch the colour its line is drawn in (#90)', async () => {
+    const { el } = await chart(OVERLAYS);
+    const seen = new Map<string, string>();
+    const colourOf = (name: string) => {
+      if (!seen.has(name)) seen.set(name, `#0000${(seen.size + 1).toString(16).padStart(2, '0')}`);
+      return seen.get(name)!;
+    };
+    (el as unknown as { _resolveColor: (name: string) => string })._resolveColor = colourOf;
+    const opts = internals(el)._buildOpts(400) as unknown as {
+      series: Array<{ label?: string; stroke?: unknown }>;
+    };
+    internals(el)._loading = false;
+    el.requestUpdate();
+    await el.updateComplete;
+    const host = cssRules('comfort-band-history-chart').find((r) =>
+      r.body.includes('--cb-text-secondary:'),
+    )!;
+    expect(host.body).toContain('--cb-text-secondary: var(--secondary-text-color,');
+    const alias: Record<string, string> = { '--cb-text-secondary': '--secondary-text-color' };
+    const swatchVar = (text: string) => {
+      const item = Array.from(root(el).querySelectorAll<HTMLElement>('.legend > span')).find(
+        (i) => i.textContent!.replace(/\s+/g, ' ').trim() === text,
+      )!;
+      const v = /var\((--[\w-]+)\)/.exec(
+        item.querySelector('.swatch')!.getAttribute('style')!,
+      )![1]!;
+      return alias[v] ?? v;
+    };
+    const stroke = (label: string) => opts.series.find((s) => s.label === label)!.stroke;
+    for (const [text, label] of [
+      ['Room', 'Room'],
+      ['Feels like', 'Apparent'],
+      ['Low band', 'Low band'],
+      ['High band', 'High band'],
+      ['Humidity (%, right axis)', 'Humidity'],
+    ] as const) {
+      expect([text, stroke(label)]).toEqual([text, colourOf(swatchVar(text))]);
+    }
   });
 
   it('labels the time axis in HA’s setting, leaving room for the strip', async () => {
