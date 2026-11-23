@@ -9326,6 +9326,26 @@ It.styles = [
         color: var(--cb-accent, var(--primary-color, #03a9f4));
         border-bottom-color: var(--cb-accent, var(--primary-color, #03a9f4));
       }
+      /* Forced colours (a Windows contrast theme) give every tab the text
+         colour, words and underline, so the tab on show looked like the
+         others. There the theme's selection colours fill it, as the History
+         chart's range on show (#73) and the Now tab's length (#89). Opted
+         out, every colour is its own, or its words would sit on a plate of
+         the page's colour. The tab on show is the one that takes focus, so
+         its ring goes inside, in the words' colour: one in the fill's colour
+         wouldn't show on it, and outside, the tab bar clips it (#87). */
+      @media (forced-colors: active) {
+        nav button[aria-selected='true'] {
+          forced-color-adjust: none;
+          background: Highlight;
+          border-bottom-color: Highlight;
+          color: HighlightText;
+        }
+        nav button[aria-selected='true']:focus-visible {
+          outline: 2px solid HighlightText;
+          outline-offset: -4px;
+        }
+      }
       .panel {
         overflow-y: auto;
         flex: 1;
@@ -9738,7 +9758,7 @@ Pi = cs([
   preview: !1
 });
 console.info(
-  "%c COMFORT-BAND-CARD %c v0.22.9 ",
+  "%c COMFORT-BAND-CARD %c v0.22.10 ",
   "color:white;background:#2196F3;padding:2px 4px;border-radius:3px",
   "color:#000;background:#fff;padding:2px 4px;border-radius:3px"
 );
