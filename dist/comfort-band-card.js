@@ -7465,6 +7465,18 @@ const $p = [
       vertical-align: middle;
       margin-right: 4px;
     }
+    /* Forced colours (a Windows contrast theme) give every swatch the
+       page's colour but leave the chart's canvas alone, so the legend no
+       longer said which line was which (#90). The swatches keep their
+       colours there, as the lines do, each ringed in the text colour so it
+       shows against the page whatever its colour. The ring is a shadow,
+       which takes no room. */
+    @media (forced-colors: active) {
+      .legend .swatch {
+        forced-color-adjust: none;
+        box-shadow: 0 0 0 1px CanvasText;
+      }
+    }
     /* Theme uPlot grid + axes via its own CSS variables so they pick
        up HA's dark/light tokens automatically. v0.9.1: use the cb-*
        tokens (which carry light-dark fallbacks) instead of the raw
@@ -9789,7 +9801,7 @@ Pi = cs([
   preview: !1
 });
 console.info(
-  "%c COMFORT-BAND-CARD %c v0.22.11 ",
+  "%c COMFORT-BAND-CARD %c v0.22.12 ",
   "color:white;background:#2196F3;padding:2px 4px;border-radius:3px",
   "color:#000;background:#fff;padding:2px 4px;border-radius:3px"
 );

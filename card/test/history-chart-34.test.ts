@@ -867,14 +867,16 @@ describe('comfort-band-history-chart readout (#34)', () => {
           'color: HighlightText; outline-color: Highlight;',
       },
     ]);
-    // ...and it's the chart's only rule inside a forced-colours query, and
-    // the only rule anywhere in the chart's styles to set forced-color-adjust.
+    // ...and it and the legend's swatches (#90, pinned in their own test)
+    // are the chart's only rules inside a forced-colours query, and the only
+    // rules anywhere in the chart's styles to set forced-color-adjust.
     expect(rules.filter((r) => r.at.includes('forced-colors')).map((r) => r.selector)).toEqual([
+      '.legend .swatch',
       ".ranges button[aria-pressed='true']",
     ]);
     expect(
       rules.filter((r) => r.body.includes('forced-color-adjust')).map((r) => r.selector),
-    ).toEqual([".ranges button[aria-pressed='true']"]);
+    ).toEqual(['.legend .swatch', ".ranges button[aria-pressed='true']"]);
   });
 
   it('is two lines tall whatever its words take, its digits one width', () => {
@@ -1000,6 +1002,33 @@ describe('comfort-band-history-chart strip and axes (#34)', () => {
     expect(swatch('Heating').style.background).toBe(internals(el)._stripColors.heating);
     expect(swatch('Cooling').style.background).toBe(internals(el)._stripColors.cooling);
     expect(swatch('Heating').style.opacity).toBe('');
+  });
+
+  // #90: in forced colours the swatches keep their colours, ringed, by the
+  // `.legend .swatch` rule; it reaches only a legend item holding one.
+  it('starts every legend item with a .swatch in its line’s colour (#90)', async () => {
+    const { el } = await chart(OVERLAYS);
+    internals(el)._buildOpts(400);
+    internals(el)._loading = false;
+    el.requestUpdate();
+    await el.updateComplete;
+    const items = Array.from(root(el).querySelectorAll<HTMLElement>('.legend > span'));
+    expect(items.map((i) => i.textContent!.replace(/\s+/g, ' ').trim())).toEqual([
+      'Room',
+      'Feels like',
+      'Low band',
+      'High band',
+      'Humidity (%, right axis)',
+      'Heating',
+      'Cooling',
+    ]);
+    for (const item of items) {
+      const swatches = item.querySelectorAll<HTMLElement>('.swatch');
+      expect(swatches).toHaveLength(1);
+      expect(item.firstElementChild).toBe(swatches[0]);
+      expect(swatches[0].localName).toBe('span');
+      expect(swatches[0].style.background || swatches[0].style.color).not.toBe('');
+    }
   });
 
   it('labels the time axis in HA’s setting, leaving room for the strip', async () => {
