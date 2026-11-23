@@ -1025,7 +1025,14 @@ describe('comfort-band-history-chart strip and axes (#34)', () => {
     for (const item of items) {
       const swatches = item.querySelectorAll<HTMLElement>('.swatch');
       expect(swatches).toHaveLength(1);
-      expect(item.firstElementChild).toBe(swatches[0]);
+      // First of all it holds (Lit's comment markers and blank text aside),
+      // ahead of its words.
+      const first = Array.from(item.childNodes).find(
+        (n) =>
+          n.nodeType === Node.ELEMENT_NODE ||
+          (n.nodeType === Node.TEXT_NODE && n.textContent!.trim() !== ''),
+      );
+      expect(first).toBe(swatches[0]);
       expect(swatches[0].localName).toBe('span');
       expect(swatches[0].style.background || swatches[0].style.color).not.toBe('');
     }
