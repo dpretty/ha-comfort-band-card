@@ -569,6 +569,45 @@ describe('comfort-band-settings-tab missing settings', () => {
 });
 
 describe('comfort-band-settings-tab switches', () => {
+  // The switch's rules, in normal and forced colours (#88), are written for
+  // a `.toggle` button holding a `.knob`: a switch drawn any other way would
+  // lose its track and knob, with every rule still in place.
+  it('draws every switch as a .toggle button with a .knob inside it (#88)', async () => {
+    const hass = makeHass({
+      states: {
+        'switch.gym_enabled': { state: 'on' },
+        'switch.gym_learning_enabled': { state: 'off' },
+        'switch.gym_use_apparent_temperature': { state: 'on' },
+        'switch.gym_mpc_enabled': { state: 'off' },
+        'switch.gym_fan_control_enabled': { state: 'on' },
+        'switch.gym_peak_saving_enabled': { state: 'off' },
+      },
+    });
+    const seen: string[] = [];
+    for (const section of ['comfort', 'automation', 'fan', 'peak', 'schedules'] as const) {
+      const el = await settingsTab(hass, section);
+      for (const sw of el.shadowRoot!.querySelectorAll<HTMLElement>('[role="switch"]')) {
+        seen.push(sw.getAttribute('aria-label')!);
+        expect(sw.localName).toBe('button');
+        expect(sw.className).toBe('toggle');
+        expect(Array.from(sw.children).map((c) => `${c.localName}.${c.className}`)).toEqual([
+          'span.knob',
+        ]);
+      }
+      teardown();
+    }
+    expect(seen.sort()).toEqual(
+      [
+        'Control this room',
+        'Fan control',
+        'Learning',
+        'Peak saving',
+        'Predictive control',
+        'Use “feels like”',
+      ].sort(),
+    );
+  });
+
   it('flips at once and turns the switch on or off', async () => {
     const hass = makeHass({ states: { 'switch.gym_enabled': { state: 'on' } } });
     const el = await settingsTab(hass, 'automation');
