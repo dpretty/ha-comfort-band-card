@@ -3,7 +3,8 @@
  * a phone, as HA's own dialogs are (#3); floating on anything larger.
  *
  * Uses the native `<dialog>` element (modal API): `showModal()` opens with
- * a backdrop, ESC and click-outside close it. No browser_mod dependency.
+ * a backdrop; ESC and the ✕ close it (a tap outside doesn't). No
+ * browser_mod dependency.
  *
  * Tabs: Now and Schedule for everyone; Advanced (settings, profiles and
  * history, #30) for whoever sets the house up.
@@ -191,6 +192,27 @@ export class ComfortBandModal extends LitElement {
       nav button[aria-selected='true'] {
         color: var(--cb-accent, var(--primary-color, #03a9f4));
         border-bottom-color: var(--cb-accent, var(--primary-color, #03a9f4));
+      }
+      /* Forced colours (a Windows contrast theme) give every tab the text
+         colour, words and underline, so the tab on show looked like the
+         others. There the theme's selection colours fill it, as the History
+         chart's range on show (#73) and the Now tab's length (#89). Opted
+         out, every colour is its own, or its words would sit on a plate of
+         the page's colour. The keys take focus to the tab on show, so its
+         ring goes inside, in the words' colour: one in the fill's colour
+         wouldn't show on it, and the tab bar's edges would cut off one
+         outside (#87). */
+      @media (forced-colors: active) {
+        nav button[aria-selected='true'] {
+          forced-color-adjust: none;
+          background: Highlight;
+          border-bottom-color: Highlight;
+          color: HighlightText;
+        }
+        nav button[aria-selected='true']:focus-visible {
+          outline: 2px solid HighlightText;
+          outline-offset: -4px;
+        }
       }
       .panel {
         overflow-y: auto;
