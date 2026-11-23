@@ -306,10 +306,28 @@ export class ComfortBandNowTab extends LitElement {
       }
       .lengths button[aria-pressed='true'] {
         background: var(--cb-accent, var(--primary-color, #03a9f4));
-        /* A border as well as the fill, so the choice shows in forced colours. */
+        /* A border as well as the fill. Forced colours keep it but not the
+           fill, and below 100% zoom it can round to the others' width, so
+           there the theme's selection colours mark the choice (below). */
         border: 2px solid currentColor;
         color: #ffffff;
         font-weight: 500;
+      }
+      /* Forced colours (a Windows contrast theme): the length picked is
+         filled with the theme's selection colours, as the History chart's
+         range on show is (#73, #89); a fill shows at any zoom, and nothing
+         changes size. Left to forced colours, its words would sit on a
+         plate of the page's colour, so it takes every colour itself, all
+         the theme's: its focus ring Highlight, as forced colours make the
+         others'. */
+      @media (forced-colors: active) {
+        .lengths button[aria-pressed='true'] {
+          forced-color-adjust: none;
+          background: Highlight;
+          border-color: Highlight;
+          color: HighlightText;
+          outline-color: Highlight;
+        }
       }
       .lengths button[aria-disabled='true'],
       .steps button[aria-disabled='true'],
