@@ -3,8 +3,8 @@
  * dialog took the text colour, words and underline, so the tab on show
  * looked like the others. The theme's selection colours fill it there, as
  * #73 and #89 did, every colour its own (or forced colours would put its
- * words on a plate of the page's colour). It's the tab that takes focus, so
- * its focus ring goes inside, in its words' colour.
+ * words on a plate of the page's colour). The keys take focus to it, so its
+ * focus ring goes inside, in its words' colour.
  *
  * jsdom has no forced colours or layout, so this pins the rules; real
  * browsers check the look.
@@ -22,10 +22,11 @@ describe('#87 the tab on show in forced colours', () => {
   const modal = () => cssRules('comfort-band-modal');
 
   // Every rule naming `nav`, whole, in and out of forced colours: one of
-  // them added, moved or changed fails here. A rule reaching the tabs under
-  // a selector that doesn't name `nav` isn't caught, unless it's in forced
-  // colours or sets forced-color-adjust (the next test); nor is an inline
-  // style.
+  // them added, changed or put in another order among them fails here (one
+  // moved past rules that don't name `nav` doesn't). A rule reaching the
+  // tabs under a selector that doesn't name `nav` isn't caught, unless it's
+  // in forced colours or sets forced-color-adjust (the next test); nor is an
+  // inline style.
   it('fills the tab on show with the selection colours, its ring inside, and nothing else changes', () => {
     expect(modal().filter((r) => r.selector.includes('nav'))).toEqual([
       {

@@ -198,10 +198,10 @@ export class ComfortBandModal extends LitElement {
          others. There the theme's selection colours fill it, as the History
          chart's range on show (#73) and the Now tab's length (#89). Opted
          out, every colour is its own, or its words would sit on a plate of
-         the page's colour. The tab on show is the one that takes focus, so
-         its ring goes inside, in the words' colour: one in the fill's colour
-         wouldn't show on it, and outside, the tab bar would clip its top and
-         bottom (#87). */
+         the page's colour. The keys take focus to the tab on show, so its
+         ring goes inside, in the words' colour: one in the fill's colour
+         wouldn't show on it, and the tab bar's edges would cut off one
+         outside (#87). */
       @media (forced-colors: active) {
         nav button[aria-selected='true'] {
           forced-color-adjust: none;
