@@ -162,6 +162,18 @@ export class ComfortBandScheduleChart extends LitElement {
       .legend .high::before {
         background: var(--cb-action-cooling);
       }
+      /* Forced colours (a Windows contrast theme) give both swatches the
+         page's colour but leave the chart's lines alone, so the legend no
+         longer said which line was which (#98). The swatches keep their
+         colours there, as the lines do, each ringed in the text colour so it
+         shows against the page whatever its colour. The ring is a shadow,
+         which takes no room. */
+      @media (forced-colors: active) {
+        .legend span::before {
+          forced-color-adjust: none;
+          box-shadow: 0 0 0 1px CanvasText;
+        }
+      }
       .axis-label {
         position: absolute;
         font-size: 10px;

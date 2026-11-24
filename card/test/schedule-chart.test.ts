@@ -3,6 +3,7 @@ import '../src/schedule-chart.js';
 import type { ComfortBandScheduleChart } from '../src/schedule-chart.js';
 import type { Transition } from '../src/types.js';
 import { mount, teardown } from './_fixture.js';
+import { cssRules } from './_css.js';
 
 afterEach(teardown);
 
@@ -90,10 +91,58 @@ describe('comfort-band-schedule-chart', () => {
     );
     const legend = el.shadowRoot!.querySelector('.legend')!;
     expect(legend.getAttribute('aria-hidden')).toBe('true');
-    expect(Array.from(legend.children).map((c) => [c.className, c.textContent!.trim()])).toEqual([
-      ['low', 'Low'],
-      ['high', 'High'],
+    // Spans, and no others in the legend: `.legend span::before` (#98's
+    // forced-colours rule names it too) draws a swatch for every span in it.
+    expect(
+      Array.from(legend.children).map((c) => [c.localName, c.className, c.textContent!.trim()]),
+    ).toEqual([
+      ['span', 'low', 'Low'],
+      ['span', 'high', 'High'],
     ]);
+    expect(legend.querySelectorAll('span').length).toBe(2);
+  });
+
+  // #98: the legend says which line is which only while each swatch has its
+  // line's colour. Every rule naming a line, a dot or a swatch's colour
+  // (`.line`, `.marker`, `.low`, `.high`), whole and in order, in and out of
+  // forced colours: one recolouring a line or its dots later on fails here,
+  // as does a style on a line or dot. (The swatches' forced-colours rule
+  // names neither; #98's own test pins it.)
+  it('draws each line and its dots in its swatch colour, and nothing recolours them', async () => {
+    const rules = cssRules('comfort-band-schedule-chart').filter((r) =>
+      /\.(line|marker|low|high)\b/.test(r.selector),
+    );
+    expect(rules).toEqual([
+      {
+        at: '',
+        selector: '.line',
+        body:
+          'fill: none; stroke: var(--cb-accent, var(--primary-color, #03a9f4)); stroke-width: 2; ' +
+          'stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; ' +
+          'pointer-events: none;',
+      },
+      { at: '', selector: '.line.low, .marker.low', body: 'stroke: var(--cb-action-heating);' },
+      { at: '', selector: '.line.high, .marker.high', body: 'stroke: var(--cb-action-cooling);' },
+      {
+        at: '',
+        selector: '.marker',
+        body: 'stroke-width: 9; stroke-linecap: round; vector-effect: non-scaling-stroke; pointer-events: none;',
+      },
+      { at: '', selector: '.legend .low::before', body: 'background: var(--cb-action-heating);' },
+      { at: '', selector: '.legend .high::before', body: 'background: var(--cb-action-cooling);' },
+    ]);
+    // Each swatch takes the variable its line and dots are drawn in.
+    const body = (selector: string) => rules.find((r) => r.selector === selector)!.body;
+    expect(body('.legend .low::before')).toBe(
+      body('.line.low, .marker.low').replace('stroke:', 'background:'),
+    );
+    expect(body('.legend .high::before')).toBe(
+      body('.line.high, .marker.high').replace('stroke:', 'background:'),
+    );
+    const el = await chart();
+    const drawn = el.shadowRoot!.querySelectorAll('.line, .marker');
+    expect(drawn.length).toBe(2 + SCHEDULE.length * 2);
+    for (const d of drawn) expect(d.getAttribute('style')).toBeNull();
   });
 
   // The hour labels sit across the plot, beside the temperatures' gutter.
