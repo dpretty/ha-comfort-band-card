@@ -1052,6 +1052,12 @@ describe('comfort-band-history-chart strip and axes (#34)', () => {
         want[name],
       );
     }
+    // The swatches' gap follows the page's direction (#101): nothing in the
+    // legend sets its own.
+    const legend = root(el).querySelector('.legend')!;
+    expect([legend, ...legend.querySelectorAll('*')].filter((e) => e.hasAttribute('dir'))).toEqual(
+      [],
+    );
   });
 
   // #90's point: each line's swatch is the colour the canvas draws the line

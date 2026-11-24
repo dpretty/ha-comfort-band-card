@@ -59,13 +59,14 @@ const sharedChartStyles = [
       color: var(--cb-text-secondary);
       padding-top: var(--cb-gap-sm);
     }
+    /* Spaced on its words' side, in right-to-left too (#101). */
     .legend .swatch {
       display: inline-block;
       width: 12px;
       height: 12px;
       border-radius: 2px;
       vertical-align: middle;
-      margin-right: 4px;
+      margin-inline-end: 4px;
     }
     /* Forced colours (a Windows contrast theme) give every swatch the
        page's colour but leave the chart's canvas alone, so the legend no

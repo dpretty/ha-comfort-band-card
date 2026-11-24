@@ -35,7 +35,7 @@ describe('#98 the Schedule legend swatches in forced colours', () => {
         selector: '.legend span::before',
         body:
           "content: ''; display: inline-block; width: 14px; height: 3px; " +
-          'margin-right: 6px; vertical-align: middle; border-radius: 2px;',
+          'margin-inline-end: 6px; vertical-align: middle; border-radius: 2px;',
       },
       {
         at: '',

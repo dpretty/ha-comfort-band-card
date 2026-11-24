@@ -30,7 +30,7 @@ describe('#90 the History legend swatches in forced colours', () => {
         selector: '.legend .swatch',
         body:
           'display: inline-block; width: 12px; height: 12px; border-radius: 2px; ' +
-          'vertical-align: middle; margin-right: 4px;',
+          'vertical-align: middle; margin-inline-end: 4px;',
       },
       {
         at: '@media (forced-colors: active)',
