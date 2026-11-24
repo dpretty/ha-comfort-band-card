@@ -36,9 +36,9 @@ const TAGS = [
   'comfort-band-card-editor',
 ];
 
-/** The rules drawn by a physical side on purpose, and pinned whole below:
- *  the drop-down arrows with their room, each mirrored by its `:dir(rtl)`
- *  rule. (The disclosure chevrons too, pinned by #108's test.) */
+/** The rules drawn by a physical side on purpose, each pinned whole below:
+ *  the drop-down arrows with their room, and their `:dir(rtl)` mirrors. (The
+ *  disclosure chevrons too, pinned by #108's test.) */
 const ARROW_RULES: Record<string, string[]> = {
   'comfort-band-settings-tab': ['.choice', '.choice:dir(rtl)'],
   'comfort-band-card-editor': ['select', 'select:dir(rtl)'],
@@ -51,18 +51,20 @@ function body(tag: string, selector: string): string {
   return found[0].body;
 }
 
-/** One declaration's value from a rule's body. */
+/** One declaration's value from a rule's body, which must set it once: a
+ *  later declaration of it in the same rule fails here. */
 function value(decls: string, prop: string): string {
-  const m = new RegExp(`(?:^|; )${prop}: ([^;]*);`).exec(decls);
-  expect(m, prop).not.toBeNull();
-  return m![1];
+  const all = [...decls.matchAll(new RegExp(`(?:^|; )${prop}: ([^;]*);`, 'g'))];
+  expect(all, prop).toHaveLength(1);
+  return all[0][1];
 }
 
 describe('#109 the tabs in right-to-left', () => {
   // Every rule in the tabs and the editor, in and out of at-rules: a side in
   // a property's name, a left or right keyword, `inset`, or an uneven
-  // margin/padding shorthand fails here, the arrows and chevrons aside.
-  it('spaces, places and aligns nothing else in the tabs or the editor by a side', () => {
+  // margin/padding shorthand fails here, the arrows and chevrons aside. What
+  // the helper doesn't read (other shorthands' sides, offsets) isn't caught.
+  it('uses no other side the helper reads in the tabs or the editor', () => {
     for (const tag of TAGS) {
       expect(
         cssRules(tag)
@@ -138,7 +140,8 @@ describe('#109 the tabs in right-to-left', () => {
   });
 
   // Every rule naming a choice, the editor's select or the current row,
-  // whole: a later declaration in one of them, or another rule restoring the
+  // listed, and each pinned whole (the `:dir(rtl)` ones in the arrow tests
+  // below): a later declaration in one of them, or another rule restoring the
   // left-to-right arrow, room or bar, fails here.
   it('draws the choices, the editor select and the current row only by these rules', () => {
     const naming = (tag: string, name: RegExp) =>
@@ -164,7 +167,40 @@ describe('#109 the tabs in right-to-left', () => {
       ['', '.row.current .band, .row.current .tag'],
       ['', '.tag.current'],
     ]);
+    expect(body('comfort-band-settings-tab', '.choice')).toBe(
+      'flex: 0 1 auto; max-width: 100%; min-height: 44px; margin-inline-start: auto; ' +
+        'padding: 0 28px 0 10px; border: 1px solid var(--divider-color, #cccccc); ' +
+        'border-radius: 8px; -webkit-appearance: none; appearance: none; ' +
+        'background-color: var(--card-background-color, #ffffff); ' +
+        'background-image: linear-gradient(45deg, transparent 50%, var(--cb-text-secondary) 50%), ' +
+        'linear-gradient(135deg, var(--cb-text-secondary) 50%, transparent 50%); ' +
+        'background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%; ' +
+        'background-size: 5px 5px; background-repeat: no-repeat; color: var(--cb-text-primary); ' +
+        'font: inherit; font-size: 16px; text-overflow: ellipsis; overflow: hidden;',
+    );
+    expect(
+      body(
+        'comfort-band-settings-tab',
+        '.step:focus-visible, .choice:focus-visible, summary:focus-visible',
+      ),
+    ).toBe(
+      'outline: 2px solid var(--cb-accent, var(--primary-color, #03a9f4)); outline-offset: 2px;',
+    );
     expect(body('comfort-band-settings-tab', '.choice:disabled')).toBe('opacity: 0.6;');
+    expect(body('comfort-band-card-editor', 'select')).toBe(
+      'font-size: 14px; padding: 8px 32px 8px 8px; border: 1px solid var(--divider-color, #cccccc); ' +
+        'border-radius: 6px; color: var(--cb-text-primary); background-color: var( ' +
+        '--mdc-text-field-fill-color, var(--secondary-background-color, ' +
+        'var(--card-background-color, #ffffff)) ); appearance: none; -webkit-appearance: none; ' +
+        'background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), ' +
+        'linear-gradient(135deg, currentColor 50%, transparent 50%); ' +
+        'background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%; ' +
+        'background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; cursor: pointer; ' +
+        'width: 100%;',
+    );
+    expect(
+      body('comfort-band-card-editor', "select, input[type='text'], input[type='checkbox']"),
+    ).toBe('font: inherit;');
     expect(body('comfort-band-card-editor', 'select:focus-visible')).toBe(
       'outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 1px;',
     );
@@ -177,15 +213,17 @@ describe('#109 the tabs in right-to-left', () => {
     );
   });
 
-  // The arrow is two small triangles drawn as backgrounds, `size` wide, the
-  // first `far` from the end and the second `near`, in room left by the
-  // padding at the end. In right-to-left the same picture sits as far from
-  // the start, the first at `near` and the second at `near + size`, and the
-  // padding swaps sides with it, in the same rule: a browser that drops the
-  // rule keeps both on the right.
-  for (const [tag, selector, size, far, near] of [
-    ['comfort-band-settings-tab', '.choice', 5, 15, 10],
-    ['comfort-band-card-editor', 'select', 6, 18, 12],
+  // The arrow is two small triangles drawn as backgrounds, each `size` wide
+  // (its `background-size`): the first's right edge `far` from the end, the
+  // second's `near`, together one picture, in room left by the padding at the
+  // end. Mirrored, each half's left edge sits that far from the start: the
+  // first (the picture's left half, which stays its left half since the
+  // picture is symmetric) at `near`, the second at `far`. The padding swaps
+  // sides with it, in the same rule: a browser that drops the rule keeps both
+  // on the right.
+  for (const [tag, selector, far, near] of [
+    ['comfort-band-settings-tab', '.choice', 15, 10],
+    ['comfort-band-card-editor', 'select', 18, 12],
   ] as const) {
     it(`mirrors the drop-down arrow of ${tag} ${selector} with its room`, () => {
       const ltr = body(tag, selector);
@@ -193,11 +231,14 @@ describe('#109 the tabs in right-to-left', () => {
       expect(value(ltr, 'background-position')).toBe(
         `calc(100% - ${far}px) 50%, calc(100% - ${near}px) 50%`,
       );
+      // The two halves meet: the second starts where the first ends.
+      const size = Number.parseFloat(value(ltr, 'background-size'));
+      expect(far - near).toBe(size);
       const [top, end, bottom, start] = value(ltr, 'padding').split(' ');
       expect(Number.parseFloat(end)).toBeGreaterThan(far + size);
       expect(rtl).toBe(
         `padding: ${top} ${start} ${bottom} ${end}; ` +
-          `background-position: ${near}px 50%, ${near + size}px 50%;`,
+          `background-position: ${near}px 50%, ${far}px 50%;`,
       );
       // Nothing else in the left-to-right rule sets the padding or position.
       expect(ltr.match(/(^|; )(padding|background-position)[\w-]*:/g)).toHaveLength(2);

@@ -78,6 +78,7 @@ describe('#101 the legend swatches in right-to-left', () => {
         'margin: 0 4px 0 0 !important',
         'padding: calc(1px + 2px) 0 0 var(--a, 4px)',
         'justify-self: right',
+        'text-align: -webkit-left',
         'border-top-left-radius: 2px',
         'transition: left 0.15s ease',
       ].filter((d) => !physical(d)),
