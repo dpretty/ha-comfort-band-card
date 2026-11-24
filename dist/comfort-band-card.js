@@ -4189,8 +4189,7 @@ kn.styles = [
         max-width: 100%;
         min-height: 44px;
         margin-inline-start: auto;
-        padding-block: 0;
-        padding-inline: 10px 28px;
+        padding: 0 28px 0 10px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 8px;
         -webkit-appearance: none;
@@ -4212,8 +4211,11 @@ kn.styles = [
         /* With its own look, WebKit lets a long option's text out of the box. */
         overflow: hidden;
       }
-      /* Its arrow at the end, where the room is, in right-to-left too (#109). */
+      /* In right-to-left the arrow and the room for it move to the end
+         together (#109). One rule for both: a browser without :dir() drops
+         it whole and keeps them together on the right, as before. */
       .choice:dir(rtl) {
+        padding: 0 10px 0 28px;
         background-position:
           10px 50%,
           15px 50%;
@@ -9648,8 +9650,7 @@ mo.styles = [
          so the theme-aware bg/text colors actually take. */
       select {
         font-size: 14px;
-        padding-block: 8px;
-        padding-inline: 8px 32px;
+        padding: 8px 32px 8px 8px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 6px;
         color: var(--cb-text-primary);
@@ -9672,8 +9673,11 @@ mo.styles = [
         cursor: pointer;
         width: 100%;
       }
-      /* Its arrow at the end, where the room is, in right-to-left too (#109). */
+      /* In right-to-left the arrow and the room for it move to the end
+         together (#109). One rule for both: a browser without :dir() drops
+         it whole and keeps them together on the right, as before. */
       select:dir(rtl) {
+        padding: 8px 8px 8px 32px;
         background-position:
           12px 50%,
           18px 50%;

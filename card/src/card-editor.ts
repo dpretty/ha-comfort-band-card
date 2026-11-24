@@ -74,8 +74,7 @@ export class ComfortBandCardEditor extends LitElement {
          so the theme-aware bg/text colors actually take. */
       select {
         font-size: 14px;
-        padding-block: 8px;
-        padding-inline: 8px 32px;
+        padding: 8px 32px 8px 8px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 6px;
         color: var(--cb-text-primary);
@@ -98,8 +97,11 @@ export class ComfortBandCardEditor extends LitElement {
         cursor: pointer;
         width: 100%;
       }
-      /* Its arrow at the end, where the room is, in right-to-left too (#109). */
+      /* In right-to-left the arrow and the room for it move to the end
+         together (#109). One rule for both: a browser without :dir() drops
+         it whole and keeps them together on the right, as before. */
       select:dir(rtl) {
+        padding: 8px 8px 8px 32px;
         background-position:
           12px 50%,
           18px 50%;

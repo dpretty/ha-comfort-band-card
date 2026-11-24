@@ -75,6 +75,11 @@ describe('#101 the legend swatches in right-to-left', () => {
         'text-align: left',
         'margin: 0 4px 0 0',
         'padding: var(--cb-gap-sm) 0 0 6px',
+        'margin: 0 4px 0 0 !important',
+        'padding: calc(1px + 2px) 0 0 var(--a, 4px)',
+        'justify-self: right',
+        'border-top-left-radius: 2px',
+        'transition: left 0.15s ease',
       ].filter((d) => !physical(d)),
     ).toEqual([]);
     expect(
@@ -86,6 +91,11 @@ describe('#101 the legend swatches in right-to-left', () => {
         'padding: 1px 2px 3px 2px',
         'text-align: center',
         'gap: var(--cb-gap-md)',
+        'padding: 1px 2px 3px 2px !important',
+        'padding: 0 calc(1px + 2px) 0 calc(1px + 2px)',
+        'border-start-start-radius: 2px',
+        'transition: inset-inline-start 0.15s ease',
+        'color: var(--cb-text-left)',
       ].filter(physical),
     ).toEqual([]);
   });

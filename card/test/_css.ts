@@ -42,10 +42,12 @@ export function cssRules(tag: string): CssRule[] {
   return out;
 }
 
-/** A declaration that spaces or places by a physical side: a left or right
- *  longhand, `left`/`right`/`inset` positioning, `float` or `text-align` to a
- *  side, or a `margin`/`padding` shorthand whose left and right differ
- *  (`!important` aside). From #101; the tabs use it too (#109). */
+/** A declaration that spaces, places or aligns by a physical side: a left or
+ *  right side in the property's name (`margin-left`, `border-top-right-radius`,
+ *  `left`), a `left` or `right` keyword in its value (`text-align`, `float`,
+ *  `justify-self`, `transition: left`), `inset`, or a `margin`/`padding`
+ *  shorthand whose left and right differ; `!important` aside. From #101; the
+ *  tabs use it too (#109). */
 export function physical(decl: string): boolean {
   const i = decl.indexOf(':');
   const prop = decl.slice(0, i).trim().toLowerCase();
@@ -54,9 +56,9 @@ export function physical(decl: string): boolean {
     .replace(/!\s*important\s*$/i, '')
     .trim()
     .toLowerCase();
-  if (/^(margin|padding|border)-(left|right)\b/.test(prop)) return true;
-  if (prop === 'left' || prop === 'right' || prop === 'inset') return true;
-  if ((prop === 'float' || prop === 'text-align') && /\b(left|right)\b/.test(value)) return true;
+  if (/(^|-)(left|right)(-|$)/.test(prop) || prop === 'inset') return true;
+  // A keyword on its own, not part of a name such as `var(--x-left)`.
+  if (/(^|[\s,(])(left|right)($|[\s,)])/.test(value)) return true;
   if (prop === 'margin' || prop === 'padding') {
     // Split on spaces outside brackets: `var(--x) 0 0 6px` is four values.
     const parts = value.split(/\s+(?![^(]*\))/);
