@@ -146,13 +146,14 @@ export class ComfortBandScheduleChart extends LitElement {
         font-size: 11px;
         color: var(--cb-text-secondary);
       }
-      /* A swatch of the line's colour: text in it would be too faint. */
+      /* A swatch of the line's colour: text in it would be too faint.
+         Spaced on its word's side, in right-to-left too (#101). */
       .legend span::before {
         content: '';
         display: inline-block;
         width: 14px;
         height: 3px;
-        margin-right: 6px;
+        margin-inline-end: 6px;
         vertical-align: middle;
         border-radius: 2px;
       }

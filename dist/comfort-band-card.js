@@ -2602,13 +2602,14 @@ fo.styles = [
         font-size: 11px;
         color: var(--cb-text-secondary);
       }
-      /* A swatch of the line's colour: text in it would be too faint. */
+      /* A swatch of the line's colour: text in it would be too faint.
+         Spaced on its word's side, in right-to-left too (#101). */
       .legend span::before {
         content: '';
         display: inline-block;
         width: 14px;
         height: 3px;
-        margin-right: 6px;
+        margin-inline-end: 6px;
         vertical-align: middle;
         border-radius: 2px;
       }
@@ -7469,13 +7470,14 @@ const $p = [
       color: var(--cb-text-secondary);
       padding-top: var(--cb-gap-sm);
     }
+    /* Spaced on its words' side, in right-to-left too (#101). */
     .legend .swatch {
       display: inline-block;
       width: 12px;
       height: 12px;
       border-radius: 2px;
       vertical-align: middle;
-      margin-right: 4px;
+      margin-inline-end: 4px;
     }
     /* Forced colours (a Windows contrast theme) give every swatch the
        page's colour but leave the chart's canvas alone, so the legend no
@@ -9813,7 +9815,7 @@ Pi = cs([
   preview: !1
 });
 console.info(
-  "%c COMFORT-BAND-CARD %c v0.22.13 ",
+  "%c COMFORT-BAND-CARD %c v0.22.14 ",
   "color:white;background:#2196F3;padding:2px 4px;border-radius:3px",
   "color:#000;background:#fff;padding:2px 4px;border-radius:3px"
 );
