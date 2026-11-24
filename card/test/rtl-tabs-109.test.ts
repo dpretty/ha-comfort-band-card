@@ -54,7 +54,8 @@ function body(tag: string, selector: string): string {
 /** One declaration's value from a rule's body, which must set it once: a
  *  later declaration of it in the same rule fails here. */
 function value(decls: string, prop: string): string {
-  const all = [...decls.matchAll(new RegExp(`(?:^|; )${prop}: ([^;]*);`, 'g'))];
+  // A lookbehind, so one match doesn't eat the `; ` the next one starts with.
+  const all = [...decls.matchAll(new RegExp(`(?<=^|; )${prop}: ([^;]*);`, 'g'))];
   expect(all, prop).toHaveLength(1);
   return all[0][1];
 }
