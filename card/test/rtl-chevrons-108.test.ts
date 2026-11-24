@@ -10,8 +10,10 @@
  * The right-to-left turn is its own rule (`:dir(rtl)`): a browser without
  * `:dir()` drops just that rule and keeps the rest.
  *
- * jsdom has no layout or `:dir()`, so this pins the rules; real browsers
- * check the gap and the turn.
+ * jsdom has no layout or pseudo-element styles, and its `:dir()` doesn't
+ * follow the page's direction, so this pins the rules; real browsers check
+ * the gap and the turn. Each tab's markup test checks no `dir` is set on the
+ * chevrons' sections or headings.
  */
 
 import { describe, expect, it } from 'vitest';

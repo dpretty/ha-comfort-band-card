@@ -301,6 +301,11 @@ describe('comfort-band-diagnostics-tab rates', () => {
     const details = el.shadowRoot!.querySelector('details.more') as HTMLDetailsElement;
     expect(details.open).toBe(false);
     expect(text(details.querySelector('summary'))).toBe('Details');
+    // Its chevron's turn and spacing follow the page's direction (#108).
+    const summary = details.querySelector(':scope > summary')!;
+    expect(
+      [details, summary, ...summary.querySelectorAll('*')].filter((e) => e.hasAttribute('dir')),
+    ).toEqual([]);
     const cells = Array.from(details.querySelectorAll('tbody tr')).map((tr) =>
       Array.from(tr.children).map((c) => text(c)),
     );

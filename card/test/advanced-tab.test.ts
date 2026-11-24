@@ -338,6 +338,18 @@ describe('comfort-band-advanced-tab', () => {
     expect(css).toMatch(/summary\s*\{[^}]*min-height:\s*44px/);
   });
 
+  // #108: each chevron's turn and spacing follow the page's direction, so no
+  // section or heading sets its own.
+  it('lets no section or its heading set its own direction (#108)', async () => {
+    const el = await advancedTab();
+    const details = Array.from(el.shadowRoot!.querySelectorAll('details'));
+    expect(details.length).toBeGreaterThan(0);
+    for (const d of details) {
+      const s = d.querySelector(':scope > summary')!;
+      expect([d, s, ...s.querySelectorAll('*')].filter((e) => e.hasAttribute('dir'))).toEqual([]);
+    }
+  });
+
   // A long summary wraps beside the chevron, under the section's name.
   it('wraps a long summary with the name, beside the chevron', async () => {
     const el = await advancedTab();
