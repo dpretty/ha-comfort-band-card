@@ -4230,16 +4230,22 @@ kn.styles = [
       details.fine > summary::-webkit-details-marker {
         display: none;
       }
+      /* Spaced on its words' side, and closed, pointing towards them, in
+         right-to-left too (#108). */
       details.fine > summary::before {
         content: '';
         flex: none;
         width: 6px;
         height: 6px;
-        margin: 0 8px 0 2px;
+        margin-block: 0;
+        margin-inline: 2px 8px;
         border-right: 2px solid var(--cb-text-secondary);
         border-bottom: 2px solid var(--cb-text-secondary);
         transform: rotate(-45deg);
         transition: transform 0.15s ease;
+      }
+      details.fine:not([open]) > summary:dir(rtl)::before {
+        transform: rotate(135deg);
       }
       details.fine[open] > summary::before {
         transform: rotate(45deg);
@@ -8487,16 +8493,22 @@ qn.styles = [
       details.more > summary::-webkit-details-marker {
         display: none;
       }
+      /* Spaced on its words' side, and closed, pointing towards them, in
+         right-to-left too (#108). */
       details.more > summary::before {
         content: '';
         flex: none;
         width: 6px;
         height: 6px;
-        margin: 0 8px 0 2px;
+        margin-block: 0;
+        margin-inline: 2px 8px;
         border-right: 2px solid var(--cb-text-secondary);
         border-bottom: 2px solid var(--cb-text-secondary);
         transform: rotate(-45deg);
         transition: transform 0.15s ease;
+      }
+      details.more:not([open]) > summary:dir(rtl)::before {
+        transform: rotate(135deg);
       }
       details.more[open] > summary::before {
         transform: rotate(45deg);
@@ -9046,7 +9058,8 @@ cn.styles = [
         cursor: pointer;
       }
       /* A flex summary loses the browser's own marker, so draw one: a chevron
-         that turns down when the section is open. */
+         that turns down when the section is open. In right-to-left it's
+         spaced on its words' side and, closed, points towards them (#108). */
       summary {
         list-style: none;
       }
@@ -9059,11 +9072,15 @@ cn.styles = [
         flex: none;
         width: 6px;
         height: 6px;
-        margin: 0 6px 0 2px;
+        margin-block: 0;
+        margin-inline: 2px 6px;
         border-right: 2px solid var(--cb-text-secondary);
         border-bottom: 2px solid var(--cb-text-secondary);
         transform: rotate(-45deg);
         transition: transform 0.15s ease;
+      }
+      details:not([open]) > summary:dir(rtl)::before {
+        transform: rotate(135deg);
       }
       details[open] > summary::before {
         transform: rotate(45deg);
@@ -9815,7 +9832,7 @@ Pi = cs([
   preview: !1
 });
 console.info(
-  "%c COMFORT-BAND-CARD %c v0.22.14 ",
+  "%c COMFORT-BAND-CARD %c v0.22.15 ",
   "color:white;background:#2196F3;padding:2px 4px;border-radius:3px",
   "color:#000;background:#fff;padding:2px 4px;border-radius:3px"
 );

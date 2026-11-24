@@ -510,16 +510,22 @@ export class ComfortBandSettingsTab extends LitElement {
       details.fine > summary::-webkit-details-marker {
         display: none;
       }
+      /* Spaced on its words' side, and closed, pointing towards them, in
+         right-to-left too (#108). */
       details.fine > summary::before {
         content: '';
         flex: none;
         width: 6px;
         height: 6px;
-        margin: 0 8px 0 2px;
+        margin-block: 0;
+        margin-inline: 2px 8px;
         border-right: 2px solid var(--cb-text-secondary);
         border-bottom: 2px solid var(--cb-text-secondary);
         transform: rotate(-45deg);
         transition: transform 0.15s ease;
+      }
+      details.fine:not([open]) > summary:dir(rtl)::before {
+        transform: rotate(135deg);
       }
       details.fine[open] > summary::before {
         transform: rotate(45deg);
