@@ -74,7 +74,8 @@ export class ComfortBandCardEditor extends LitElement {
          so the theme-aware bg/text colors actually take. */
       select {
         font-size: 14px;
-        padding: 8px 32px 8px 8px;
+        padding-block: 8px;
+        padding-inline: 8px 32px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 6px;
         color: var(--cb-text-primary);
@@ -96,6 +97,12 @@ export class ComfortBandCardEditor extends LitElement {
         background-repeat: no-repeat;
         cursor: pointer;
         width: 100%;
+      }
+      /* Its arrow at the end, where the room is, in right-to-left too (#109). */
+      select:dir(rtl) {
+        background-position:
+          12px 50%,
+          18px 50%;
       }
       select:focus-visible {
         outline: 2px solid var(--primary-color, #03a9f4);

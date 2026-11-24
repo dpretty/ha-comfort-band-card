@@ -54,11 +54,15 @@ describe('#88 the Settings switches in forced colours', () => {
         at: '',
         selector: '.toggle .knob',
         body:
-          'position: absolute; top: 50%; left: 4px; width: 24px; height: 24px; ' +
+          'position: absolute; top: 50%; inset-inline-start: 4px; width: 24px; height: 24px; ' +
           'margin-top: -12px; border-radius: 50%; background: #ffffff; ' +
-          'box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); transition: left 0.15s ease;',
+          'box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); transition: inset-inline-start 0.15s ease;',
       },
-      { at: '', selector: ".toggle[aria-checked='true'] .knob", body: 'left: 24px;' },
+      {
+        at: '',
+        selector: ".toggle[aria-checked='true'] .knob",
+        body: 'inset-inline-start: 24px;',
+      },
       {
         at: '',
         selector: ".toggle[aria-disabled='true']",

@@ -128,12 +128,12 @@ export class ComfortBandDiagnosticsTab extends LitElement {
         color: var(--cb-text-secondary);
       }
       .value {
-        margin-left: auto;
+        margin-inline-start: auto;
         max-width: 100%;
         overflow-wrap: anywhere;
         font-size: 14px;
         color: var(--cb-text-primary);
-        text-align: right;
+        text-align: end;
       }
       details.more {
         margin-top: var(--cb-gap-sm);
@@ -192,13 +192,13 @@ export class ComfortBandDiagnosticsTab extends LitElement {
       th,
       td {
         padding: 4px 5px;
-        text-align: right;
+        text-align: end;
         white-space: nowrap;
       }
       th:first-child,
       td:first-child {
-        padding-left: 0;
-        text-align: left;
+        padding-inline-start: 0;
+        text-align: start;
       }
       thead th {
         font-weight: 500;

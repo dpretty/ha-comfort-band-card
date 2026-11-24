@@ -281,7 +281,7 @@ export class ComfortBandProfilesTab extends LitElement {
       .menu button {
         background: transparent;
         border: none;
-        text-align: left;
+        text-align: start;
         font: inherit;
         font-size: 13px;
         min-height: 44px;

@@ -632,10 +632,10 @@ describe('comfort-band-schedule-tab layout', () => {
       .map((s) => s.cssText)
       .join('\n');
 
-  it('wraps a row on a phone, its range whole and its buttons at the right', () => {
+  it('wraps a row on a phone, its range whole and its buttons at the end', () => {
     expect(css()).toMatch(/\.row\s*\{[^}]*flex-wrap:\s*wrap/);
     expect(css()).toMatch(/\.row \.band\s*\{[^}]*white-space:\s*nowrap/);
-    expect(css()).toMatch(/\.row \.actions\s*\{[^}]*margin-left:\s*auto/);
+    expect(css()).toMatch(/\.row \.actions\s*\{[^}]*margin-inline-start:\s*auto/);
   });
 
   it('keeps the current row’s highlight under the pointer, its text legible', () => {
