@@ -106,9 +106,11 @@ describe('comfort-band-schedule-chart', () => {
   // line's colour. Every rule naming a line, a dot or a swatch's colour
   // (`.line`, `.marker`, `.low`, `.high`), whole and in order, in and out of
   // forced colours: one recolouring a line or its dots later on fails here,
-  // as does a style on a line or dot. (The swatches' forced-colours rule
-  // names neither; #98's own test pins it.)
-  it('draws each line and its dots in its swatch colour, and nothing recolours them', async () => {
+  // as does a style on a line or dot. A rule under a selector naming none of
+  // those classes (`svg path`) isn't caught. (The swatches' forced-colours
+  // rule names none of them; #98's own test pins it.) Which data each line
+  // and dot draws is pinned below (#103).
+  it('draws each line and its dots in its swatch colour, and no rule naming them recolours them', async () => {
     const rules = cssRules('comfort-band-schedule-chart').filter((r) =>
       /\.(line|marker|low|high)\b/.test(r.selector),
     );
@@ -158,6 +160,78 @@ describe('comfort-band-schedule-chart', () => {
   it('has no legend without changes', async () => {
     const el = await chart([]);
     expect(el.shadowRoot!.querySelector('.legend')).toBeNull();
+  });
+
+  // #103: one change draws both lines, so the legend names them.
+  it('names the lines with a single change', async () => {
+    const el = await chart([{ at: '06:00', low: 20, high: 23 }]);
+    expect(el.shadowRoot!.querySelectorAll('.line').length).toBe(2);
+    const legend = el.shadowRoot!.querySelector('.legend')!;
+    expect(Array.from(legend.children).map((c) => c.className)).toEqual(['low', 'high']);
+  });
+
+  // #103: the legend names the low edge by the heating colour and the high
+  // by the cooling, so each edge's data must be drawn under its own class.
+  // Changes out of order, each value its own, so a line or dot drawn from the
+  // other edge's values, another change's, or out of order fails here.
+  const EDGES: Transition[] = [
+    { at: '18:00', low: 17, high: 21 },
+    { at: '06:00', low: 20, high: 23 },
+    { at: '12:00', low: 19, high: 25 },
+  ];
+  // 14–28 °C up the 200-unit-high plot, and 24 h across the 600-unit-wide one.
+  const y = (t: number) => 200 - ((t - 14) / 14) * 200;
+
+  it("draws each edge's line from its own values, stepping at each change", async () => {
+    const el = await chart(EDGES);
+    const d = (edge: string) => el.shadowRoot!.querySelector(`.line.${edge}`)!.getAttribute('d');
+    // Held from the last change until midnight and on from midnight to the
+    // first; at each change it steps from the value before to the new one.
+    const path = (pts: Array<[number, number]>) =>
+      pts.map(([x, t], i) => `${i === 0 ? 'M' : 'L'} ${x} ${y(t)}`).join(' ');
+    expect(d('low')).toBe(
+      path([
+        [0, 17],
+        [150, 17],
+        [150, 20],
+        [300, 20],
+        [300, 19],
+        [450, 19],
+        [450, 17],
+        [600, 17],
+      ]),
+    );
+    expect(d('high')).toBe(
+      path([
+        [0, 21],
+        [150, 21],
+        [150, 23],
+        [300, 23],
+        [300, 25],
+        [450, 25],
+        [450, 21],
+        [600, 21],
+      ]),
+    );
+  });
+
+  it("puts every change's dots on its own edge, at its own time", async () => {
+    const el = await chart(EDGES);
+    const dots = (edge: string) =>
+      Array.from(el.shadowRoot!.querySelectorAll(`.marker.${edge}`)).map((m) => [
+        m.getAttribute('x1'),
+        m.getAttribute('y1'),
+      ]);
+    expect(dots('low')).toEqual([
+      ['150', String(y(20))],
+      ['300', String(y(19))],
+      ['450', String(y(17))],
+    ]);
+    expect(dots('high')).toEqual([
+      ['150', String(y(23))],
+      ['300', String(y(25))],
+      ['450', String(y(21))],
+    ]);
   });
 
   // A dot is a line of no length with a round cap, its stroke unscaled.
