@@ -142,6 +142,11 @@ describe('comfort-band-schedule-chart', () => {
     );
     const legend = el.shadowRoot!.querySelector('.legend')!;
     expect(legend.getAttribute('aria-hidden')).toBe('true');
+    // The swatches' gap follows the page's direction (#101): nothing in the
+    // legend sets its own.
+    expect([legend, ...legend.querySelectorAll('*')].filter((e) => e.hasAttribute('dir'))).toEqual(
+      [],
+    );
     // Spans, and no others in the legend: `.legend span::before` (#98's
     // forced-colours rule names it too) draws a swatch for every span in it.
     expect(
