@@ -337,6 +337,13 @@ describe('comfort-band-settings-tab sections', () => {
     expect(fine.querySelector('summary')!.textContent!.replace(/\s+/g, ' ').trim()).toBe(
       'Fine-tuning Timings and tolerances',
     );
+    // Its chevron's turn and spacing follow the page's direction (#108).
+    const fineSummary = fine.querySelector(':scope > summary')!;
+    expect(
+      [fine, fineSummary, ...fineSummary.querySelectorAll('*')].filter((e) =>
+        e.hasAttribute('dir'),
+      ),
+    ).toEqual([]);
     expect(
       Array.from(fine.querySelectorAll('.row')).map((r) => r.getAttribute('data-setting')),
     ).toEqual([

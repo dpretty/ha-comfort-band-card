@@ -84,7 +84,8 @@ export class ComfortBandAdvancedTab extends LitElement {
         cursor: pointer;
       }
       /* A flex summary loses the browser's own marker, so draw one: a chevron
-         that turns down when the section is open. */
+         that turns down when the section is open. In right-to-left it's
+         spaced on its words' side and, closed, points towards them (#108). */
       summary {
         list-style: none;
       }
@@ -97,11 +98,15 @@ export class ComfortBandAdvancedTab extends LitElement {
         flex: none;
         width: 6px;
         height: 6px;
-        margin: 0 6px 0 2px;
+        margin-block: 0;
+        margin-inline: 2px 6px;
         border-right: 2px solid var(--cb-text-secondary);
         border-bottom: 2px solid var(--cb-text-secondary);
         transform: rotate(-45deg);
         transition: transform 0.15s ease;
+      }
+      details:not([open]) > summary:dir(rtl)::before {
+        transform: rotate(135deg);
       }
       details[open] > summary::before {
         transform: rotate(45deg);
