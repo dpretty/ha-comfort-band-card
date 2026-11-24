@@ -22,6 +22,57 @@ async function chart(transitions: Transition[] = SCHEDULE): Promise<ComfortBandS
   return mount('comfort-band-schedule-chart', { transitions });
 }
 
+// 14–28 °C up the 200-unit-high plot, and 24 h across the 600-unit-wide one.
+const y = (t: number) => 200 - ((t - 14) / 14) * 200;
+/** The point on the plot for an hour of the day and a temperature. */
+const at = (hour: number, t: number): [number, number] => [(hour / 24) * 600, y(t)];
+
+/** The corners a path's `d` visits, read back as numbers, so how it's
+ *  written (spaces or commas, `L` or `H`/`V`) doesn't matter. Absolute
+ *  commands only: the chart writes no others, and one it starts writing
+ *  fails here. */
+function corners(d: string | null): Array<[number, number]> {
+  const tokens = (d ?? '').match(/[a-zA-Z]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/g) ?? [];
+  const out: Array<[number, number]> = [];
+  let cmd = '';
+  let x = 0;
+  let yy = 0;
+  for (let i = 0; i < tokens.length; ) {
+    if (/[a-zA-Z]/.test(tokens[i])) {
+      cmd = tokens[i++];
+      continue;
+    }
+    if (cmd === 'M' || cmd === 'L') {
+      x = Number(tokens[i++]);
+      yy = Number(tokens[i++]);
+    } else if (cmd === 'H') {
+      x = Number(tokens[i++]);
+    } else if (cmd === 'V') {
+      yy = Number(tokens[i++]);
+    } else {
+      throw new Error(`corners: "${cmd}" in "${d}"`);
+    }
+    out.push([x, yy]);
+  }
+  return out;
+}
+
+/** The points got, each number replaced by the wanted one when within 0.005
+ *  units of it (unseen on the plot), so only a real move fails, and shows. */
+function near(
+  got: Array<[number, number]>,
+  want: Array<[number, number]>,
+): Array<[number, number]> {
+  return got.map(([gx, gy], i): [number, number] =>
+    want[i] && Math.abs(gx - want[i][0]) < 0.005 && Math.abs(gy - want[i][1]) < 0.005
+      ? want[i]
+      : [gx, gy],
+  );
+}
+
+const lineD = (el: ComfortBandScheduleChart, edge: string) =>
+  el.shadowRoot!.querySelector(`.line.${edge}`)!.getAttribute('d');
+
 describe('comfort-band-schedule-chart', () => {
   it('renders two stepped polylines, one filled path, and 2N markers', async () => {
     const el = await chart();
@@ -106,9 +157,11 @@ describe('comfort-band-schedule-chart', () => {
   // line's colour. Every rule naming a line, a dot or a swatch's colour
   // (`.line`, `.marker`, `.low`, `.high`), whole and in order, in and out of
   // forced colours: one recolouring a line or its dots later on fails here,
-  // as does a style on a line or dot. (The swatches' forced-colours rule
-  // names neither; #98's own test pins it.)
-  it('draws each line and its dots in its swatch colour, and nothing recolours them', async () => {
+  // as does a style on a line or dot. A rule under a selector naming none of
+  // those classes (`svg path`) isn't caught. (The swatches' forced-colours
+  // rule names none of them; #98's own test pins it.) Which data each line
+  // and dot draws is pinned below (#103).
+  it('draws each line and its dots in its swatch colour, and no rule naming them recolours them', async () => {
     const rules = cssRules('comfort-band-schedule-chart').filter((r) =>
       /\.(line|marker|low|high)\b/.test(r.selector),
     );
@@ -160,6 +213,63 @@ describe('comfort-band-schedule-chart', () => {
     expect(el.shadowRoot!.querySelector('.legend')).toBeNull();
   });
 
+  // #103: one change draws both lines, flat all day at its values, and the
+  // legend names them.
+  it('draws and names both lines with a single change', async () => {
+    const el = await chart([{ at: '06:00', low: 20, high: 23 }]);
+    const flat = (t: number) => [at(0, t), at(6, t), at(6, t), at(24, t)];
+    expect(near(corners(lineD(el, 'low')), flat(20))).toEqual(flat(20));
+    expect(near(corners(lineD(el, 'high')), flat(23))).toEqual(flat(23));
+    const legend = el.shadowRoot!.querySelector('.legend')!;
+    expect(Array.from(legend.children).map((c) => [c.className, c.textContent!.trim()])).toEqual([
+      ['low', 'Low'],
+      ['high', 'High'],
+    ]);
+  });
+
+  // #103: the legend names the low edge by the heating colour and the high
+  // by the cooling, so each edge's data must be drawn under its own class.
+  // Changes out of order, each value its own: the day's last change in the
+  // middle, the first unpadded and off the hour, and each edge's overnight
+  // value neither its lowest nor its highest. So a line or dot drawn from the
+  // other edge's values or another change's, in the order given or sorted as
+  // text, without its minutes, or wrapping from the wrong change fails here.
+  const EDGES: Transition[] = [
+    { at: '12:00', low: 21, high: 26 },
+    { at: '18:00', low: 19, high: 24 },
+    { at: '6:30', low: 18, high: 22 },
+  ];
+
+  it("draws each edge's line from its own values, stepping at each change", async () => {
+    const el = await chart(EDGES);
+    for (const edge of ['low', 'high']) expect(lineD(el, edge)!.trim()[0]).toBe('M');
+    // Held from the last change through midnight to the first; at each
+    // change it steps from the value before to the new one.
+    const low = [
+      ...[at(0, 19), at(6.5, 19), at(6.5, 18), at(12, 18)],
+      ...[at(12, 21), at(18, 21), at(18, 19), at(24, 19)],
+    ];
+    const high = [
+      ...[at(0, 24), at(6.5, 24), at(6.5, 22), at(12, 22)],
+      ...[at(12, 26), at(18, 26), at(18, 24), at(24, 24)],
+    ];
+    expect(near(corners(lineD(el, 'low')), low)).toEqual(low);
+    expect(near(corners(lineD(el, 'high')), high)).toEqual(high);
+  });
+
+  it("puts every change's dots on its own edge, at its own time", async () => {
+    const el = await chart(EDGES);
+    // In the day's order: their order in the page isn't seen.
+    const dots = (edge: string) =>
+      Array.from(el.shadowRoot!.querySelectorAll(`.marker.${edge}`))
+        .map((m): [number, number] => [Number(m.getAttribute('x1')), Number(m.getAttribute('y1'))])
+        .sort((a, b) => a[0] - b[0]);
+    const low = [at(6.5, 18), at(12, 21), at(18, 19)];
+    const high = [at(6.5, 22), at(12, 26), at(18, 24)];
+    expect(near(dots('low'), low)).toEqual(low);
+    expect(near(dots('high'), high)).toEqual(high);
+  });
+
   // A dot is a line of no length with a round cap, its stroke unscaled.
   it('draws each change as a round dot', async () => {
     const el = await chart();
@@ -179,12 +289,12 @@ describe('comfort-band-schedule-chart', () => {
       expect(m.getAttribute('x2')).toBe(m.getAttribute('x1'));
       expect(m.getAttribute('y2')).toBe(m.getAttribute('y1'));
     }
-    // Each at its own edge: 14–28 °C up the 200-unit-high plot.
-    const y = (t: number) => String(200 - ((t - 14) / 14) * 200);
+    // Each at its own edge (every change's dots: #103's test, above).
     const [low, high] = ['low', 'high'].map(
       (edge) => el.shadowRoot!.querySelector(`.marker.${edge}`)!,
     );
-    expect([low.getAttribute('y1'), high.getAttribute('y1')]).toEqual([y(20), y(23)]);
+    expect(Number(low.getAttribute('y1'))).toBeCloseTo(y(20));
+    expect(Number(high.getAttribute('y1'))).toBeCloseTo(y(23));
   });
 
   // Real browsers check the spacing itself (#33 review): the now label sits
