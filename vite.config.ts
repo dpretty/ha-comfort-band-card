@@ -2,7 +2,11 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   build: {
-    target: 'es2022',
+    // The oldest browsers the card runs in (#113). Home Assistant itself
+    // supports older ones (Chrome 67, its legacy build). Chrome 87 is where
+    // the logical insets and margins the card uses arrived. esbuild lowers
+    // the syntax these don't run, such as a class static block.
+    target: ['chrome87', 'edge87', 'firefox98', 'safari15.4', 'ios15.4'],
     lib: {
       entry: 'card/src/index.ts',
       formats: ['es'],

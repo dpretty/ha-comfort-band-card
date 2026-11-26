@@ -205,9 +205,12 @@ describe('band-gauge', () => {
   // #22: idle is the commonest state, and its inactive grey was grey on the
   // grey track; a light theme colour failed 3:1 against a light card.
   it('takes each action’s colour, moved towards the text’s', () => {
-    expect(ruleFor('.gauge')).toContain(
+    // Mixed where color-mix() is there; the action's colour as it is where
+    // it isn't (before Safari 16.2, Chrome 111 and Firefox 113, #113).
+    expect(ruleFor('.gauge', '@supports (color: color-mix(in oklab, red, blue))')).toBe(
       '--cb-gauge-color: color-mix(in oklab, var(--cb-gauge-base) 70%, var(--cb-text-primary));',
     );
+    expect(ruleFor('.gauge')).toContain('--cb-gauge-color: var(--cb-gauge-base);');
     expect(ruleFor('.gauge')).toContain('--cb-gauge-base: var(--cb-action-unknown);');
     expect(ruleFor('.gauge.heating')).toBe('--cb-gauge-base: var(--cb-action-heating);');
     expect(ruleFor('.gauge.cooling')).toBe('--cb-gauge-base: var(--cb-action-cooling);');
@@ -288,7 +291,12 @@ describe('band-gauge', () => {
       {
         at: '',
         selectors: ['.gauge'],
-        body: '--cb-gauge-color: color-mix(in oklab, var(--cb-gauge-base) 70%, var(--cb-text-primary)); --cb-gauge-base: var(--cb-action-unknown);',
+        body: '--cb-gauge-color: var(--cb-gauge-base); --cb-gauge-base: var(--cb-action-unknown);',
+      },
+      {
+        at: '@supports (color: color-mix(in oklab, red, blue))',
+        selectors: ['.gauge'],
+        body: '--cb-gauge-color: color-mix(in oklab, var(--cb-gauge-base) 70%, var(--cb-text-primary));',
       },
       { at: '', selectors: ['.gauge.heating'], body: '--cb-gauge-base: var(--cb-action-heating);' },
       { at: '', selectors: ['.gauge.cooling'], body: '--cb-gauge-base: var(--cb-action-cooling);' },
