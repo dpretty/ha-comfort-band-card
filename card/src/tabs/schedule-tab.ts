@@ -245,7 +245,7 @@ export class ComfortBandScheduleTab extends LitElement {
       .row .actions {
         display: flex;
         gap: 4px;
-        margin-left: auto;
+        margin-inline-start: auto;
       }
       .row.confirm {
         background: var(--cb-track-bg);
@@ -336,6 +336,10 @@ export class ComfortBandScheduleTab extends LitElement {
       .row.current {
         box-shadow: inset 3px 0 0 var(--cb-accent, var(--primary-color, #03a9f4));
         background: var(--cb-track-bg);
+      }
+      /* The bar at the row's start, in right-to-left too (#109). */
+      .row.current:dir(rtl) {
+        box-shadow: inset -3px 0 0 var(--cb-accent, var(--primary-color, #03a9f4));
       }
       /* On the highlight, secondary text would be too faint. */
       .row.current .band,

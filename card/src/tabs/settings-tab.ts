@@ -325,20 +325,22 @@ export class ComfortBandSettingsTab extends LitElement {
       .toggle[aria-checked='true'] {
         background: var(--cb-accent, var(--primary-color, #03a9f4));
       }
+      /* The knob starts at the switch's start and moves to its end when on,
+         mirrored in right-to-left, as phone switches do (#109). */
       .toggle .knob {
         position: absolute;
         top: 50%;
-        left: 4px;
+        inset-inline-start: 4px;
         width: 24px;
         height: 24px;
         margin-top: -12px;
         border-radius: 50%;
         background: #ffffff;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-        transition: left 0.15s ease;
+        transition: inset-inline-start 0.15s ease;
       }
       .toggle[aria-checked='true'] .knob {
-        left: 24px;
+        inset-inline-start: 24px;
       }
       .toggle[aria-disabled='true'] {
         opacity: 0.5;
@@ -380,7 +382,7 @@ export class ComfortBandSettingsTab extends LitElement {
         overflow-wrap: anywhere;
         font-size: 13px;
         color: var(--cb-text-primary);
-        text-align: right;
+        text-align: end;
       }
       .info-value.unconfigured {
         font-style: italic;
@@ -416,7 +418,7 @@ export class ComfortBandSettingsTab extends LitElement {
         align-items: center;
         flex: 0 0 auto;
         gap: 2px;
-        margin-left: auto;
+        margin-inline-start: auto;
       }
       /* WCAG 2.5.5: 44x44 targets on the steppers too. */
       .step {
@@ -462,7 +464,7 @@ export class ComfortBandSettingsTab extends LitElement {
         flex: 0 1 auto;
         max-width: 100%;
         min-height: 44px;
-        margin-left: auto;
+        margin-inline-start: auto;
         padding: 0 28px 0 10px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 8px;
@@ -484,6 +486,15 @@ export class ComfortBandSettingsTab extends LitElement {
         text-overflow: ellipsis;
         /* With its own look, WebKit lets a long option's text out of the box. */
         overflow: hidden;
+      }
+      /* In right-to-left the arrow and the room for it move to the end
+         together (#109). One rule for both: a browser without :dir() drops
+         it whole and keeps them together on the right, as before. */
+      .choice:dir(rtl) {
+        padding: 0 10px 0 28px;
+        background-position:
+          10px 50%,
+          15px 50%;
       }
       .choice:disabled {
         opacity: 0.6;
@@ -531,7 +542,7 @@ export class ComfortBandSettingsTab extends LitElement {
         transform: rotate(45deg);
       }
       details.fine .fine-summary {
-        margin-left: var(--cb-gap-sm);
+        margin-inline-start: var(--cb-gap-sm);
         font-size: 12px;
         color: var(--cb-text-secondary);
       }

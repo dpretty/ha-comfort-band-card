@@ -97,6 +97,15 @@ export class ComfortBandCardEditor extends LitElement {
         cursor: pointer;
         width: 100%;
       }
+      /* In right-to-left the arrow and the room for it move to the end
+         together (#109). One rule for both: a browser without :dir() drops
+         it whole and keeps them together on the right, as before. */
+      select:dir(rtl) {
+        padding: 8px 8px 8px 32px;
+        background-position:
+          12px 50%,
+          18px 50%;
+      }
       select:focus-visible {
         outline: 2px solid var(--primary-color, #03a9f4);
         outline-offset: 1px;

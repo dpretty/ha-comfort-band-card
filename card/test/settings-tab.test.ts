@@ -896,7 +896,7 @@ describe('comfort-band-settings-tab steppers', () => {
 
   it('puts a stepper or a choice below its title when they don’t fit side by side', async () => {
     expect(css()).toMatch(/\.row\.num\s*\{[^}]*flex-wrap:\s*wrap/);
-    expect(css()).toMatch(/\.stepper\s*\{[^}]*margin-left:\s*auto/);
+    expect(css()).toMatch(/\.stepper\s*\{[^}]*margin-inline-start:\s*auto/);
     const el = await settingsTab(makeHass(), 'fan');
     expect(row(el, 'activeFanMode').classList.contains('pick')).toBe(true);
     expect(row(el, 'fanControlEnabled').classList.contains('pick')).toBe(false);

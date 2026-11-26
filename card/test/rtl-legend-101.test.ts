@@ -13,7 +13,7 @@
 import { describe, expect, it } from 'vitest';
 import '../src/history-chart.js';
 import '../src/schedule-chart.js';
-import { cssRules } from './_css.js';
+import { cssRules, physical } from './_css.js';
 
 const TAGS = ['comfort-band-history-chart', 'comfort-band-schedule-chart'];
 
@@ -34,27 +34,6 @@ function spacing(tag: string, name: string): string[] {
 
 /** The card's own legend (`.legend`), not uPlot's (`.u-legend`). */
 const LEGEND = /(^|[^\w-])\.legend\b/;
-
-/** A declaration that spaces or places by a physical side: a left or right
- *  longhand, `left`/`right`/`inset` positioning, `float` or `text-align` to a
- *  side, or a `margin`/`padding` shorthand whose left and right differ. */
-function physical(decl: string): boolean {
-  const i = decl.indexOf(':');
-  const prop = decl.slice(0, i).trim().toLowerCase();
-  const value = decl
-    .slice(i + 1)
-    .trim()
-    .toLowerCase();
-  if (/^(margin|padding|border)-(left|right)\b/.test(prop)) return true;
-  if (prop === 'left' || prop === 'right' || prop === 'inset') return true;
-  if ((prop === 'float' || prop === 'text-align') && /\b(left|right)\b/.test(value)) return true;
-  if (prop === 'margin' || prop === 'padding') {
-    // Split on spaces outside brackets: `var(--x) 0 0 6px` is four values.
-    const parts = value.split(/\s+(?![^(]*\))/);
-    return parts.length === 4 && parts[1] !== parts[3];
-  }
-  return false;
-}
 
 describe('#101 the legend swatches in right-to-left', () => {
   // The swatch's only spacing is on its words' side: a physical margin or
@@ -96,6 +75,12 @@ describe('#101 the legend swatches in right-to-left', () => {
         'text-align: left',
         'margin: 0 4px 0 0',
         'padding: var(--cb-gap-sm) 0 0 6px',
+        'margin: 0 4px 0 0 !important',
+        'padding: calc(1px + 2px) 0 0 var(--a, 4px)',
+        'justify-self: right',
+        'text-align: -webkit-left',
+        'border-top-left-radius: 2px',
+        'transition: left 0.15s ease',
       ].filter((d) => !physical(d)),
     ).toEqual([]);
     expect(
@@ -107,6 +92,11 @@ describe('#101 the legend swatches in right-to-left', () => {
         'padding: 1px 2px 3px 2px',
         'text-align: center',
         'gap: var(--cb-gap-md)',
+        'padding: 1px 2px 3px 2px !important',
+        'padding: 0 calc(1px + 2px) 0 calc(1px + 2px)',
+        'border-start-start-radius: 2px',
+        'transition: inset-inline-start 0.15s ease',
+        'color: var(--cb-text-left)',
       ].filter(physical),
     ).toEqual([]);
   });

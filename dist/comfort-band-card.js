@@ -3383,7 +3383,7 @@ We.styles = [
       .row .actions {
         display: flex;
         gap: 4px;
-        margin-left: auto;
+        margin-inline-start: auto;
       }
       .row.confirm {
         background: var(--cb-track-bg);
@@ -3474,6 +3474,10 @@ We.styles = [
       .row.current {
         box-shadow: inset 3px 0 0 var(--cb-accent, var(--primary-color, #03a9f4));
         background: var(--cb-track-bg);
+      }
+      /* The bar at the row's start, in right-to-left too (#109). */
+      .row.current:dir(rtl) {
+        box-shadow: inset -3px 0 0 var(--cb-accent, var(--primary-color, #03a9f4));
       }
       /* On the highlight, secondary text would be too faint. */
       .row.current .band,
@@ -4045,20 +4049,22 @@ kn.styles = [
       .toggle[aria-checked='true'] {
         background: var(--cb-accent, var(--primary-color, #03a9f4));
       }
+      /* The knob starts at the switch's start and moves to its end when on,
+         mirrored in right-to-left, as phone switches do (#109). */
       .toggle .knob {
         position: absolute;
         top: 50%;
-        left: 4px;
+        inset-inline-start: 4px;
         width: 24px;
         height: 24px;
         margin-top: -12px;
         border-radius: 50%;
         background: #ffffff;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-        transition: left 0.15s ease;
+        transition: inset-inline-start 0.15s ease;
       }
       .toggle[aria-checked='true'] .knob {
-        left: 24px;
+        inset-inline-start: 24px;
       }
       .toggle[aria-disabled='true'] {
         opacity: 0.5;
@@ -4100,7 +4106,7 @@ kn.styles = [
         overflow-wrap: anywhere;
         font-size: 13px;
         color: var(--cb-text-primary);
-        text-align: right;
+        text-align: end;
       }
       .info-value.unconfigured {
         font-style: italic;
@@ -4136,7 +4142,7 @@ kn.styles = [
         align-items: center;
         flex: 0 0 auto;
         gap: 2px;
-        margin-left: auto;
+        margin-inline-start: auto;
       }
       /* WCAG 2.5.5: 44x44 targets on the steppers too. */
       .step {
@@ -4182,7 +4188,7 @@ kn.styles = [
         flex: 0 1 auto;
         max-width: 100%;
         min-height: 44px;
-        margin-left: auto;
+        margin-inline-start: auto;
         padding: 0 28px 0 10px;
         border: 1px solid var(--divider-color, #cccccc);
         border-radius: 8px;
@@ -4204,6 +4210,15 @@ kn.styles = [
         text-overflow: ellipsis;
         /* With its own look, WebKit lets a long option's text out of the box. */
         overflow: hidden;
+      }
+      /* In right-to-left the arrow and the room for it move to the end
+         together (#109). One rule for both: a browser without :dir() drops
+         it whole and keeps them together on the right, as before. */
+      .choice:dir(rtl) {
+        padding: 0 10px 0 28px;
+        background-position:
+          10px 50%,
+          15px 50%;
       }
       .choice:disabled {
         opacity: 0.6;
@@ -4251,7 +4266,7 @@ kn.styles = [
         transform: rotate(45deg);
       }
       details.fine .fine-summary {
-        margin-left: var(--cb-gap-sm);
+        margin-inline-start: var(--cb-gap-sm);
         font-size: 12px;
         color: var(--cb-text-secondary);
       }
@@ -4895,7 +4910,7 @@ Xt.styles = [
       .menu button {
         background: transparent;
         border: none;
-        text-align: left;
+        text-align: start;
         font: inherit;
         font-size: 13px;
         min-height: 44px;
@@ -8471,12 +8486,12 @@ qn.styles = [
         color: var(--cb-text-secondary);
       }
       .value {
-        margin-left: auto;
+        margin-inline-start: auto;
         max-width: 100%;
         overflow-wrap: anywhere;
         font-size: 14px;
         color: var(--cb-text-primary);
-        text-align: right;
+        text-align: end;
       }
       details.more {
         margin-top: var(--cb-gap-sm);
@@ -8535,13 +8550,13 @@ qn.styles = [
       th,
       td {
         padding: 4px 5px;
-        text-align: right;
+        text-align: end;
         white-space: nowrap;
       }
       th:first-child,
       td:first-child {
-        padding-left: 0;
-        text-align: left;
+        padding-inline-start: 0;
+        text-align: start;
       }
       thead th {
         font-weight: 500;
@@ -9658,6 +9673,15 @@ mo.styles = [
         cursor: pointer;
         width: 100%;
       }
+      /* In right-to-left the arrow and the room for it move to the end
+         together (#109). One rule for both: a browser without :dir() drops
+         it whole and keeps them together on the right, as before. */
+      select:dir(rtl) {
+        padding: 8px 8px 8px 32px;
+        background-position:
+          12px 50%,
+          18px 50%;
+      }
       select:focus-visible {
         outline: 2px solid var(--primary-color, #03a9f4);
         outline-offset: 1px;
@@ -9832,7 +9856,7 @@ Pi = cs([
   preview: !1
 });
 console.info(
-  "%c COMFORT-BAND-CARD %c v0.22.15 ",
+  "%c COMFORT-BAND-CARD %c v0.22.16 ",
   "color:white;background:#2196F3;padding:2px 4px;border-radius:3px",
   "color:#000;background:#fff;padding:2px 4px;border-radius:3px"
 );
