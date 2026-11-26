@@ -54,10 +54,19 @@ export class BandGauge extends LitElement {
         container-type: inline-size;
       }
       .gauge {
-        /* The action's colour, moved towards the text's: darker on a light
-           card, lighter on a dark one, so it meets 3:1 against it (#22). */
-        --cb-gauge-color: color-mix(in oklab, var(--cb-gauge-base) 70%, var(--cb-text-primary));
+        /* The action's colour as it is, where color-mix() is missing (before
+           Safari 16.2 and Chrome 111, #113): a custom property set to an
+           unsupported function resolves to nothing, which would leave the
+           band and marker unpainted. */
+        --cb-gauge-color: var(--cb-gauge-base);
         --cb-gauge-base: var(--cb-action-unknown);
+      }
+      /* The action's colour, moved towards the text's: darker on a light
+         card, lighter on a dark one, so it meets 3:1 against it (#22). */
+      @supports (color: color-mix(in oklab, red, blue)) {
+        .gauge {
+          --cb-gauge-color: color-mix(in oklab, var(--cb-gauge-base) 70%, var(--cb-text-primary));
+        }
       }
       .gauge.heating {
         --cb-gauge-base: var(--cb-action-heating);
