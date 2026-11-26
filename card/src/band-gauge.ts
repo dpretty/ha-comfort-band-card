@@ -5,9 +5,12 @@
  * `high`, a round marker at `room`, and the band's two limits written under
  * it (#22), as the status line writes them ("19.5°", "23°"). The band and
  * marker take the action's colour (heating, cooling, idle, or not being
- * controlled), mixed 30% towards the theme's text colour: darker on a light
- * card and lighter on a dark one, so with Home Assistant's own themes even
- * its light orange heat, and its idle grey, meet 3:1 against the card.
+ * controlled), mixed 30% towards the theme's text colour where the browser
+ * can mix colours: darker on a light card and lighter on a dark one, so with
+ * Home Assistant's own themes even its light orange heat, and its idle grey,
+ * meet 3:1 against the card. Where it can't (before Safari 16.2, Chrome 111
+ * and Firefox 113, #113), they take the action's colour as it is, which can
+ * fall below 3:1 on a light card.
  *
  * Laid out in HTML rather than a stretched SVG, so the marker stays round at
  * any width. In forced colours (Windows contrast themes) it's drawn in the

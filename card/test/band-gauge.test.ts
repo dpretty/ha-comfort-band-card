@@ -206,7 +206,7 @@ describe('band-gauge', () => {
   // grey track; a light theme colour failed 3:1 against a light card.
   it('takes each action’s colour, moved towards the text’s', () => {
     // Mixed where color-mix() is there; the action's colour as it is where
-    // it isn't (before Safari 16.2 and Chrome 111, #113).
+    // it isn't (before Safari 16.2, Chrome 111 and Firefox 113, #113).
     expect(ruleFor('.gauge', '@supports (color: color-mix(in oklab, red, blue))')).toBe(
       '--cb-gauge-color: color-mix(in oklab, var(--cb-gauge-base) 70%, var(--cb-text-primary));',
     );

@@ -39,23 +39,24 @@ describe('#113 the build floor', () => {
   });
 
   // ES2022 and later syntax (class static blocks, class fields, private
-  // `#x in`, top-level await, a regex literal's `d` or `v` flag) fails here.
+  // `#x in`, top-level await, a regex literal's `d` or `v` flag) fails here;
+  // a flag esbuild has moved into `new RegExp(…)` doesn't.
   // ES2021's, such as logical assignment (`??=`), runs in all of them.
   it('parses as ES2021', () => {
     expect(() => parse(bundle(), { ecmaVersion: 2021, sourceType: 'module' })).not.toThrow();
   });
 
-  // Regex features the floor doesn't run, in literals or in the
-  // `new RegExp(…, flags)` esbuild writes them as for these targets: lookbehind
-  // (Safari 16.4), and the `d` (Chrome 90) and `v` flags. And a list of
-  // built-ins newer than the floor, which would load and then throw or be
+  // Regex lookbehind (Safari 16.4), in a literal or a string. A regex
+  // literal's `d` (Chrome 90) or `v` flag fails "parses as ES2021", but for
+  // these targets esbuild writes such a literal as `new RegExp(…, "d")`, and
+  // the flags there aren't read: the card has none (#113's review). And a list
+  // of built-ins newer than the floor, which would load and then throw or be
   // ignored. It's a list, not every one: an options object such as
-  // `addEventListener`'s `signal`, say, isn't read.
-  it('uses none of a list of regex features and built-ins newer than the floor', () => {
+  // `addEventListener`'s `signal`, say, isn't read, nor is CSS.
+  it('uses no lookbehind, and none of a list of built-ins newer than the floor', () => {
     const text = bundle();
     const found = [
       /\(\?<[=!]/,
-      /new RegExp\([^)]*,\s*["'`][a-z]*[dv][a-z]*["'`]\s*\)/,
       /\.at\(/,
       /\bObject\.hasOwn\b/,
       /\bstructuredClone\b/,
