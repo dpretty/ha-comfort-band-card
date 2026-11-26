@@ -8,7 +8,7 @@ On a phone (450 px wide or 500 px tall, or less) the modal fills the screen, as 
 
 > Requires the `comfort_band` integration ≥ **v0.1.0** for the tile, Now, Schedule and History, **≥ v0.3.0** for full profile management (create / clone / rename / delete), or **≥ v0.4.0** for the "feels like" and learning switches.
 
-> Runs in Chrome and Edge **85** or later, Firefox **98** or later, and Safari **15.4** or later (iPhone and iPad too). Home Assistant itself supports some older browsers, back to Chrome 67, where the card doesn't load. On the oldest of these a few details fall back: before Chrome 87, some spacing and focus rings; before Safari 16.2 and Chrome 111, the band gauge takes its action's own colour rather than one mixed towards the text's.
+> Runs in Chrome and Edge **87** or later, Firefox **98** or later, and Safari **15.4** or later (iPhone and iPad too). Home Assistant itself supports some older browsers, back to Chrome 67, which the card doesn't. In the oldest browsers the card runs in, a few details fall back: before Safari 16.2, Chrome 111 and Firefox 113, the band gauge takes its action's own colour rather than one mixed towards the text's; before Safari 16, Chrome 105 and Firefox 110, a gauge too narrow for its limits shows them anyway; and before Safari 16.4 and Chrome 120, in right-to-left languages, the drop-down arrows, a closed section's arrow and the Schedule's current-row bar stay as in left-to-right.
 
 ## What you get
 

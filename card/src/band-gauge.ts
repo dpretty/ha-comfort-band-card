@@ -54,10 +54,10 @@ export class BandGauge extends LitElement {
         container-type: inline-size;
       }
       .gauge {
-        /* The action's colour as it is, where color-mix() is missing (before
-           Safari 16.2 and Chrome 111, #113): a custom property set to an
-           unsupported function resolves to nothing, which would leave the
-           band and marker unpainted. */
+        /* The action's colour as it is, where color mixing is missing (before
+           Safari 16.2, Chrome 111 and Firefox 113, #113): set to it there,
+           this property would make the band's background and the marker's
+           border that read it invalid, and leave them unpainted. */
         --cb-gauge-color: var(--cb-gauge-base);
         --cb-gauge-base: var(--cb-action-unknown);
       }
